@@ -1,27 +1,18 @@
-# Auralis 0.5.0 — build and verification report
+# AUVYX Alpha 1.6 — change and verification report
 
-## Source checks completed
-- Updated Gradle app version and GitHub Actions artifact naming.
-- Added the Android INTERNET permission required by the SoundCloud embed.
-- Updated app label, launcher foreground artwork and platform theme resource.
-- Replaced the previous palette implementation with a Material 3 dynamic-colour theme (Android 12+) and a Material 3 fallback palette on older Android versions.
-- Changed the default appearance to System and mapped legacy saved values (HyperOS/LANE/Liquid) to System mode.
-- Reworked app navigation shell, home screen, search screen, settings screen, local track rows and empty states.
-- Added a SoundCloud WebView embed based on SoundCloud's official HTML5 Widget/embedded-player URL. Input is restricted to HTTPS SoundCloud hosts.
-- Kept the existing local Room / DataStore / Media3 code and app ID intact.
+## Changes made
+- Replaced the previous visible branding with AUVYX.
+- Updated app label, in-app brand labels, Android theme resource name, Gradle root project name, workflow name, workflow run name, concurrency key, and uploaded artifact name.
+- Set `versionName` to `Alpha 1.6` and incremented `versionCode` to 6.
+- Preserved `namespace` and `applicationId` as `com.nexus.music` to avoid breaking updates to the already-installed app.
+- Kept Material 3 and the existing SoundCloud embedded-player approach; did not claim that SoundCloud has native Media3 integration.
 
-## Not verified here
-- No Android SDK or Gradle installation was available in this environment, so a full `assembleDebug` was not run.
-- No APK was generated in this environment.
-- No physical-device visual test was possible.
-- SoundCloud embedded playback requires testing with a real public link; some tracks disallow embedding and some links may be unavailable.
+## Not verified
+- This environment does not have Gradle or an Android SDK, so no APK build was run.
+- No device install or playback test was performed.
+- The exact failure cause for the latest GitHub Actions run is not visible in the supplied screenshot. The build workflow was kept on the action/toolchain configuration from the available source archive; this update fixes project naming/version metadata, but cannot honestly be described as a proven fix for the unknown CI error.
 
-## Required next checks
-1. Run GitHub Actions workflow **Build Auralis Music APK**.
-2. Install the downloaded APK on the target Android device.
-3. Confirm Material 3 screens render correctly in both system light and dark mode.
-4. Paste a public SoundCloud track URL in Search → SoundCloud and verify that the official widget loads and plays after tapping its Play button.
-5. Confirm local playback, queue, playlists, library persistence and Speed Lab still work as before.
-
-A green GitHub build only proves compilation, not device playback or provider availability.
-- A Kotlin parser pass was attempted without an Android/Compose dependency classpath. No Kotlin parse/`expecting` diagnostics were found, but this is not a substitute for Gradle compilation.
+## Required verification
+1. Push this source to the repository and run **Build AUVYX APK**.
+2. If it fails, open the failed run and inspect the first red step's complete log. The first compiler/Gradle error is needed to fix the actual cause.
+3. Install `AUVYX-Alpha-1.6-debug` on the phone and test local playback, playlists, queue restoration, Speed Lab, and one public SoundCloud embed URL.

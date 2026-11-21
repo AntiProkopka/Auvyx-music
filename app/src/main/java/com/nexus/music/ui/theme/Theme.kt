@@ -16,7 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val AuralisLight = lightColorScheme(
+private val AUVYXLight = lightColorScheme(
     primary = Color(0xFF6750A4), onPrimary = Color.White,
     primaryContainer = Color(0xFFEADDFF), onPrimaryContainer = Color(0xFF21005D),
     secondary = Color(0xFF625B71), onSecondary = Color.White,
@@ -29,7 +29,7 @@ private val AuralisLight = lightColorScheme(
     outline = Color(0xFF79747E), outlineVariant = Color(0xFFCAC4D0)
 )
 
-private val AuralisDark = darkColorScheme(
+private val AUVYXDark = darkColorScheme(
     primary = Color(0xFFD0BCFF), onPrimary = Color(0xFF381E72),
     primaryContainer = Color(0xFF4F378B), onPrimaryContainer = Color(0xFFEADDFF),
     secondary = Color(0xFFCCC2DC), onSecondary = Color(0xFF332D41),
@@ -54,7 +54,7 @@ fun NexusTheme(themeMode: String, content: @Composable () -> Unit) {
     val colors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
-        if (dark) AuralisDark else AuralisLight
+        if (dark) AUVYXDark else AUVYXLight
     }
 
     val view = LocalView.current

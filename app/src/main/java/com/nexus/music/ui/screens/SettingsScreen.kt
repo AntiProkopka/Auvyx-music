@@ -45,7 +45,7 @@ fun SettingsScreen(vm: AppViewModel) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Auralis", style = MaterialTheme.typography.headlineMedium,
+                Text("AUVYX", style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer)
                 Text("Музыка, собранная вокруг тебя.", style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -107,7 +107,7 @@ fun SettingsScreen(vm: AppViewModel) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("О приложении", style = MaterialTheme.typography.titleMedium)
-                Text("Auralis 0.5.0", style = MaterialTheme.typography.titleLarge)
+                Text("AUVYX · Alpha 1.6", style = MaterialTheme.typography.titleLarge)
                 Text(
                     "Локальная медиатека и плеер на Media3. SoundCloud подключён через официальный встроенный плеер для публичных ссылок.",
                     style = MaterialTheme.typography.bodyMedium,

@@ -72,13 +72,13 @@ fun NexusRoot(vm: AppViewModel) {
     val player by vm.player.state.collectAsStateWithLifecycle()
 
     val title = when {
-        route == "home" -> "Auralis"
+        route == "home" -> "AUVYX"
         route == "search" -> "Поиск и SoundCloud"
         route == "library" -> "Медиатека"
         route == "settings" -> "Настройки"
         route?.startsWith("playlist") == true -> "Плейлист"
         route == "player" -> "Сейчас играет"
-        else -> "Auralis"
+        else -> "AUVYX"
     }
 
     LaunchedEffect(Unit) {

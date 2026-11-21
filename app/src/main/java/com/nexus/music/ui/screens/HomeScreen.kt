@@ -69,7 +69,7 @@ fun HomeScreen(vm: AppViewModel) {
                     Text("Твоя музыка. В одном месте.", style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer)
                     Text(
-                        "Auralis объединяет локальную коллекцию и музыкальные источники в одном интерфейсе.",
+                        "AUVYX объединяет локальную коллекцию и музыкальные источники в одном интерфейсе.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
