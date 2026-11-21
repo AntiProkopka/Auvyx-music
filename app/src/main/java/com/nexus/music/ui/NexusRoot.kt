@@ -70,6 +70,9 @@ fun NexusRoot(vm: AppViewModel) {
     LaunchedEffect(Unit) {
         vm.messages.collect { snackbar.showSnackbar(it) }
     }
+    LaunchedEffect(vm.player) {
+        vm.player.errors.collect { snackbar.showSnackbar(it) }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },

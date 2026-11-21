@@ -3,9 +3,11 @@ package com.nexus.music.playback
 import android.content.ComponentName
 import android.content.Context
 import android.util.Log
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
-import androidx.media3.common.C
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -15,7 +17,9 @@ import com.nexus.music.data.db.QueueEntity
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.data.settings.SettingsStore
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,13 +40,12 @@ data class PlayerState(
     val shuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val queue: List<QueueItem> = emptyList(),
-    val currentIndex: Int = 0
+    val currentIndex: Int = 0,
+    val speed: Float = 1f,
+    val pitch: Float = 1f
 )
 
-/**
- * Мост между UI и PlaybackService (Media3). Хранит очередь и позицию в Room/DataStore,
- * чтобы после перезапуска приложения всё восстанавливалось.
- */
+/** UI bridge to the MediaSessionService player. */
 class PlayerController(
     private val context: Context,
     private val db: NexusDatabase,
@@ -55,11 +58,16 @@ class PlayerController(
     private val _position = MutableStateFlow(0L)
     val position: StateFlow<Long> = _position.asStateFlow()
 
+    private val _errors = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val errors = _errors
+
     private var controller: MediaController? = null
     private var connecting = false
     private var tickerStarted = false
     private var lastLoggedId: String? = null
     private var queue: List<QueueItem> = emptyList()
+    private var saveParametersJob: Job? = null
+    private val pendingActions = mutableListOf<(MediaController) -> Unit>()
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
@@ -76,6 +84,11 @@ class PlayerController(
                 savePlaybackPosition()
             }
         }
+
+        override fun onPlayerError(error: PlaybackException) {
+            Log.e(TAG, "Ошибка воспроизведения", error)
+            _errors.tryEmit("Не удалось воспроизвести этот файл. Проверьте доступ к файлу или его формат.")
+        }
     }
 
     fun connect() {
@@ -84,47 +97,68 @@ class PlayerController(
         scope.launch {
             try {
                 val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-                val c = MediaController.Builder(context, token)
+                val connected = MediaController.Builder(context, token)
                     .setListener(object : MediaController.Listener {
                         override fun onDisconnected(controller: MediaController) {
                             this@PlayerController.controller = null
                             _state.value = PlayerState()
+                            _position.value = 0L
                         }
                     })
                     .buildAsync()
                     .await()
-                controller = c
-                restoreQueue(c)
-                c.addListener(listener)
+                controller = connected
+                connected.addListener(listener)
+                connected.shuffleModeEnabled = settings.shuffle.first()
+                connected.repeatMode = settings.repeatMode.first()
+                val speed = settings.speed.first().coerceIn(0.5f, 2f)
+                val pitch = settings.pitch.first().coerceIn(0.5f, 2f)
+                connected.setPlaybackParameters(PlaybackParameters(speed, pitch))
+                restoreQueue(connected)
                 rebuildQueue()
                 refreshState()
+                val waiting = pendingActions.toList()
+                pendingActions.clear()
+                waiting.forEach { action -> action(connected) }
                 startTicker()
             } catch (e: Exception) {
                 Log.e(TAG, "Не удалось подключиться к PlaybackService", e)
+                _errors.tryEmit("Не удалось запустить аудиоплеер. Перезапустите приложение.")
             } finally {
                 connecting = false
             }
         }
     }
 
-    // ---------- Управление ----------
-
-    fun playTracks(tracks: List<TrackEntity>, startIndex: Int, shuffle: Boolean = false) {
-        val c = controller ?: return
-        if (tracks.isEmpty()) return
-        val index = if (shuffle) tracks.indices.random() else startIndex.coerceIn(0, tracks.lastIndex)
-        lastLoggedId = null
-        if (shuffle) {
-            c.shuffleModeEnabled = true
-            scope.launch { settings.setShuffle(true) }
+    private fun withController(action: (MediaController) -> Unit) {
+        val current = controller
+        if (current != null) {
+            action(current)
+        } else {
+            pendingActions += action
+            connect()
         }
-        c.setMediaItems(tracks.map { toMediaItem(it) }, index, 0L)
-        c.prepare()
-        c.play()
     }
 
-    fun playQueueIndex(index: Int) {
-        val c = controller ?: return
+    // ---------- Playback ----------
+
+    fun playTracks(tracks: List<TrackEntity>, startIndex: Int, shuffle: Boolean = false) {
+        if (tracks.isEmpty()) return
+        withController { c ->
+            val index = if (shuffle) tracks.indices.random() else startIndex.coerceIn(0, tracks.lastIndex)
+            lastLoggedId = null
+            c.shuffleModeEnabled = shuffle
+            c.setMediaItems(tracks.map(::toMediaItem), index, 0L)
+            c.prepare()
+            c.play()
+            scope.launch {
+                settings.setShuffle(shuffle)
+                settings.setPlayback(index, 0L)
+            }
+        }
+    }
+
+    fun playQueueIndex(index: Int) = withController { c ->
         if (index in 0 until c.mediaItemCount) {
             lastLoggedId = null
             c.seekToDefaultPosition(index)
@@ -132,8 +166,7 @@ class PlayerController(
         }
     }
 
-    fun togglePlayPause() {
-        val c = controller ?: return
+    fun togglePlayPause() = withController { c ->
         if (c.isPlaying) {
             c.pause()
         } else {
@@ -142,40 +175,59 @@ class PlayerController(
         }
     }
 
-    fun next() {
-        controller?.seekToNext()
-    }
+    fun next() = withController { it.seekToNext() }
 
-    fun previous() {
-        controller?.seekToPrevious()
-    }
+    fun previous() = withController { it.seekToPrevious() }
 
     fun seekTo(positionMs: Long) {
-        controller?.seekTo(positionMs)
-        _position.value = positionMs
+        withController { c ->
+            c.seekTo(positionMs.coerceAtLeast(0L))
+            _position.value = positionMs.coerceAtLeast(0L)
+        }
     }
 
-    fun toggleShuffle() {
-        val c = controller ?: return
+    fun toggleShuffle() = withController { c ->
         val value = !c.shuffleModeEnabled
         c.shuffleModeEnabled = value
         scope.launch { settings.setShuffle(value) }
+        refreshState()
     }
 
-    fun cycleRepeat() {
-        val c = controller ?: return
-        val next = when (c.repeatMode) {
+    fun cycleRepeat() = withController { c ->
+        val nextMode = when (c.repeatMode) {
             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
             Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
             else -> Player.REPEAT_MODE_OFF
         }
-        c.repeatMode = next
-        scope.launch { settings.setRepeatMode(next) }
+        c.repeatMode = nextMode
+        scope.launch { settings.setRepeatMode(nextMode) }
+        refreshState()
     }
 
-    /** Добавляет трек в конец очереди; если очередь пуста — начинает воспроизведение. */
-    fun enqueue(track: TrackEntity) {
-        val c = controller ?: return
+    fun setSpeed(value: Float) = setPlaybackParameters(value, _state.value.pitch)
+
+    fun setPitch(value: Float) = setPlaybackParameters(_state.value.speed, value)
+
+    fun resetSpeedLab() = setPlaybackParameters(1f, 1f)
+
+    fun setSpeedAndPitch(speed: Float, pitch: Float) = setPlaybackParameters(speed, pitch)
+
+    private fun setPlaybackParameters(speed: Float, pitch: Float) {
+        val safeSpeed = speed.coerceIn(0.5f, 2f)
+        val safePitch = pitch.coerceIn(0.5f, 2f)
+        withController { c ->
+            c.setPlaybackParameters(PlaybackParameters(safeSpeed, safePitch))
+            saveParametersJob?.cancel()
+            saveParametersJob = scope.launch {
+                delay(300)
+                settings.setPlaybackParameters(safeSpeed, safePitch)
+            }
+            refreshState()
+        }
+    }
+
+    /** Adds a track at the end of the current queue. */
+    fun enqueue(track: TrackEntity) = withController { c ->
         val wasEmpty = c.mediaItemCount == 0
         c.addMediaItem(toMediaItem(track))
         if (wasEmpty) {
@@ -184,43 +236,42 @@ class PlayerController(
         }
     }
 
-    fun playNext(track: TrackEntity) {
-        val c = controller ?: return
+    fun playNext(track: TrackEntity) = withController { c ->
         if (c.mediaItemCount == 0) {
-            enqueue(track)
+            c.setMediaItem(toMediaItem(track))
+            c.prepare()
+            c.play()
         } else {
-            c.addMediaItem(c.currentMediaItemIndex + 1, toMediaItem(track))
+            val insertAt = (c.currentMediaItemIndex + 1).coerceIn(0, c.mediaItemCount)
+            c.addMediaItem(insertAt, toMediaItem(track))
         }
     }
 
-    fun removeFromQueue(index: Int) {
-        val c = controller ?: return
+    fun removeFromQueue(index: Int) = withController { c ->
         if (index in 0 until c.mediaItemCount) c.removeMediaItem(index)
     }
 
-    /** Убирает из очереди треки, удалённые из медиатеки. */
-    fun removeTracks(ids: Set<Long>) {
-        val c = controller ?: return
+    fun removeTracks(ids: Set<Long>) = withController { c ->
         for (i in c.mediaItemCount - 1 downTo 0) {
             val id = c.getMediaItemAt(i).mediaId.toLongOrNull()
             if (id != null && id in ids) c.removeMediaItem(i)
         }
     }
 
-    // ---------- Внутреннее ----------
+    // ---------- Internal ----------
 
-    private fun toMediaItem(t: TrackEntity): MediaItem =
-        MediaItem.Builder()
-            .setMediaId(t.id.toString())
-            .setUri(t.uri)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(t.title)
-                    .setArtist(t.artist)
-                    .setAlbumTitle(t.album)
-                    .build()
-            )
+    private fun toMediaItem(track: TrackEntity): MediaItem {
+        val metadata = MediaMetadata.Builder()
+            .setTitle(track.title)
+            .setArtist(track.artist)
+            .setAlbumTitle(track.album)
+        track.artworkUri?.let { metadata.setArtworkUri(android.net.Uri.parse(it)) }
+        return MediaItem.Builder()
+            .setMediaId(track.id.toString())
+            .setUri(track.uri)
+            .setMediaMetadata(metadata.build())
             .build()
+    }
 
     private suspend fun restoreQueue(c: MediaController) {
         if (c.mediaItemCount > 0) return
@@ -228,13 +279,20 @@ class PlayerController(
         if (saved.isEmpty()) return
         val byId = db.trackDao().getByIds(saved.map { it.trackId }).associateBy { it.id }
         val ordered = saved.mapNotNull { byId[it.trackId] }
-        if (ordered.isEmpty()) return
+        if (ordered.isEmpty()) {
+            db.queueDao().clear()
+            return
+        }
         val index = settings.queueIndex.first().coerceIn(0, ordered.lastIndex)
         val position = settings.queuePosition.first().coerceAtLeast(0L)
         c.shuffleModeEnabled = settings.shuffle.first()
         c.repeatMode = settings.repeatMode.first()
-        c.setMediaItems(ordered.map { toMediaItem(it) }, index, position)
+        c.setMediaItems(ordered.map(::toMediaItem), index, position)
         c.prepare()
+        if (ordered.size != saved.size) {
+            val rows = ordered.mapIndexed { i, track -> QueueEntity(position = i, trackId = track.id) }
+            db.queueDao().replace(rows)
+        }
     }
 
     private fun rebuildQueue() {
@@ -243,21 +301,18 @@ class PlayerController(
             val item = c.getMediaItemAt(i)
             QueueItem(
                 mediaId = item.mediaId,
-                title = item.mediaMetadata.title?.toString() ?: "",
-                artist = item.mediaMetadata.artist?.toString() ?: ""
+                title = item.mediaMetadata.title?.toString() ?: "Без названия",
+                artist = item.mediaMetadata.artist?.toString() ?: "Неизвестный исполнитель"
             )
         }
     }
 
     private fun persistQueue() {
         val rows = queue.mapNotNull { it.mediaId.toLongOrNull() }
-            .mapIndexed { i, id -> QueueEntity(position = i, trackId = id) }
+            .mapIndexed { index, id -> QueueEntity(position = index, trackId = id) }
         scope.launch {
-            try {
-                db.queueDao().replace(rows)
-            } catch (e: Exception) {
-                Log.w(TAG, "Не удалось сохранить очередь", e)
-            }
+            runCatching { db.queueDao().replace(rows) }
+                .onFailure { Log.w(TAG, "Не удалось сохранить очередь", it) }
         }
     }
 
@@ -265,6 +320,7 @@ class PlayerController(
         val c = controller ?: return
         val item = c.currentMediaItem
         val duration = c.duration
+        val params = c.playbackParameters
         _state.value = PlayerState(
             mediaId = item?.mediaId,
             title = item?.mediaMetadata?.title?.toString() ?: "",
@@ -275,7 +331,9 @@ class PlayerController(
             shuffle = c.shuffleModeEnabled,
             repeatMode = c.repeatMode,
             queue = queue,
-            currentIndex = c.currentMediaItemIndex
+            currentIndex = c.currentMediaItemIndex.coerceAtLeast(0),
+            speed = params.speed,
+            pitch = params.pitch
         )
         _position.value = c.currentPosition.coerceAtLeast(0L)
     }
@@ -286,19 +344,18 @@ class PlayerController(
         lastLoggedId = id
         val trackId = id.toLongOrNull() ?: return
         scope.launch {
-            try {
+            runCatching {
                 db.historyDao().insert(HistoryEntity(trackId = trackId, playedAt = System.currentTimeMillis()))
-            } catch (e: Exception) {
-                Log.w(TAG, "Не удалось записать историю", e)
-            }
+            }.onFailure { Log.w(TAG, "Не удалось записать историю", it) }
         }
     }
 
     private fun savePlaybackPosition() {
         val c = controller ?: return
+        if (c.currentMediaItemIndex < 0) return
         val index = c.currentMediaItemIndex
         val position = c.currentPosition.coerceAtLeast(0L)
-        scope.launch { settings.setPlayback(index, position) }
+        scope.launch { runCatching { settings.setPlayback(index, position) } }
     }
 
     private fun startTicker() {

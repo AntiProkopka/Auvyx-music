@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -31,10 +33,13 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -55,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
 import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.formatTime
+import com.nexus.music.ui.components.ArtworkImage
 
 @Composable
 fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
@@ -62,6 +68,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     val tracks by vm.tracks.collectAsStateWithLifecycle()
     val pos by vm.player.position.collectAsStateWithLifecycle()
     var showQueue by remember { mutableStateOf(false) }
+    var showSpeedLab by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
 
@@ -151,12 +158,20 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Default.MusicNote,
-                        contentDescription = null,
-                        modifier = Modifier.size(96.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    if (track?.artworkUri != null) {
+                        ArtworkImage(
+                            artworkUri = track.artworkUri,
+                            contentDescription = "Обложка ${s.title}",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.MusicNote,
+                            contentDescription = null,
+                            modifier = Modifier.size(96.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
             }
         }
@@ -230,7 +245,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             }
         }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             IconButton(
                 enabled = track != null,
                 onClick = { track?.let { vm.toggleFavorite(it) } }
@@ -242,7 +257,54 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                     else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            FilledTonalButton(
+                enabled = s.mediaId != null,
+                onClick = { showSpeedLab = true }
+            ) {
+                Icon(Icons.Default.Tune, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Speed Lab")
+            }
         }
         Spacer(Modifier.height(12.dp))
+    }
+
+    if (showSpeedLab) {
+        AlertDialog(
+            onDismissRequest = { showSpeedLab = false },
+            title = { Text("Speed Lab") },
+            text = {
+                Column {
+                    Text("Скорость · ${"%.2f".format(s.speed)}×", style = MaterialTheme.typography.titleSmall)
+                    Slider(
+                        value = s.speed.coerceIn(0.5f, 2f),
+                        onValueChange = vm.player::setSpeed,
+                        valueRange = 0.5f..2f
+                    )
+                    Text("Высота тона · ${"%.2f".format(s.pitch)}×", style = MaterialTheme.typography.titleSmall)
+                    Slider(
+                        value = s.pitch.coerceIn(0.5f, 2f),
+                        onValueChange = vm.player::setPitch,
+                        valueRange = 0.5f..2f
+                    )
+                    Text(
+                        "Скорость и высота тона меняются независимо.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        TextButton(onClick = { vm.player.setSpeedAndPitch(0.8f, 0.85f) }) { Text("Slowed") }
+                        TextButton(onClick = vm.player::resetSpeedLab) { Text("Original") }
+                        TextButton(onClick = { vm.player.setSpeedAndPitch(1.25f, 1f) }) { Text("Speed Up") }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSpeedLab = false }) { Text("Готово") }
+            }
+        )
     }
 }

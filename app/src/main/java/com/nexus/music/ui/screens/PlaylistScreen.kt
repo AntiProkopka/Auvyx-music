@@ -97,7 +97,7 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
         if (tracks.isEmpty()) {
             EmptyHint("В плейлисте пока нет треков. Добавьте их через меню «⋮» у трека в медиатеке.")
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 itemsIndexed(tracks, key = { _, t -> t.id }) { index, t ->
                     TrackRow(
                         track = t,

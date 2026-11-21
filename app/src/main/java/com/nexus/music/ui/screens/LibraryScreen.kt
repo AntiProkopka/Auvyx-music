@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -167,7 +168,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                 if (playlists.isEmpty()) {
                     EmptyHint("Плейлистов пока нет.")
                 } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
                         items(playlists, key = { it.id }) { p ->
                             Column(
                                 modifier = Modifier
@@ -216,13 +217,13 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
 }
 
 @Composable
-private fun TrackList(
+private fun ColumnScope.TrackList(
     vm: AppViewModel,
     list: List<TrackEntity>,
     currentId: String?,
     onAddToPlaylist: (TrackEntity) -> Unit
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
         itemsIndexed(list, key = { _, t -> t.id }) { index, t ->
             TrackRow(
                 track = t,

@@ -14,7 +14,8 @@ data class TrackEntity(
     val album: String,
     val durationMs: Long,
     val addedAt: Long,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val artworkUri: String? = null
 )
 
 @Entity(tableName = "playlists")

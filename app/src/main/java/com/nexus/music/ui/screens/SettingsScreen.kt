@@ -42,8 +42,13 @@ fun SettingsScreen(vm: AppViewModel) {
             modifier = Modifier.padding(16.dp)
         )
 
-        SectionTitle("Внешний вид")
-        listOf("system" to "Как в системе", "light" to "Светлая", "dark" to "Тёмная").forEach { (key, label) ->
+        SectionTitle("Тема приложения")
+        listOf(
+            "hyperos" to "HyperOS · по умолчанию",
+            "lane" to "LANE · минимализм",
+            "material3" to "Material 3 · цвета системы",
+            "liquid" to "Liquid Glass · холодная палитра"
+        ).forEach { (key, label) ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -55,6 +60,13 @@ fun SettingsScreen(vm: AppViewModel) {
                 Text(label)
             }
         }
+
+        Text(
+            "Тема меняет цветовую схему всех экранов. Размытие фона и системный эффект стекла пока не реализованы.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        )
 
         SectionTitle("Медиатека")
         Text(
@@ -79,7 +91,7 @@ fun SettingsScreen(vm: AppViewModel) {
 
         SectionTitle("О приложении")
         Text(
-            "NEXUS Music 0.3.0 · Фундамент\nЛокальная медиатека, плеер, очередь, плейлисты, сохранение данных.",
+            "NEXUS Music 0.4.0 · Foundation+\nЛокальная медиатека, плеер, очередь, плейлисты, сохранение данных.",
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
         )

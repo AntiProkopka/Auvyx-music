@@ -1,5 +1,9 @@
 package com.nexus.music.ui.components
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +34,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,8 +43,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.nexus.music.data.db.PlaylistSummary
 import com.nexus.music.data.db.TrackEntity
 
@@ -72,11 +82,19 @@ fun TrackRow(
                 .background(MaterialTheme.colorScheme.secondaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = if (isCurrent) Icons.Default.GraphicEq else Icons.Default.MusicNote,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSecondaryContainer
-            )
+            if (track.artworkUri != null) {
+                ArtworkImage(
+                    artworkUri = track.artworkUri,
+                    contentDescription = "Обложка ${track.title}",
+                    modifier = Modifier.size(44.dp)
+                )
+            } else {
+                Icon(
+                    imageVector = if (isCurrent) Icons.Default.GraphicEq else Icons.Default.MusicNote,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -120,6 +138,57 @@ fun TrackRow(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun ArtworkImage(
+    artworkUri: String?,
+    contentDescription: String?,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val bitmap = produceState<Bitmap?>(null, artworkUri) {
+        value = withContext(Dispatchers.IO) {
+            if (artworkUri.isNullOrBlank()) null else runCatching {
+                val uri = Uri.parse(artworkUri)
+                if (uri.scheme == "file") {
+                    decodeSampledBitmap(uri.path) { BitmapFactory.decodeFile(uri.path, it) }
+                } else {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(stream, null, bounds)
+                    }
+                    val sample = calculateInSampleSize(bounds.outWidth, bounds.outHeight, 640, 640)
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(
+                            stream,
+                            null,
+                            BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) }
+                        )
+                    }
+                }
+            }.getOrNull()
+        }
+    }.value
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        Box(
+            modifier = modifier.background(MaterialTheme.colorScheme.secondaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.MusicNote,
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer
+            )
         }
     }
 }
@@ -217,4 +286,24 @@ fun PlaylistPickerDialog(
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
     )
+}
+
+private fun decodeSampledBitmap(
+    path: String?,
+    decoder: (BitmapFactory.Options) -> Bitmap?
+): Bitmap? {
+    if (path.isNullOrBlank()) return null
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, bounds)
+    val sample = calculateInSampleSize(bounds.outWidth, bounds.outHeight, 640, 640)
+    return decoder(BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) })
+}
+
+private fun calculateInSampleSize(width: Int, height: Int, maxWidth: Int, maxHeight: Int): Int {
+    if (width <= 0 || height <= 0) return 1
+    var sample = 1
+    while (width / (sample * 2) >= maxWidth && height / (sample * 2) >= maxHeight) {
+        sample *= 2
+    }
+    return sample
 }

@@ -58,7 +58,7 @@ fun SearchScreen(vm: AppViewModel) {
         } else if (results.isEmpty()) {
             EmptyHint("Ничего не найдено.")
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 itemsIndexed(results, key = { _, t -> t.id }) { index, t ->
                     TrackRow(
                         track = t,
