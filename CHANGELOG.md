@@ -1,23 +1,11 @@
-# Changelog
+# Auralis changelog
 
-## 0.4.0 — Foundation+
-
-- Hardened local folder scanning so a single inaccessible folder/file does not abort a complete scan.
-- Added extraction and private caching of embedded album artwork.
-- Added artwork thumbnails in track rows and the player.
-- Added Room migration from database schema 1 to 2 without deleting existing library data.
-- Improved MediaController startup by queuing player actions until the session connection is ready.
-- Added visible playback error feedback.
-- Improved persistence and restoration of the playback queue, shuffle/repeat state and last playback position.
-- Added independent speed and pitch controls to Speed Lab, including persistent values and presets.
-- Added four selectable colour palettes: HyperOS, LANE, Material 3 and Liquid Glass palette.
-- Corrected list sizing in library/search/playlist views.
-- Added a GitHub Actions workflow that builds and uploads a debug APK.
-
-### Not included in this version
-
-Spotify, SoundCloud, YouTube Music and Yandex Music integrations; equalizer; crossfade; synchronized lyrics; cloud backup; real glass blur/translucency.
-
-### Verification status
-
-Source-level static checks only. Android Gradle compilation and device testing were not possible in the current environment. See `BUILD-REPORT.md`.
+## 0.5.0
+- Rebranded visible app name and launcher artwork to Auralis.
+- Rebuilt the shared app shell around Material 3 top app bar, navigation bar, tonal mini-player and dynamic colours.
+- Replaced the four palette-only options with Material 3 System / Light / Dark appearance modes.
+- Migrated old persisted theme values to System mode at read time.
+- Refined home, search, local library, track list, empty states and settings with Material 3 components.
+- Added an official SoundCloud embedded-player source for public track and playlist URLs.
+- Kept local playback and SoundCloud embed playback separate; no unsupported audio extraction or fake provider API credentials.
+- Increased app version to 0.5.0 while keeping application ID `com.nexus.music` for continuity.

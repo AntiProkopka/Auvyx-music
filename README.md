@@ -1,63 +1,49 @@
-# NEXUS Music 0.4.0 — Foundation+
+# Auralis 0.5.0
 
-NEXUS Music is an Android local music player built with Kotlin, Jetpack Compose, Room, DataStore and AndroidX Media3.
+Auralis is an Android music app built with Kotlin, Jetpack Compose, Material 3, Room, DataStore and AndroidX Media3.
 
-This release concentrates on a dependable local player. It is **not** yet a multi-platform streaming aggregator. Spotify, YouTube Music, Yandex Music and SoundCloud are not connected in this build; there are no fake source buttons or claims of direct playback from those services.
+## What changed in 0.5.0
 
-## Included in 0.4.0
+- Rebranded the visible app name and launcher artwork to **Auralis**.
+- Kept the Android application ID `com.nexus.music` so this remains the same app identity for existing installs. Internal Kotlin package names are unchanged intentionally.
+- Reworked the app shell around Material 3: centered top app bar, Material 3 navigation bar, tonal mini-player, dynamic colour scheme and consistent screen surfaces.
+- Made Material 3 the only visual design system. The old HyperOS/LANE/Liquid palette selector was replaced by System / Light / Dark appearance modes. Existing saved palette names are read as System so an upgrade does not remain stuck on the old palette.
+- Updated the home screen, track rows, empty states, search, library actions and settings to use Material 3 cards, list items, chips, typography and tonal surfaces.
+- Added a SoundCloud source in Search. Paste a public track or playlist URL and listen through the official SoundCloud embedded player in the app.
 
-- Add individual audio files through Android's system document picker.
-- Add folders through Storage Access Framework; scan nested folders for audio.
-- Read title, artist, album and duration from local file metadata.
-- Extract embedded album artwork and cache it in app-private storage.
-- Persistent library, favourites, playlists, listening history and queue (Room).
-- Settings persisted with DataStore, including selected theme and Speed Lab values.
-- Media3 playback with play/pause, next/previous, seeking, shuffle, repeat and editable queue.
-- Background playback through MediaSessionService, with system media controls/notification.
-- Restore the queue and last saved playback position after the app process is recreated.
-- Speed Lab: independent playback speed and pitch controls, 0.5×–2.0×, persisted between launches.
-- Four selectable palettes: HyperOS (default), LANE, Material 3 dynamic colours, and Liquid Glass palette.
-- Search, sort, recently played, track actions, add-to-playlist, rename and delete playlists.
-- Database migration from the 0.3.0 schema to 0.4.0, adding artwork metadata without deleting the library.
+## SoundCloud integration: what it does and does not do
 
-## Known limitations
+The current integration uses SoundCloud's documented embedded HTML5 player / Widget URL. It does **not** extract audio streams, download tracks, or bypass SoundCloud access restrictions. A track may fail to embed if its owner disabled embedding, the link is private/unavailable, or SoundCloud blocks the embedded player in the current WebView environment.
 
-- Liquid Glass currently changes the colour palette only. Real-time background blur/translucent glass rendering is not included.
-- The Material 3 theme uses Android dynamic colours on Android 12+; older versions use the standard Material palette.
-- Equalizer, crossfade, synced lyrics, cloud backup and provider integrations are not included yet.
-- Playback support for individual codecs depends on Android's installed platform decoders and the selected file provider.
-- Files whose SAF permission is revoked may stop playing; re-add the file or folder to grant access again.
-- Queue restoration saves the playback position periodically while playing, so the last few seconds may not be preserved after a sudden force-stop or power loss.
+SoundCloud playback is currently separate from the local Media3 player: it is not added to the local queue, system MediaSession, local history or Speed Lab. This is an intentionally narrow first integration, not a claim that the full SoundCloud API adapter is finished. Official API credentials are a separate setup; current SoundCloud registration documentation says app credentials require an Artist Pro subscription, so no fake client ID or embedded secret is included in this APK.
+
+## Existing local-player features retained
+
+- Add audio files or folders through Android's Storage Access Framework.
+- Read common metadata and embedded artwork.
+- Persistent local library, favourites, playlists and listening history (Room).
+- Persistent settings (DataStore).
+- Media3 playback with play/pause, next/previous, seeking, shuffle, repeat and queue controls.
+- Background playback via MediaSessionService and system media controls.
+- Queue and last-position restoration.
+- Speed Lab with independent speed and pitch controls for local Media3 playback.
+
+## Still not included
+
+Spotify, YouTube Music and Yandex Music are not connected. There is no SoundCloud native stream resolver, custom integrated SoundCloud queue, crossfade, equalizer, synced lyrics, cloud backup or account sync. Do not treat the SoundCloud embed as a unified native audio source.
 
 ## Build
 
-Requirements: JDK 17, Android SDK Platform 34, Android Build Tools, and Gradle 8.7.
+Requirements: JDK 17, Android SDK Platform 34, Android Build Tools 34.0.0 and Gradle 8.7.
 
 ```bash
-gradle --no-daemon assembleDebug
+gradle --no-daemon clean assembleDebug
 ```
 
-The debug APK is written to:
+The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
+The GitHub Actions workflow `.github/workflows/build.yml` runs on push to `main`/`master` or manually with **Actions → Build Auralis Music APK → Run workflow**. It publishes the artifact `Auralis-Music-0.5.0-debug` for 14 days.
 
-A GitHub Actions workflow is included at `.github/workflows/build.yml`. Push the project to the `main` or `master` branch (or start it manually from Actions) and the workflow will build the debug APK and publish it as the artifact `NEXUS-Music-0.4.0-debug` for 14 days. Open the successful workflow run in GitHub Actions, download that artifact ZIP, extract it, and install `app-debug.apk`.
+## Verification status
 
-## Important verification note
-
-This source archive was statically reviewed and edited in an environment without an Android SDK or Gradle installation and without package-repository network access. XML/YAML parsing and a Kotlin syntax parse passed, but a successful Android compilation and on-device playback test could not be performed here. The included GitHub Actions workflow is configured to perform the real Gradle build. Do not treat this archive as a device-tested release until that build succeeds and the APK has been installed and tested on an Android device. See `BUILD-REPORT.md` for the exact checks and limitations.
-
-## Project structure
-
-```text
-app/src/main/java/com/nexus/music/
-  data/db/          Room entities, DAOs, database and migration
-  data/local/       SAF media scanning and metadata extraction
-  data/settings/    DataStore settings
-  playback/         Media3 service and player controller
-  ui/screens/       Home, search, library, playlists, player, settings
-  ui/components/    Reusable track rows, artwork, dialogs and menus
-  ui/theme/         Four selectable colour themes
-```
+This source archive was updated in an environment without Android SDK or Gradle. I could inspect and edit the Kotlin/XML/Gradle/manifest files, but I could not run an Android compile or install the app on a device. The GitHub Actions workflow is the next required build check. The embedded SoundCloud widget also requires a real-device test with a public track URL. Do not treat this archive as a fully verified release until both checks pass.

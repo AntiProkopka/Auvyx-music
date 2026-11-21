@@ -16,6 +16,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,7 +52,7 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp),
+                .padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
@@ -73,25 +75,32 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
                 Icon(Icons.Default.Delete, contentDescription = "Удалить плейлист")
             }
         }
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
         ) {
-            FilledTonalButton(
-                enabled = tracks.isNotEmpty(),
-                onClick = { vm.player.playTracks(tracks, 0) }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Играть")
-            }
-            FilledTonalButton(
-                enabled = tracks.isNotEmpty(),
-                onClick = { vm.player.playTracks(tracks, 0, shuffle = true) }
-            ) {
-                Icon(Icons.Default.Shuffle, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Вперемешку")
+                FilledTonalButton(
+                    modifier = Modifier.weight(1f),
+                    enabled = tracks.isNotEmpty(),
+                    onClick = { vm.player.playTracks(tracks, 0) }
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Играть")
+                }
+                FilledTonalButton(
+                    modifier = Modifier.weight(1f),
+                    enabled = tracks.isNotEmpty(),
+                    onClick = { vm.player.playTracks(tracks, 0, shuffle = true) }
+                ) {
+                    Icon(Icons.Default.Shuffle, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Вперемешку")
+                }
             }
         }
         if (tracks.isEmpty()) {

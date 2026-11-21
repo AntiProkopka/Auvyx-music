@@ -1,6 +1,11 @@
 <resources>
-    <style name="Theme.Nexus" parent="android:Theme.DeviceDefault.DayNight">
+    <style name="Theme.Auralis" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F7F7FF</item>
+        <item name="android:navigationBarColor">#F7F7FF</item>
+        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowNoTitle">true</item>
-        <item name="android:windowActionBar">false</item>
     </style>
 </resources>

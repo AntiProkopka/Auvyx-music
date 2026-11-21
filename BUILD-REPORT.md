@@ -1,29 +1,27 @@
-# NEXUS Music 0.4.0 — проверка исходников
+# Auralis 0.5.0 — build and verification report
 
-## Что проверено локально
+## Source checks completed
+- Updated Gradle app version and GitHub Actions artifact naming.
+- Added the Android INTERNET permission required by the SoundCloud embed.
+- Updated app label, launcher foreground artwork and platform theme resource.
+- Replaced the previous palette implementation with a Material 3 dynamic-colour theme (Android 12+) and a Material 3 fallback palette on older Android versions.
+- Changed the default appearance to System and mapped legacy saved values (HyperOS/LANE/Liquid) to System mode.
+- Reworked app navigation shell, home screen, search screen, settings screen, local track rows and empty states.
+- Added a SoundCloud WebView embed based on SoundCloud's official HTML5 Widget/embedded-player URL. Input is restricted to HTTPS SoundCloud hosts.
+- Kept the existing local Room / DataStore / Media3 code and app ID intact.
 
-- Архив исходного проекта извлечён и структура просмотрена.
-- AndroidManifest.xml и XML-ресурсы успешно разобраны XML-парсером.
-- Workflow GitHub Actions успешно разобран YAML-парсером.
-- Kotlin-файлы прошли проверку синтаксического разбора локальным `kotlinc`: сообщений `expecting`, `unexpected tokens` и аналогичных ошибок синтаксиса не найдено.
-- Проверены декларации Room и миграция базы данных версии 1 → 2.
-- Проверены зависимости Gradle, конфигурация Android SDK и шаг публикации APK в GitHub Actions.
+## Not verified here
+- No Android SDK or Gradle installation was available in this environment, so a full `assembleDebug` was not run.
+- No APK was generated in this environment.
+- No physical-device visual test was possible.
+- SoundCloud embedded playback requires testing with a real public link; some tracks disallow embedding and some links may be unavailable.
 
-## Что не удалось проверить в этой среде
+## Required next checks
+1. Run GitHub Actions workflow **Build Auralis Music APK**.
+2. Install the downloaded APK on the target Android device.
+3. Confirm Material 3 screens render correctly in both system light and dark mode.
+4. Paste a public SoundCloud track URL in Search → SoundCloud and verify that the official widget loads and plays after tapping its Play button.
+5. Confirm local playback, queue, playlists, library persistence and Speed Lab still work as before.
 
-В рабочем окружении отсутствуют Gradle и Android SDK. Кроме того, доступ к репозиториям пакетов для загрузки недостающих инструментов недоступен. Поэтому здесь не выполнены:
-
-- Gradle `assembleDebug`;
-- проверка типов Kotlin с AndroidX/Compose/Media3 на classpath;
-- запуск приложения на эмуляторе или физическом Android-устройстве;
-- фактическая проверка декодирования разных аудиоформатов, фонового воспроизведения и поведения после перезапуска.
-
-**Следовательно, этот исходный архив нельзя считать успешно собранным или протестированным APK.** Для этого нужно получить зелёную сборку GitHub Actions и установить полученный APK на устройство.
-
-## Известные ограничения 0.4.0
-
-- Это локальный музыкальный плеер, а не готовый стриминговый агрегатор.
-- Spotify, SoundCloud, Яндекс Музыка и YouTube Music не подключены.
-- Нет эквалайзера, кроссфейда, синхронизированных текстов песен и облачной синхронизации.
-- Liquid Glass пока является цветовой темой без настоящего blur/translucency.
-- Поддержка конкретных кодеков зависит от декодеров Android и источника файла.
+A green GitHub build only proves compilation, not device playback or provider availability.
+- A Kotlin parser pass was attempted without an Android/Compose dependency classpath. No Kotlin parse/`expecting` diagnostics were found, but this is not a substitute for Gradle compilation.

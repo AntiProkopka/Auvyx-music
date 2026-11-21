@@ -32,7 +32,14 @@ class SettingsStore(private val context: Context) {
 
     private val store get() = context.nexusDataStore
 
-    val themeMode: Flow<String> = store.data.map { it[Keys.THEME] ?: "hyperos" }
+    val themeMode: Flow<String> = store.data.map { prefs ->
+        // Previous versions stored palette names. They now migrate to the real Material 3 system theme.
+        when (prefs[Keys.THEME]) {
+            "light" -> "light"
+            "dark" -> "dark"
+            else -> "system"
+        }
+    }
     val sortMode: Flow<String> = store.data.map { it[Keys.SORT] ?: "added" }
     val folders: Flow<Set<String>> = store.data.map { it[Keys.FOLDERS] ?: emptySet() }
     val queueIndex: Flow<Int> = store.data.map { it[Keys.QUEUE_INDEX] ?: 0 }

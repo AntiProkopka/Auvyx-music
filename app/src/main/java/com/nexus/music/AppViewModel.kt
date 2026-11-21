@@ -41,7 +41,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         db.playlistDao().observePlaylists().stateIn(viewModelScope, lazily, emptyList())
 
     val themeMode: StateFlow<String> =
-        settings.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, "hyperos")
+        settings.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, "system")
     val sortMode: StateFlow<String> =
         settings.sortMode.stateIn(viewModelScope, SharingStarted.Eagerly, "added")
     val folders: StateFlow<Set<String>> =

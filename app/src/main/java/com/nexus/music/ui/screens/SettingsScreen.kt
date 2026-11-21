@@ -1,20 +1,27 @@
 package com.nexus.music.ui.screens
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -22,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
-import com.nexus.music.ui.components.SectionTitle
 
 @Composable
 fun SettingsScreen(vm: AppViewModel) {
@@ -31,69 +37,88 @@ fun SettingsScreen(vm: AppViewModel) {
     val tracks by vm.tracks.collectAsStateWithLifecycle()
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 16.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            "Настройки",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(16.dp)
-        )
-
-        SectionTitle("Тема приложения")
-        listOf(
-            "hyperos" to "HyperOS · по умолчанию",
-            "lane" to "LANE · минимализм",
-            "material3" to "Material 3 · цвета системы",
-            "liquid" to "Liquid Glass · холодная палитра"
-        ).forEach { (key, label) ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { vm.setTheme(key) }
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RadioButton(selected = theme == key, onClick = { vm.setTheme(key) })
-                Text(label)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Auralis", style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text("Музыка, собранная вокруг тебя.", style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
         }
 
-        Text(
-            "Тема меняет цветовую схему всех экранов. Размытие фона и системный эффект стекла пока не реализованы.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-        )
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column {
+                ListItem(
+                    headlineContent = { Text("Оформление") },
+                    supportingContent = { Text("Material 3 · динамические цвета Android") },
+                    leadingContent = { Icon(Icons.Default.Palette, contentDescription = null) }
+                )
+                listOf("system" to "Как в системе", "light" to "Светлая", "dark" to "Тёмная").forEach { (key, label) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = theme == key, onClick = { vm.setTheme(key) })
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        }
 
-        SectionTitle("Медиатека")
-        Text(
-            "Треков: ${tracks.size}\nПодключённых папок: ${folders.size}",
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-        )
-        OutlinedButton(
-            onClick = { vm.refreshLibrary() },
-            modifier = Modifier.padding(horizontal = 16.dp)
-        ) { Text("Пересканировать папки") }
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column {
+                ListItem(
+                    headlineContent = { Text("Медиатека") },
+                    supportingContent = { Text("${tracks.size} треков · ${folders.size} подключённых папок") },
+                    leadingContent = { Icon(Icons.Default.Storage, contentDescription = null) }
+                )
+                OutlinedButton(
+                    onClick = { vm.refreshLibrary() },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Text("Пересканировать папки")
+                }
+            }
+        }
 
-        SectionTitle("Данные")
-        OutlinedButton(
-            onClick = { vm.clearHistory() },
-            modifier = Modifier.padding(horizontal = 16.dp)
-        ) { Text("Очистить историю прослушивания") }
-        Spacer(Modifier.height(8.dp))
-        Button(
-            onClick = { vm.resetSettings() },
-            modifier = Modifier.padding(horizontal = 16.dp)
-        ) { Text("Сбросить настройки внешнего вида") }
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Данные", style = MaterialTheme.typography.titleMedium)
+                OutlinedButton(
+                    onClick = { vm.clearHistory() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.DeleteSweep, contentDescription = null)
+                    Text("Очистить историю прослушивания")
+                }
+                Button(onClick = { vm.resetSettings() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Сбросить настройки")
+                }
+            }
+        }
 
-        SectionTitle("О приложении")
-        Text(
-            "NEXUS Music 0.4.0 · Foundation+\nЛокальная медиатека, плеер, очередь, плейлисты, сохранение данных.",
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-        )
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("О приложении", style = MaterialTheme.typography.titleMedium)
+                Text("Auralis 0.5.0", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Локальная медиатека и плеер на Media3. SoundCloud подключён через официальный встроенный плеер для публичных ссылок.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "SoundCloud воспроизводится отдельно от локальной очереди и Speed Lab.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }

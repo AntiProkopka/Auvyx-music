@@ -13,6 +13,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -24,6 +26,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,6 +62,7 @@ private val navItems = listOf(
     NavItem("settings", "Настройки", Icons.Default.Settings)
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NexusRoot(vm: AppViewModel) {
     val nav = rememberNavController()
@@ -66,6 +70,16 @@ fun NexusRoot(vm: AppViewModel) {
     val route = backStack?.destination?.route
     val snackbar = remember { SnackbarHostState() }
     val player by vm.player.state.collectAsStateWithLifecycle()
+
+    val title = when {
+        route == "home" -> "Auralis"
+        route == "search" -> "Поиск и SoundCloud"
+        route == "library" -> "Медиатека"
+        route == "settings" -> "Настройки"
+        route?.startsWith("playlist") == true -> "Плейлист"
+        route == "player" -> "Сейчас играет"
+        else -> "Auralis"
+    }
 
     LaunchedEffect(Unit) {
         vm.messages.collect { snackbar.showSnackbar(it) }
@@ -75,14 +89,29 @@ fun NexusRoot(vm: AppViewModel) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
+        topBar = {
+            if (route != "player" && route?.startsWith("playlist") != true) {
+                CenterAlignedTopAppBar(
+                    title = { Text(title, style = MaterialTheme.typography.titleLarge) },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground
+                    )
+                )
+            }
+        },
         bottomBar = {
             if (route != "player") {
                 Column {
                     if (player.mediaId != null) {
                         MiniPlayer(vm = vm, onOpen = { nav.navigate("player") })
                     }
-                    NavigationBar {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        tonalElevation = 2.dp
+                    ) {
                         navItems.forEach { item ->
                             val selected = route == item.route ||
                                 (item.route == "library" && route?.startsWith("playlist") == true)
@@ -90,7 +119,7 @@ fun NexusRoot(vm: AppViewModel) {
                                 selected = selected,
                                 onClick = { navigateTo(nav, item.route) },
                                 icon = { Icon(item.icon, contentDescription = item.label) },
-                                label = { Text(item.label) }
+                                label = { Text(item.label, maxLines = 1) }
                             )
                         }
                     }
@@ -139,22 +168,21 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
     val duration = s.durationMs.coerceAtLeast(1L)
 
     Surface(
-        tonalElevation = 3.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen)
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen)
     ) {
         Column {
             Row(
-                modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        s.title.ifBlank { "—" },
+                        s.title.ifBlank { "Ничего не играет" },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.titleSmall
                     )
                     Text(
                         s.artist,
@@ -176,7 +204,9 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
             }
             LinearProgressIndicator(
                 progress = { (pos.toFloat() / duration.toFloat()).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
             )
         }
     }

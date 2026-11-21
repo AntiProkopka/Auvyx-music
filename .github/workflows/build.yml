@@ -1,4 +1,4 @@
-name: Build NEXUS Music APK
+name: Build Auralis Music APK
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: nexus-apk-${{ github.ref }}
+  group: auralis-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: NEXUS-Music-0.4.0-debug
+          name: Auralis-Music-0.5.0-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

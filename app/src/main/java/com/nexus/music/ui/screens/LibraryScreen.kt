@@ -21,6 +21,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -86,28 +90,32 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
         ) {
-            FilledTonalButton(onClick = {
-                filePicker.launch(arrayOf("audio/*", "application/ogg", "application/octet-stream"))
-            }) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Файлы")
-            }
-            FilledTonalButton(onClick = { folderPicker.launch(null) }) {
-                Icon(Icons.Default.FolderOpen, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Папка")
-            }
-            FilledTonalButton(onClick = { vm.refreshLibrary() }) {
-                Icon(Icons.Default.Refresh, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Обновить")
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    modifier = Modifier.weight(1f),
+                    onClick = { filePicker.launch(arrayOf("audio/*", "application/ogg", "application/octet-stream")) }
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Файлы")
+                }
+                FilledTonalButton(modifier = Modifier.weight(1f), onClick = { folderPicker.launch(null) }) {
+                    Icon(Icons.Default.FolderOpen, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Папка")
+                }
+                FilledTonalButton(modifier = Modifier.weight(1f), onClick = { vm.refreshLibrary() }) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Скан")
+                }
             }
         }
         if (busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -170,19 +178,17 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
                         items(playlists, key = { it.id }) { p ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onOpenPlaylist(p.id) }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                            ) {
-                                Text(p.name, style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    "Треков: ${p.trackCount}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            ListItem(
+                                modifier = Modifier.fillMaxWidth().clickable { onOpenPlaylist(p.id) },
+                                leadingContent = {
+                                    Icon(Icons.Default.QueueMusic, contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary)
+                                },
+                                headlineContent = { Text(p.name, style = MaterialTheme.typography.titleSmall) },
+                                supportingContent = {
+                                    Text("Треков: ${p.trackCount}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            )
                         }
                     }
                 }
