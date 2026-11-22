@@ -23,20 +23,27 @@ import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 
-private val artworkCache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
+private val artworkCache = object : LruCache<String, Bitmap>(32 * 1024 * 1024) {
     override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
 }
 
-private fun bestArtworkUrl(raw: String): String =
-    raw.replace(Regex("-(?:small|badge|t\\d+x\\d+|large)(?=\\.)"), "-t500x500")
+private fun artworkCandidates(raw: String): List<String> {
+    val clean = raw.substringBefore('?')
+    val query = raw.substringAfter('?', "").takeIf { raw.contains('?') }?.let { "?$it" }.orEmpty()
+    val original = clean.replace(Regex("-(?:small|badge|t\\d+x\\d+|large)(?=\\.)"), "-original") + query
+    val large = clean.replace(Regex("-(?:small|badge|t\\d+x\\d+|original)(?=\\.)"), "-t500x500") + query
+    val medium = clean.replace(Regex("-(?:small|badge|original)(?=\\.)"), "-large") + query
+    return listOf(original, large, medium, raw).distinct()
+}
 
 private fun loadArtwork(url: String): Bitmap? {
     artworkCache.get(url)?.let { return it }
     val connection = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 10_000
-        readTimeout = 10_000
+        readTimeout = 12_000
         instanceFollowRedirects = true
         setRequestProperty("User-Agent", "AUVYX Android Music Player")
+        setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
     }
     return try {
         connection.inputStream.use { input -> BitmapFactory.decodeStream(input) }
@@ -55,10 +62,8 @@ fun RemoteArtworkImage(
     val bitmap = produceState<Bitmap?>(null, imageUrl) {
         value = withContext(Dispatchers.IO) {
             if (imageUrl.isNullOrBlank() || !imageUrl.startsWith("https://", true)) null
-            else {
-                val highResolution = bestArtworkUrl(imageUrl)
-                runCatching { loadArtwork(highResolution) }.getOrNull()
-                    ?: if (highResolution != imageUrl) runCatching { loadArtwork(imageUrl) }.getOrNull() else null
+            else artworkCandidates(imageUrl).firstNotNullOfOrNull { candidate ->
+                runCatching { loadArtwork(candidate) }.getOrNull()
             }
         }
     }.value

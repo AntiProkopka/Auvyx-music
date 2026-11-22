@@ -10,16 +10,21 @@ import com.nexus.music.data.db.PlaylistTrackEntity
 import com.nexus.music.data.db.SoundCloudFavoriteEntity
 import com.nexus.music.data.db.SoundCloudHistoryEntity
 import com.nexus.music.data.db.TrackEntity
+import com.nexus.music.data.settings.SettingsStore
 import com.nexus.music.data.soundcloud.SoundCloudRepository
 import com.nexus.music.data.soundcloud.SoundCloudTrack
+import com.nexus.music.playback.SixBandEqualizer
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -55,6 +60,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val folders: StateFlow<Set<String>> =
         settings.folders.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
+    private val _nickname = MutableStateFlow<String?>(null)
+    val nickname: StateFlow<String?> = _nickname.asStateFlow()
+    val nicknameReady = MutableStateFlow(false)
+    private val _equalizerGains = MutableStateFlow(SettingsStore.DEFAULT_EQ_GAINS)
+    val equalizerGains: StateFlow<List<Float>> = _equalizerGains.asStateFlow()
+    val equalizerPreset: StateFlow<String> = settings.equalizerPreset.stateIn(
+        viewModelScope, SharingStarted.Eagerly, "bass_boost"
+    )
+    val equalizerEnabled: StateFlow<Boolean> = settings.equalizerEnabled.stateIn(
+        viewModelScope, SharingStarted.Eagerly, true
+    )
+
     val busy = MutableStateFlow(false)
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val searchQuery = MutableStateFlow("")
@@ -63,6 +80,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val soundCloudLoading = MutableStateFlow(false)
     val soundCloudError = MutableStateFlow<String?>(null)
     private var soundCloudSearchJob: Job? = null
+    private var equalizerSaveJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            settings.nickname.collect { value ->
+                _nickname.value = value
+                nicknameReady.value = true
+            }
+        }
+        viewModelScope.launch {
+            settings.equalizerGains.collect { gains ->
+                _equalizerGains.value = gains
+                nexus.equalizer.setGains(gains)
+            }
+        }
+        viewModelScope.launch { settings.equalizerEnabled.collect(nexus.equalizer::setEnabled) }
+    }
 
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val searchResults: StateFlow<List<TrackEntity>> = searchQuery
@@ -71,6 +105,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (q.isBlank()) flowOf(emptyList<TrackEntity>()) else db.trackDao().search(q.trim())
         }
         .stateIn(viewModelScope, lazily, emptyList())
+
+    fun setNickname(value: String) {
+        viewModelScope.launch {
+            settings.setNickname(value)
+            messages.tryEmit("Имя сохранено")
+        }
+    }
+
+    fun setEqualizerEnabled(enabled: Boolean) {
+        nexus.equalizer.setEnabled(enabled)
+        viewModelScope.launch { settings.setEqualizerEnabled(enabled) }
+    }
+
+    fun setEqualizerPreset(preset: String) {
+        val gains = when (preset) {
+            "default" -> SixBandEqualizer.DEFAULT
+            "treble" -> SixBandEqualizer.TREBLE_BOOST
+            "vocal" -> SixBandEqualizer.VOCAL
+            "custom" -> equalizerGains.value
+            else -> SixBandEqualizer.BASS_BOOST
+        }
+        _equalizerGains.value = gains
+        nexus.equalizer.setGains(gains)
+        equalizerSaveJob?.cancel()
+        equalizerSaveJob = viewModelScope.launch {
+            settings.setEqualizerPreset(preset, gains)
+        }
+    }
+
+    fun setEqualizerBand(index: Int, value: Float) {
+        if (index !in 0 until SixBandEqualizer.BAND_COUNT) return
+        val updated = _equalizerGains.value.toMutableList()
+        updated[index] = value.coerceIn(-12f, 12f)
+        _equalizerGains.value = updated
+        nexus.equalizer.setGains(updated)
+        equalizerSaveJob?.cancel()
+        equalizerSaveJob = viewModelScope.launch {
+            delay(180)
+            settings.setEqualizerPreset("custom", updated)
+        }
+    }
 
     // SoundCloud catalogue
     fun searchSoundCloud(query: String) {
@@ -105,6 +180,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun enqueueSoundCloud(track: SoundCloudTrack) {
         player.enqueueSoundCloudTrack(track)
         messages.tryEmit("Добавлено в очередь: ${track.title}")
+    }
+
+    fun playNextSoundCloud(track: SoundCloudTrack) {
+        player.playNextSoundCloudTrack(track)
+        messages.tryEmit("Следующим: ${track.title}")
     }
 
     fun toggleSoundCloudFavorite(track: SoundCloudTrack) {

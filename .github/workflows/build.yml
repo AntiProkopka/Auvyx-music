@@ -1,5 +1,5 @@
-name: Build AUVYX APK
-run-name: AUVYX Alpha 1.9 APK · ${{ github.event_name }}
+name: Build auvyx APK
+run-name: auvyx Alpha 2.0 APK · ${{ github.event_name }}
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: auvyx-alpha-1-9-${{ github.ref }}
+  group: auvyx-alpha-2-0-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -39,13 +39,36 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Restore stable signing key (optional but recommended)
+        env:
+          AUVYX_SIGNING_KEYSTORE_BASE64: ${{ secrets.AUVYX_SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$AUVYX_SIGNING_KEYSTORE_BASE64" ]; then
+            printf '%s' "$AUVYX_SIGNING_KEYSTORE_BASE64" | base64 --decode > app/auvyx-signing.jks
+          else
+            echo "No stable signing keystore supplied; using the runner debug key."
+          fi
+
       - name: Build debug APK
+        env:
+          AUVYX_SIGNING_STORE_PASSWORD: ${{ secrets.AUVYX_SIGNING_STORE_PASSWORD }}
+          AUVYX_SIGNING_KEY_ALIAS: ${{ secrets.AUVYX_SIGNING_KEY_ALIAS }}
+          AUVYX_SIGNING_KEY_PASSWORD: ${{ secrets.AUVYX_SIGNING_KEY_PASSWORD }}
         run: gradle --no-daemon --stacktrace clean assembleDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: AUVYX-Alpha-1.9-debug
+          name: auvyx-Alpha-2.0-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Report signing mode
+        if: always()
+        run: |
+          if [ -f app/auvyx-signing.jks ]; then
+            echo "Stable signing keystore was supplied to this build."
+          else
+            echo "WARNING: stable signing keystore is missing; this APK uses the runner's debug key."
+          fi

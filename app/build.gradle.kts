@@ -5,6 +5,13 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val stableSigningFile = file("auvyx-signing.jks")
+val stableStorePassword = System.getenv("AUVYX_SIGNING_STORE_PASSWORD") ?: ""
+val stableKeyAlias = System.getenv("AUVYX_SIGNING_KEY_ALIAS") ?: ""
+val stableKeyPassword = System.getenv("AUVYX_SIGNING_KEY_PASSWORD") ?: ""
+val hasStableSigning = stableSigningFile.exists() && stableStorePassword.isNotBlank() &&
+    stableKeyAlias.isNotBlank() && stableKeyPassword.isNotBlank()
+
 android {
     namespace = "com.nexus.music"
     compileSdk = 34
@@ -13,13 +20,28 @@ android {
         applicationId = "com.nexus.music"
         minSdk = 29
         targetSdk = 34
-        versionCode = 9
-        versionName = "Alpha 1.9"
+        versionCode = 10
+        versionName = "Alpha 2.0"
+    }
+
+    signingConfigs {
+        create("stableCi") {
+            storeFile = stableSigningFile
+            storePassword = stableStorePassword
+            keyAlias = stableKeyAlias
+            keyPassword = stableKeyPassword
+        }
     }
 
     buildTypes {
+        debug {
+            // GitHub Actions uses this only after the owner adds the signing secrets.
+            // Without them Android's normal debug key remains the fallback.
+            if (hasStableSigning) signingConfig = signingConfigs.getByName("stableCi")
+        }
         release {
             isMinifyEnabled = false
+            if (hasStableSigning) signingConfig = signingConfigs.getByName("stableCi")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

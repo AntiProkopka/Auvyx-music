@@ -1,5 +1,11 @@
 package com.nexus.music.ui.screens
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,9 +17,12 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,8 +41,11 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material3.FilledIconButton
+import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,22 +67,38 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.Player
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.playback.PlaybackAudioRouting
 import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.formatTime
 import com.nexus.music.ui.components.ArtworkImage
 import com.nexus.music.ui.components.RemoteArtworkImage
 
+@OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     val s by vm.player.state.collectAsStateWithLifecycle()
     val tracks by vm.tracks.collectAsStateWithLifecycle()
     val cloudFavorites by vm.soundCloudFavorites.collectAsStateWithLifecycle()
     val pos by vm.player.position.collectAsStateWithLifecycle()
+    val eqGains by vm.equalizerGains.collectAsStateWithLifecycle()
+    val eqEnabled by vm.equalizerEnabled.collectAsStateWithLifecycle()
+    val eqPreset by vm.equalizerPreset.collectAsStateWithLifecycle()
+    val nickname by vm.nickname.collectAsStateWithLifecycle()
     var showQueue by remember { mutableStateOf(false) }
     var showSpeedLab by remember { mutableStateOf(false) }
+    var showEqualizer by remember { mutableStateOf(false) }
+    var showOutput by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val bluetoothPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        showOutput = true
+    }
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
 
@@ -189,6 +217,16 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                 Spacer(Modifier.width(6.dp))
                 Text("Speed Lab")
             }
+            FilledTonalButton(enabled = true, onClick = { showEqualizer = true }) { Text("EQ") }
+            IconButton(onClick = {
+                if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                } else {
+                    showOutput = true
+                }
+            }) {
+                Icon(Icons.Default.Speaker, contentDescription = "Вывод звука")
+            }
         }
         Spacer(Modifier.height(12.dp))
     }
@@ -214,4 +252,145 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             confirmButton = { TextButton(onClick = { showSpeedLab = false }) { Text("Готово") } }
         )
     }
+
+    if (showEqualizer) {
+        EqualizerDialog(
+            gains = eqGains,
+            enabled = eqEnabled,
+            preset = eqPreset,
+            onEnabledChange = vm::setEqualizerEnabled,
+            onPreset = vm::setEqualizerPreset,
+            onBandChange = vm::setEqualizerBand,
+            onDismiss = { showEqualizer = false }
+        )
+    }
+
+    if (showOutput) {
+        AudioOutputDialog(
+            nickname = nickname,
+            onSelect = { device -> PlaybackAudioRouting.select(device); showOutput = false },
+            onDismiss = { showOutput = false }
+        )
+    }
+}
+
+@Composable
+private fun EqualizerDialog(
+    gains: List<Float>,
+    enabled: Boolean,
+    preset: String,
+    onEnabledChange: (Boolean) -> Unit,
+    onPreset: (String) -> Unit,
+    onBandChange: (Int, Float) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val names = listOf("60 Hz", "150 Hz", "400 Hz", "1 kHz", "2.4 kHz", "15 kHz")
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("6-band EQ") },
+        text = {
+            Column(Modifier.heightIn(max = 470.dp).verticalScroll(rememberScrollState())) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = enabled, onCheckedChange = onEnabledChange)
+                    Text("Эквалайзер включён")
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    FilterChip(selected = preset == "bass_boost", onClick = { onPreset("bass_boost") }, label = { Text("Bass Boost") })
+                    FilterChip(selected = preset == "default", onClick = { onPreset("default") }, label = { Text("Default") })
+                    FilterChip(selected = preset == "treble", onClick = { onPreset("treble") }, label = { Text("Treble") })
+                    FilterChip(selected = preset == "vocal", onClick = { onPreset("vocal") }, label = { Text("Vocal") })
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    FilterChip(selected = preset == "custom", onClick = { onPreset("custom") }, label = { Text("Custom") })
+                }
+                names.forEachIndexed { index, name ->
+                    val value = gains.getOrElse(index) { 0f }
+                    Text("$name · ${if (value > 0) "+" else ""}${"%.1f".format(value)} dB", style = MaterialTheme.typography.labelLarge)
+                    Slider(
+                        value = value.coerceIn(-12f, 12f),
+                        onValueChange = { onBandChange(index, it) },
+                        valueRange = -12f..12f,
+                        enabled = enabled
+                    )
+                }
+                Text("Диапазон ±12 dB. Обработка применяется к декодированному PCM-звуку.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Готово") } }
+    )
+}
+
+@Composable
+private fun AudioOutputDialog(
+    nickname: String?,
+    onSelect: (AudioDeviceInfo?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    val outputs = remember(nickname) {
+        audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .filter { it.isSink && it.type in SUPPORTED_OUTPUT_TYPES }
+            .sortedWith(compareBy<AudioDeviceInfo> { if (it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) 0 else 1 }.thenBy { it.id })
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Устройство вывода") },
+        text = {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                TextButton(onClick = { onSelect(null) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Системный выбор устройства")
+                }
+                outputs.forEach { device ->
+                    TextButton(onClick = { onSelect(device) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(audioDeviceLabel(device, nickname), modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                if (outputs.isEmpty()) {
+                    Text("Подключённые устройства вывода не найдены.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
+    )
+}
+
+private val SUPPORTED_OUTPUT_TYPES = setOf(
+    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+    AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+    AudioDeviceInfo.TYPE_WIRED_HEADSET,
+    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+    AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+    AudioDeviceInfo.TYPE_USB_HEADSET,
+    AudioDeviceInfo.TYPE_USB_DEVICE,
+    AudioDeviceInfo.TYPE_HDMI,
+    AudioDeviceInfo.TYPE_LINE_ANALOG,
+    AudioDeviceInfo.TYPE_LINE_DIGITAL,
+    AudioDeviceInfo.TYPE_DOCK,
+    AudioDeviceInfo.TYPE_BLE_HEADSET,
+    AudioDeviceInfo.TYPE_BLE_SPEAKER
+)
+
+private fun audioDeviceLabel(device: AudioDeviceInfo, nickname: String?): String {
+    if (device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+        val owner = nickname?.takeIf { it.isNotBlank() } ?: "Phone"
+        return if (owner == "Phone") owner else "$owner's phone"
+    }
+    val typeLabel = when (device.type) {
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_BLE_HEADSET,
+        AudioDeviceInfo.TYPE_BLE_SPEAKER -> "Bluetooth"
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Проводные наушники"
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_USB_DEVICE -> "USB-аудио"
+        AudioDeviceInfo.TYPE_HDMI -> "HDMI"
+        AudioDeviceInfo.TYPE_LINE_ANALOG,
+        AudioDeviceInfo.TYPE_LINE_DIGITAL -> "Линейный выход"
+        AudioDeviceInfo.TYPE_DOCK -> "Док-станция"
+        else -> "Аудиоустройство"
+    }
+    val name = runCatching { device.productName.toString().takeIf { it.isNotBlank() } }.getOrNull()
+    return if (name.isNullOrBlank() || name == "0") typeLabel else "$name · $typeLabel"
 }

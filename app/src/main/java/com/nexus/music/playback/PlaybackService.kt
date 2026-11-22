@@ -11,19 +11,18 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.nexus.music.NexusApp
 import com.nexus.music.data.soundcloud.SoundCloudRepository
 
 @OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
+    private var exoPlayer: ExoPlayer? = null
 
     override fun onCreate() {
         super.onCreate()
 
-        // SoundCloud tracks enter Media3 as auvyx-sc://track items. Resolve that
-        // URI to the current signed HLS URL only when Media3 starts loading it.
-        // The wrapper also handles ordinary content:// and file:// local tracks.
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
             .setAllowCrossProtocolRedirects(true)
@@ -44,7 +43,9 @@ class PlaybackService : MediaSessionService() {
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(resolvingFactory)
 
+        val equalizer = (application as NexusApp).equalizer
         val player = ExoPlayer.Builder(this)
+            .setRenderersFactory(AuvyxRenderersFactory(this, equalizer.audioProcessor))
             .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -55,6 +56,9 @@ class PlaybackService : MediaSessionService() {
             )
             .setHandleAudioBecomingNoisy(true)
             .build()
+
+        exoPlayer = player
+        PlaybackAudioRouting.attach(player)
         session = MediaSession.Builder(this, player).build()
     }
 
@@ -68,10 +72,12 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        exoPlayer?.let { PlaybackAudioRouting.detach(it) }
         session?.run {
             player.release()
             release()
         }
+        exoPlayer = null
         session = null
         super.onDestroy()
     }

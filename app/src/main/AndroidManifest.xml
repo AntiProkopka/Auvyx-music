@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <application
         android:name=".NexusApp"
@@ -21,10 +22,10 @@
         <activity-alias
             android:name=".LauncherIconOne"
             android:targetActivity=".MainActivity"
-            android:enabled="true"
+            android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/auvyx_icon_1"
-            android:label="AUVYX">
+            android:label="auvyx">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -37,7 +38,7 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/auvyx_icon_2"
-            android:label="AUVYX">
+            android:label="auvyx">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -47,10 +48,10 @@
         <activity-alias
             android:name=".LauncherIconThree"
             android:targetActivity=".MainActivity"
-            android:enabled="false"
+            android:enabled="true"
             android:exported="true"
             android:icon="@mipmap/auvyx_icon_3"
-            android:label="AUVYX">
+            android:label="auvyx">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

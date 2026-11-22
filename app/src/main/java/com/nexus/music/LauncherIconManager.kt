@@ -18,11 +18,11 @@ object LauncherIconManager {
             packageManager.getComponentEnabledSetting(component(context, className)) ==
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED
         }
-        return explicitlyEnabled?.first ?: "1"
+        return explicitlyEnabled?.first ?: "3"
     }
 
     fun apply(context: Context, selected: String) {
-        val choice = selected.takeIf { value -> aliases.any { it.first == value } } ?: "1"
+        val choice = selected.takeIf { value -> aliases.any { it.first == value } } ?: "3"
         val packageManager = context.packageManager
         aliases.forEach { (id, className) ->
             packageManager.setComponentEnabledSetting(

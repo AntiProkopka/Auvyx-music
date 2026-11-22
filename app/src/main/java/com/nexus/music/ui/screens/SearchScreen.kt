@@ -1,7 +1,5 @@
 package com.nexus.music.ui.screens
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,7 +18,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,7 +28,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
@@ -54,14 +50,11 @@ fun SearchScreen(vm: AppViewModel) {
     val cloudError by vm.soundCloudError.collectAsStateWithLifecycle()
     val cloudFavorites by vm.soundCloudFavorites.collectAsStateWithLifecycle()
     val current by vm.player.state.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     var pending by remember { mutableStateOf<TrackEntity?>(null) }
 
     val showLocal = source == "all" || source == "local"
     val showSoundCloud = source == "all" || source == "soundcloud"
 
-    // One query drives every currently integrated catalogue. Remote calls are debounced
-    // so typing quickly does not send a request for every character.
     LaunchedEffect(query, source) {
         vm.searchQuery.value = if (showLocal) query else ""
         if (showSoundCloud) {
@@ -106,7 +99,7 @@ fun SearchScreen(vm: AppViewModel) {
 
         LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
             if (query.isBlank()) {
-                item { EmptyHint("Введи запрос. В режиме «Все» AUVYX одновременно ищет в медиатеке устройства и SoundCloud.") }
+                item { EmptyHint("Введи запрос. Поиск одновременно проверит выбранные каталоги.") }
             } else {
                 if (showLocal) {
                     item {
@@ -168,41 +161,15 @@ fun SearchScreen(vm: AppViewModel) {
                                 isFavorite = cloudFavorites.any { it.trackId == track.id },
                                 onPlay = { vm.playSoundCloud(cloudResults, index) },
                                 onFavorite = { vm.toggleSoundCloudFavorite(track) },
-                                onEnqueue = { vm.enqueueSoundCloud(track) }
+                                onEnqueue = { vm.enqueueSoundCloud(track) },
+                                onPlayNext = { vm.playNextSoundCloud(track) }
                             )
                         }
-                    }
-                }
-
-                if (showSoundCloud) {
-                    item {
-                        OutlinedButton(
-                            onClick = {
-                                val url = Uri.Builder()
-                                    .scheme("https")
-                                    .authority("music.youtube.com")
-                                    .appendPath("search")
-                                    .appendQueryParameter("q", query)
-                                    .build()
-                                context.startActivity(Intent(Intent.ACTION_VIEW, url))
-                            },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
-                        ) {
-                            Text("Открыть этот запрос в YouTube Music")
-                        }
-                        Text(
-                            "YouTube Music откроется отдельно. Встроенный поиск и воспроизведение через сторонний API недоступны.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp)
-                        )
                     }
                 }
             }
         }
     }
 
-    pending?.let { track ->
-        AddToPlaylistDialog(vm, track) { pending = null }
-    }
+    pending?.let { track -> AddToPlaylistDialog(vm, track) { pending = null } }
 }

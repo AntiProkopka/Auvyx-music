@@ -25,17 +25,23 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.ui.components.NameDialog
 
 @Composable
 fun SettingsScreen(vm: AppViewModel) {
     val theme by vm.themeMode.collectAsStateWithLifecycle()
     val folders by vm.folders.collectAsStateWithLifecycle()
     val tracks by vm.tracks.collectAsStateWithLifecycle()
+    val nickname by vm.nickname.collectAsStateWithLifecycle()
+    var editingNickname by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -47,7 +53,7 @@ fun SettingsScreen(vm: AppViewModel) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
             Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("AUVYX", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text("auvyx", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 Text("Музыка, собранная вокруг тебя.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 Text("PERSONAL MUSIC PLAYER", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
@@ -56,8 +62,25 @@ fun SettingsScreen(vm: AppViewModel) {
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column {
                 ListItem(
+                    headlineContent = { Text("Профиль плеера") },
+                    supportingContent = { Text("${nickname ?: "Имя не задано"} · используется в названии встроенного динамика") },
+                    leadingContent = { Icon(Icons.Default.Storage, contentDescription = null) }
+                )
+                OutlinedButton(onClick = { editingNickname = true }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text("Изменить никнейм")
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        ) {
+            Column {
+                ListItem(
                     headlineContent = { Text("Оформление") },
-                    supportingContent = { Text("Фирменная палитра AUVYX · Material 3") },
+                    supportingContent = { Text("Material 3") },
                     leadingContent = { Icon(Icons.Default.Palette, contentDescription = null) }
                 )
                 listOf("system" to "Как в системе", "light" to "Светлая", "dark" to "Тёмная").forEach { (key, label) ->
@@ -96,20 +119,30 @@ fun SettingsScreen(vm: AppViewModel) {
                     Icon(Icons.Default.DeleteSweep, contentDescription = null)
                     Text("Очистить историю прослушивания")
                 }
-                Button(onClick = { vm.resetSettings() }, modifier = Modifier.fillMaxWidth()) { Text("Сбросить настройки") }
+                Button(onClick = { vm.resetSettings() }, modifier = Modifier.fillMaxWidth()) { Text("Сбросить настройки интерфейса") }
             }
         }
 
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("О приложении", style = MaterialTheme.typography.titleMedium)
-                Text("AUVYX · Alpha 1.9", style = MaterialTheme.typography.headlineSmall)
+                Text("auvyx · Alpha 2.0", style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    "Локальная медиатека и единый плеер на Media3. Поиск объединяет локальную медиатеку и SoundCloud; YouTube Music открывается через официальное приложение или сайт.",
+                    "Локальная медиатека, SoundCloud и единый движок воспроизведения на Media3. В Alpha 2.0 добавлены собственный 6-полосный эквалайзер и выбор аудиовыхода.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
+    }
+
+    if (editingNickname) {
+        NameDialog(
+            title = "Никнейм плеера",
+            initial = nickname.orEmpty(),
+            confirmLabel = "Сохранить",
+            onConfirm = { vm.setNickname(it); editingNickname = false },
+            onDismiss = { editingNickname = false }
+        )
     }
 }

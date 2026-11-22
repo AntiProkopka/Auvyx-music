@@ -50,7 +50,7 @@ fun AppIconSettingsSection() {
         Column {
             ListItem(
                 headlineContent = { Text("Иконка приложения") },
-                supportingContent = { Text("Выбери один из трёх вариантов AUVYX") },
+                supportingContent = { Text("Выбери один из трёх вариантов auvyx") },
                 leadingContent = { androidx.compose.material3.Icon(Icons.Default.Apps, contentDescription = null) }
             )
             options.forEach { (id, label, iconRes) ->
