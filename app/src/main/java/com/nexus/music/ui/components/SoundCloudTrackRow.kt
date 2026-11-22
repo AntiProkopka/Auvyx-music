@@ -1,7 +1,10 @@
 package com.nexus.music.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,6 +18,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
@@ -33,11 +37,16 @@ fun SoundCloudTrackRow(
         modifier = Modifier.clickable(onClick = onPlay),
         leadingContent = {
             if (!track.artworkUrl.isNullOrBlank()) {
-                RemoteArtworkImage(
-                    imageUrl = track.artworkUrl,
-                    contentDescription = "Обложка ${track.title}",
-                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(16.dp))
-                )
+                Box(modifier = Modifier.size(56.dp)) {
+                    RemoteArtworkImage(
+                        imageUrl = track.artworkUrl,
+                        contentDescription = "Обложка ${track.title}",
+                        modifier = Modifier.matchParentSize().clip(RoundedCornerShape(16.dp))
+                    )
+                    Box(modifier = Modifier.align(Alignment.BottomEnd)) {
+                        PlatformArtworkBadge(platform = "soundcloud")
+                    }
+                }
             } else {
                 Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(40.dp))
             }
@@ -52,7 +61,7 @@ fun SoundCloudTrackRow(
         },
         supportingContent = {
             Text(
-                "${track.artist} · ${formatTime(track.durationMs)} · SoundCloud",
+                "${track.artist} · ${formatTime(track.durationMs)}",
                 maxLines = 1,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

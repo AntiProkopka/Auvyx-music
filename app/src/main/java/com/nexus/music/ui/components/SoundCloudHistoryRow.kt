@@ -1,6 +1,8 @@
 package com.nexus.music.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -10,6 +12,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
@@ -25,13 +28,21 @@ fun SoundCloudHistoryRow(
         modifier = Modifier.clickable(onClick = onClick),
         leadingContent = {
             if (!item.artworkUrl.isNullOrBlank()) {
-                RemoteArtworkImage(
-                    imageUrl = item.artworkUrl,
-                    contentDescription = "Обложка ${item.title}",
-                    modifier = Modifier.size(54.dp).clip(RoundedCornerShape(14.dp))
-                )
+                Box(modifier = Modifier.size(54.dp)) {
+                    RemoteArtworkImage(
+                        imageUrl = item.artworkUrl,
+                        contentDescription = "Обложка ${item.title}",
+                        modifier = Modifier.matchParentSize().clip(RoundedCornerShape(14.dp))
+                    )
+                    Box(modifier = Modifier.align(Alignment.BottomEnd)) {
+                        PlatformArtworkBadge(platform = "soundcloud")
+                    }
+                }
             } else {
-                Icon(Icons.Default.Cloud, contentDescription = null, modifier = Modifier.size(38.dp))
+                Box(modifier = Modifier.size(54.dp), contentAlignment = Alignment.BottomEnd) {
+                    Icon(Icons.Default.Cloud, contentDescription = null, modifier = Modifier.align(Alignment.Center).size(38.dp))
+                    PlatformArtworkBadge(platform = "soundcloud")
+                }
             }
         },
         headlineContent = {
@@ -45,7 +56,7 @@ fun SoundCloudHistoryRow(
         supportingContent = {
             val duration = if (item.durationMs > 0L) " · ${formatTime(item.durationMs)}" else ""
             Text(
-                "${item.artist}$duration · SoundCloud",
+                "${item.artist}$duration",
                 maxLines = 1,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall

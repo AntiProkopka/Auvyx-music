@@ -72,6 +72,8 @@ fun SettingsScreen(vm: AppViewModel) {
             }
         }
 
+        AppIconSettingsSection()
+
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column {
                 ListItem(
@@ -101,9 +103,9 @@ fun SettingsScreen(vm: AppViewModel) {
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("О приложении", style = MaterialTheme.typography.titleMedium)
-                Text("AUVYX · Alpha 1.8", style = MaterialTheme.typography.headlineSmall)
+                Text("AUVYX · Alpha 1.9", style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    "Локальная медиатека и единый плеер на Media3. SoundCloud-каталог работает через неофициальный публичный веб-интерфейс и может меняться.",
+                    "Локальная медиатека и единый плеер на Media3. Поиск объединяет локальную медиатеку и SoundCloud; YouTube Music открывается через официальное приложение или сайт.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

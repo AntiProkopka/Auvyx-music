@@ -13,8 +13,8 @@ android {
         applicationId = "com.nexus.music"
         minSdk = 29
         targetSdk = 34
-        versionCode = 8
-        versionName = "Alpha 1.8"
+        versionCode = 9
+        versionName = "Alpha 1.9"
     }
 
     buildTypes {
