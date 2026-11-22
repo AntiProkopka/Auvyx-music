@@ -107,14 +107,14 @@ fun SettingsScreen(vm: AppViewModel) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("О приложении", style = MaterialTheme.typography.titleMedium)
-                Text("AUVYX · Alpha 1.6", style = MaterialTheme.typography.titleLarge)
+                Text("AUVYX · Alpha 1.7", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Локальная медиатека и плеер на Media3. SoundCloud подключён через официальный встроенный плеер для публичных ссылок.",
+                    "Локальная медиатека и единый плеер на Media3. Поиск SoundCloud работает через публичный веб-интерфейс сервиса.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "SoundCloud воспроизводится отдельно от локальной очереди и Speed Lab.",
+                    "Веб-интерфейс SoundCloud неофициальный и может измениться. Некоторые треки недоступны для внешнего воспроизведения.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

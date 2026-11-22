@@ -61,6 +61,7 @@ import com.nexus.music.AppViewModel
 import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.formatTime
 import com.nexus.music.ui.components.ArtworkImage
+import com.nexus.music.ui.components.RemoteArtworkImage
 
 @Composable
 fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
@@ -73,6 +74,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     var dragValue by remember { mutableFloatStateOf(0f) }
 
     val track = remember(tracks, s.mediaId) { tracks.firstOrNull { it.id.toString() == s.mediaId } }
+    val artworkUri = track?.artworkUri ?: s.artworkUri
     val duration = s.durationMs.coerceAtLeast(1L)
     val sliderValue = if (dragging) dragValue else pos.toFloat().coerceIn(0f, duration.toFloat())
 
@@ -158,12 +160,20 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (track?.artworkUri != null) {
-                        ArtworkImage(
-                            artworkUri = track.artworkUri,
-                            contentDescription = "Обложка ${s.title}",
-                            modifier = Modifier.fillMaxSize()
-                        )
+                    if (!artworkUri.isNullOrBlank()) {
+                        if (artworkUri.startsWith("https://", ignoreCase = true)) {
+                            RemoteArtworkImage(
+                                imageUrl = artworkUri,
+                                contentDescription = "Обложка ${s.title}",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            ArtworkImage(
+                                artworkUri = artworkUri,
+                                contentDescription = "Обложка ${s.title}",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     } else {
                         Icon(
                             Icons.Default.MusicNote,
@@ -298,7 +308,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                     ) {
                         TextButton(onClick = { vm.player.setSpeedAndPitch(0.8f, 0.85f) }) { Text("Slowed") }
                         TextButton(onClick = vm.player::resetSpeedLab) { Text("Original") }
-                        TextButton(onClick = { vm.player.setSpeedAndPitch(1.25f, 1f) }) { Text("Speed Up") }
+                        TextButton(onClick = { vm.player.setSpeedAndPitch(1.25f, 1.25f) }) { Text("Speed Up") }
                     }
                 }
             },

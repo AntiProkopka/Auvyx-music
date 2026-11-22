@@ -1,48 +1,49 @@
 package com.nexus.music.ui.screens
 
-import android.content.Intent
-import android.net.Uri
-import android.webkit.WebChromeClient
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
 import com.nexus.music.data.db.TrackEntity
+import com.nexus.music.data.soundcloud.SoundCloudTrack
 import com.nexus.music.ui.components.AddToPlaylistDialog
+import com.nexus.music.ui.components.RemoteArtworkImage
 import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.TrackRow
 import com.nexus.music.ui.components.trackMenu
@@ -58,7 +59,7 @@ fun SearchScreen(vm: AppViewModel) {
             FilterChip(selected = source == "local", onClick = { source = "local" }, label = { Text("На устройстве") })
             FilterChip(selected = source == "soundcloud", onClick = { source = "soundcloud" }, label = { Text("SoundCloud") })
         }
-        if (source == "local") LocalLibrarySearch(vm) else SoundCloudSearch()
+        if (source == "local") LocalLibrarySearch(vm) else SoundCloudSearch(vm)
     }
 }
 
@@ -107,143 +108,127 @@ private fun LocalLibrarySearch(vm: AppViewModel) {
 }
 
 @Composable
-private fun SoundCloudSearch() {
-    val context = LocalContext.current
-    var input by rememberSaveable { mutableStateOf("") }
-    var activeUrl by rememberSaveable { mutableStateOf("") }
-    var error by rememberSaveable { mutableStateOf<String?>(null) }
+private fun SoundCloudSearch(vm: AppViewModel) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val results by vm.soundCloudResults.collectAsStateWithLifecycle()
+    val loading by vm.soundCloudLoading.collectAsStateWithLifecycle()
+    val error by vm.soundCloudError.collectAsStateWithLifecycle()
 
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier = Modifier.fillMaxSize()) {
         Card(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 Text("SoundCloud", style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSecondaryContainer)
                 Text(
-                    "Вставь публичную ссылку на трек или плейлист. Воспроизведение идёт через официальный встроенный плеер SoundCloud.",
+                    "Ищи публичные треки и запускай их в общем плеере AUVYX. Доступность зависит от ограничений SoundCloud.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
-                Button(onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://soundcloud.com")))
-                }) {
-                    Icon(Icons.Default.OpenInBrowser, contentDescription = null)
-                    Text("Найти музыку")
-                }
             }
         }
 
         OutlinedTextField(
-            value = input,
-            onValueChange = { input = it; error = null },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             singleLine = true,
-            shape = RoundedCornerShape(20.dp),
-            label = { Text("Ссылка на SoundCloud") },
-            placeholder = { Text("https://soundcloud.com/artist/track") }
-        )
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = {
-                val candidate = input.trim()
-                val uri = runCatching { Uri.parse(candidate) }.getOrNull()
-                val host = uri?.host?.lowercase()
-                val validHost = host == "soundcloud.com" || host == "www.soundcloud.com" ||
-                    host == "m.soundcloud.com" || host == "on.soundcloud.com"
-                val path = uri?.path.orEmpty().trim('/')
-                val validPath = path.contains('/') || (host == "on.soundcloud.com" && path.isNotBlank())
-                if (uri != null && uri.scheme.equals("https", ignoreCase = true) && validHost && validPath) {
-                    activeUrl = uri.toString()
-                    error = null
-                } else {
-                    error = "Нужна публичная HTTPS-ссылка на трек или плейлист SoundCloud."
+            shape = RoundedCornerShape(24.dp),
+            label = { Text("Трек или исполнитель") },
+            placeholder = { Text("Например, название композиции") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { query = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Очистить")
+                    }
                 }
-            }, enabled = input.isNotBlank()) { Text("Открыть плеер") }
-            androidx.compose.material3.OutlinedButton(onClick = { input = ""; activeUrl = ""; error = null }) {
-                Text("Сбросить")
             }
-        }
-        error?.let {
-            Text(it, color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(horizontal = 16.dp))
+        )
+        Button(
+            onClick = { vm.searchSoundCloud(query) },
+            enabled = query.isNotBlank() && !loading,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+        ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            } else {
+                Icon(Icons.Default.Search, contentDescription = null)
+            }
+            Text(if (loading) "Ищем…" else "Найти")
         }
 
-        if (activeUrl.isBlank()) {
-            EmptyHint("После выбора трека в SoundCloud скопируй его ссылку и вставь сюда. Треки с отключённым встраиванием могут не воспроизводиться.")
-        } else {
-            Card(
-                modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-            ) {
-                SoundCloudWidget(url = activeUrl, modifier = Modifier.fillMaxSize())
+        if (error != null) {
+            Text(
+                text = error.orEmpty(),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+            )
+        } else if (results.isEmpty() && !loading) {
+            EmptyHint("Введи запрос, чтобы искать музыку в SoundCloud.")
+        } else if (results.isNotEmpty()) {
+            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                itemsIndexed(results, key = { _, track -> track.id }) { index, track ->
+                    SoundCloudTrackRow(
+                        track = track,
+                        onPlay = { vm.playSoundCloud(results, index) },
+                        onEnqueue = { vm.enqueueSoundCloud(track) }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SoundCloudWidget(url: String, modifier: Modifier = Modifier) {
-    val playerUrl = remember(url) {
-        Uri.parse("https://w.soundcloud.com/player/").buildUpon()
-            .appendQueryParameter("url", url)
-            .appendQueryParameter("color", "#6750A4")
-            .appendQueryParameter("auto_play", "false")
-            .appendQueryParameter("hide_related", "true")
-            .appendQueryParameter("show_comments", "false")
-            .appendQueryParameter("show_user", "true")
-            .appendQueryParameter("visual", "true")
-            .build().toString()
-    }
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            WebView(ctx).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.mediaPlaybackRequiresUserGesture = true
-                settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                settings.allowFileAccess = false
-                settings.allowContentAccess = false
-                webViewClient = WebViewClient()
-                webChromeClient = WebChromeClient()
-                setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                tag = playerUrl
-                loadDataWithBaseURL(
-                    "https://w.soundcloud.com/",
-                    soundCloudEmbedHtml(playerUrl),
-                    "text/html", "UTF-8", null
+private fun SoundCloudTrackRow(
+    track: SoundCloudTrack,
+    onPlay: () -> Unit,
+    onEnqueue: () -> Unit
+) {
+    ListItem(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onPlay),
+        leadingContent = {
+            if (track.artworkUrl != null) {
+                RemoteArtworkImage(
+                    imageUrl = track.artworkUrl,
+                    contentDescription = "Обложка ${track.title}",
+                    modifier = Modifier.size(54.dp).clip(RoundedCornerShape(12.dp))
                 )
+            } else {
+                Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(42.dp))
             }
         },
-        update = { webView ->
-            if (webView.tag != playerUrl) {
-                webView.tag = playerUrl
-                webView.loadDataWithBaseURL(
-                    "https://w.soundcloud.com/",
-                    soundCloudEmbedHtml(playerUrl),
-                    "text/html", "UTF-8", null
-                )
-            }
+        headlineContent = {
+            Text(track.title, maxLines = 1, style = MaterialTheme.typography.titleSmall)
         },
-        onRelease = { webView ->
-            webView.stopLoading()
-            webView.destroy()
+        supportingContent = {
+            Text(
+                "${track.artist} · ${formatSoundCloudDuration(track.durationMs)}",
+                maxLines = 1,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        trailingContent = {
+            IconButton(onClick = onEnqueue) {
+                Icon(Icons.Default.Add, contentDescription = "Добавить в очередь")
+            }
         }
     )
 }
 
-private fun soundCloudEmbedHtml(playerUrl: String): String {
-    val htmlSafePlayerUrl = playerUrl.replace("&", "&amp;")
-    return """
-    <!doctype html>
-    <html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-      html,body{margin:0;padding:0;width:100%;height:100%;background:transparent;overflow:hidden}
-      iframe{border:0;width:100%;height:100%;min-height:420px;border-radius:20px}
-    </style></head>
-    <body><iframe allow="autoplay" scrolling="no" src="$htmlSafePlayerUrl"></iframe></body></html>
-""".trimIndent()
+private fun formatSoundCloudDuration(ms: Long): String {
+    val seconds = (ms / 1000L).coerceAtLeast(0L)
+    return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
 }

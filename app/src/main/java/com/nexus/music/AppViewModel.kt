@@ -8,8 +8,11 @@ import com.nexus.music.data.db.PlaylistEntity
 import com.nexus.music.data.db.PlaylistSummary
 import com.nexus.music.data.db.PlaylistTrackEntity
 import com.nexus.music.data.db.TrackEntity
+import com.nexus.music.data.soundcloud.SoundCloudRepository
+import com.nexus.music.data.soundcloud.SoundCloudTrack
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +55,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val searchQuery = MutableStateFlow("")
 
+    // SoundCloud catalogue state. Remote entries stay separate from the local Room library.
+    val soundCloudResults = MutableStateFlow<List<SoundCloudTrack>>(emptyList())
+    val soundCloudLoading = MutableStateFlow(false)
+    val soundCloudError = MutableStateFlow<String?>(null)
+    private var soundCloudSearchJob: Job? = null
+
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val searchResults: StateFlow<List<TrackEntity>> = searchQuery
         .debounce(300)
@@ -59,6 +68,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (q.isBlank()) flowOf(emptyList<TrackEntity>()) else db.trackDao().search(q.trim())
         }
         .stateIn(viewModelScope, lazily, emptyList())
+
+    // ---------- SoundCloud ----------
+
+    fun searchSoundCloud(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) {
+            soundCloudResults.value = emptyList()
+            soundCloudError.value = null
+            return
+        }
+        soundCloudSearchJob?.cancel()
+        soundCloudSearchJob = viewModelScope.launch {
+            soundCloudLoading.value = true
+            soundCloudError.value = null
+            try {
+                soundCloudResults.value = SoundCloudRepository.searchTracks(trimmed)
+                if (soundCloudResults.value.isEmpty()) {
+                    soundCloudError.value = "Ничего не найдено. Попробуй другой запрос."
+                }
+            } catch (error: Exception) {
+                soundCloudResults.value = emptyList()
+                soundCloudError.value = error.message ?: "Не удалось выполнить поиск SoundCloud."
+            } finally {
+                soundCloudLoading.value = false
+            }
+        }
+    }
+
+    fun playSoundCloud(results: List<SoundCloudTrack>, index: Int) {
+        player.playSoundCloudTracks(results, index)
+    }
+
+    fun enqueueSoundCloud(track: SoundCloudTrack) {
+        player.enqueueSoundCloudTrack(track)
+        messages.tryEmit("Добавлено в очередь: ${track.title}")
+    }
 
     // ---------- Медиатека ----------
 
