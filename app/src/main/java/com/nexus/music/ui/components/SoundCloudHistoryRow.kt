@@ -2,7 +2,7 @@ package com.nexus.music.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.matchParentSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,7 +32,7 @@ fun SoundCloudHistoryRow(
                     RemoteArtworkImage(
                         imageUrl = item.artworkUrl,
                         contentDescription = "Обложка ${item.title}",
-                        modifier = Modifier.matchParentSize().clip(RoundedCornerShape(14.dp))
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp))
                     )
                     Box(modifier = Modifier.align(Alignment.BottomEnd)) {
                         PlatformArtworkBadge(platform = "soundcloud")

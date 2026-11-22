@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.matchParentSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -41,7 +41,7 @@ fun SoundCloudTrackRow(
                     RemoteArtworkImage(
                         imageUrl = track.artworkUrl,
                         contentDescription = "Обложка ${track.title}",
-                        modifier = Modifier.matchParentSize().clip(RoundedCornerShape(16.dp))
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
                     )
                     Box(modifier = Modifier.align(Alignment.BottomEnd)) {
                         PlatformArtworkBadge(platform = "soundcloud")
