@@ -16,6 +16,7 @@ import androidx.media3.session.SessionToken
 import com.nexus.music.data.db.HistoryEntity
 import com.nexus.music.data.db.NexusDatabase
 import com.nexus.music.data.db.QueueEntity
+import com.nexus.music.data.db.SoundCloudHistoryEntity
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.data.settings.SettingsStore
 import com.nexus.music.data.soundcloud.SoundCloudTrack
@@ -31,7 +32,7 @@ import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
- data class QueueItem(val mediaId: String, val title: String, val artist: String)
+data class QueueItem(val mediaId: String, val title: String, val artist: String)
 
 data class PlayerState(
     val mediaId: String? = null,
@@ -39,6 +40,7 @@ data class PlayerState(
     val artist: String = "",
     val album: String = "",
     val artworkUri: String? = null,
+    val sourceUri: String? = null,
     val isPlaying: Boolean = false,
     val durationMs: Long = 0L,
     val shuffle: Boolean = false,
@@ -58,10 +60,8 @@ class PlayerController(
 ) {
     private val _state = MutableStateFlow(PlayerState())
     val state: StateFlow<PlayerState> = _state.asStateFlow()
-
     private val _position = MutableStateFlow(0L)
     val position: StateFlow<Long> = _position.asStateFlow()
-
     private val _errors = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val errors = _errors
 
@@ -136,16 +136,13 @@ class PlayerController(
 
     private fun withController(action: (MediaController) -> Unit) {
         val current = controller
-        if (current != null) {
-            action(current)
-        } else {
+        if (current != null) action(current) else {
             pendingActions += action
             connect()
         }
     }
 
-    // ---------- Local playback ----------
-
+    // Local playback
     fun playTracks(tracks: List<TrackEntity>, startIndex: Int, shuffle: Boolean = false) {
         if (tracks.isEmpty()) return
         withController { c ->
@@ -162,8 +159,7 @@ class PlayerController(
         }
     }
 
-    // ---------- SoundCloud playback ----------
-
+    // SoundCloud playback
     fun playSoundCloudTracks(tracks: List<SoundCloudTrack>, startIndex: Int) {
         if (tracks.isEmpty()) return
         withController { c ->
@@ -216,8 +212,7 @@ class PlayerController(
             .build()
     }
 
-    // ---------- Queue and transport controls ----------
-
+    // Transport controls
     fun playQueueIndex(index: Int) = withController { c ->
         if (index in 0 until c.mediaItemCount) {
             lastLoggedId = null
@@ -227,16 +222,13 @@ class PlayerController(
     }
 
     fun togglePlayPause() = withController { c ->
-        if (c.isPlaying) {
-            c.pause()
-        } else {
+        if (c.isPlaying) c.pause() else {
             if (c.playbackState == Player.STATE_IDLE) c.prepare()
             c.play()
         }
     }
 
     fun next() = withController { it.seekToNext() }
-
     fun previous() = withController { it.seekToPrevious() }
 
     fun seekTo(positionMs: Long) {
@@ -265,11 +257,8 @@ class PlayerController(
     }
 
     fun setSpeed(value: Float) = setPlaybackParameters(value, _state.value.pitch)
-
     fun setPitch(value: Float) = setPlaybackParameters(_state.value.speed, value)
-
     fun resetSpeedLab() = setPlaybackParameters(1f, 1f)
-
     fun setSpeedAndPitch(speed: Float, pitch: Float) = setPlaybackParameters(speed, pitch)
 
     private fun setPlaybackParameters(speed: Float, pitch: Float) {
@@ -286,7 +275,6 @@ class PlayerController(
         }
     }
 
-    /** Adds a local track at the end of the current queue. */
     fun enqueue(track: TrackEntity) = withController { c ->
         val wasEmpty = c.mediaItemCount == 0
         c.addMediaItem(toMediaItem(track))
@@ -318,8 +306,7 @@ class PlayerController(
         }
     }
 
-    // ---------- Internal ----------
-
+    // Internal helpers
     private fun toMediaItem(track: TrackEntity): MediaItem {
         val metadata = MediaMetadata.Builder()
             .setTitle(track.title)
@@ -368,8 +355,6 @@ class PlayerController(
     }
 
     private fun persistQueue() {
-        // Room's current queue schema stores only local numeric TrackEntity IDs.
-        // Do not overwrite the saved local queue when a SoundCloud queue is active.
         if (queue.any { it.mediaId.toLongOrNull() == null }) return
         val rows = queue.mapNotNull { it.mediaId.toLongOrNull() }
             .mapIndexed { index, id -> QueueEntity(position = index, trackId = id) }
@@ -390,6 +375,7 @@ class PlayerController(
             artist = item?.mediaMetadata?.artist?.toString() ?: "",
             album = item?.mediaMetadata?.albumTitle?.toString() ?: "",
             artworkUri = item?.mediaMetadata?.artworkUri?.toString(),
+            sourceUri = item?.localConfiguration?.uri?.toString(),
             isPlaying = c.isPlaying,
             durationMs = if (duration == C.TIME_UNSET) 0L else duration.coerceAtLeast(0L),
             shuffle = c.shuffleModeEnabled,
@@ -403,9 +389,33 @@ class PlayerController(
     }
 
     private fun logHistory() {
-        val id = controller?.currentMediaItem?.mediaId ?: return
+        val c = controller ?: return
+        val item = c.currentMediaItem ?: return
+        val id = item.mediaId
         if (id == lastLoggedId) return
         lastLoggedId = id
+        val metadata = item.mediaMetadata
+        val duration = c.duration.takeIf { it != C.TIME_UNSET }?.coerceAtLeast(0L) ?: 0L
+        if (id.startsWith("soundcloud:")) {
+            val trackId = id.substringAfter(':').toLongOrNull() ?: return
+            val permalink = item.localConfiguration?.uri?.getQueryParameter("url") ?: return
+            scope.launch {
+                runCatching {
+                    db.soundCloudHistoryDao().insert(
+                        SoundCloudHistoryEntity(
+                            trackId = trackId,
+                            title = metadata.title?.toString().orEmpty().ifBlank { "Без названия" },
+                            artist = metadata.artist?.toString().orEmpty().ifBlank { "SoundCloud" },
+                            durationMs = duration,
+                            artworkUrl = metadata.artworkUri?.toString(),
+                            permalinkUrl = permalink,
+                            playedAt = System.currentTimeMillis()
+                        )
+                    )
+                }.onFailure { Log.w(TAG, "Не удалось записать историю SoundCloud", it) }
+            }
+            return
+        }
         val trackId = id.toLongOrNull() ?: return
         scope.launch {
             runCatching {
@@ -434,6 +444,9 @@ class PlayerController(
                 if (c != null && c.isPlaying) {
                     _position.value = c.currentPosition.coerceAtLeast(0L)
                     tick++
+                    // A fallback guard for OEM/player event ordering: write the current
+                    // track once after playback really starts, even if an event was missed.
+                    if (tick % 2 == 0) logHistory()
                     if (tick % 10 == 0) savePlaybackPosition()
                 }
             }

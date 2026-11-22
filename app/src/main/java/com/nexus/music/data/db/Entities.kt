@@ -28,18 +28,8 @@ data class PlaylistEntity(
 @Entity(
     tableName = "playlist_tracks",
     foreignKeys = [
-        ForeignKey(
-            entity = PlaylistEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["playlistId"],
-            onDelete = ForeignKey.CASCADE
-        ),
-        ForeignKey(
-            entity = TrackEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["trackId"],
-            onDelete = ForeignKey.CASCADE
-        )
+        ForeignKey(entity = PlaylistEntity::class, parentColumns = ["id"], childColumns = ["playlistId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = TrackEntity::class, parentColumns = ["id"], childColumns = ["trackId"], onDelete = ForeignKey.CASCADE)
     ],
     indices = [Index("playlistId"), Index("trackId")]
 )
@@ -52,14 +42,7 @@ data class PlaylistTrackEntity(
 
 @Entity(
     tableName = "history",
-    foreignKeys = [
-        ForeignKey(
-            entity = TrackEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["trackId"],
-            onDelete = ForeignKey.CASCADE
-        )
-    ],
+    foreignKeys = [ForeignKey(entity = TrackEntity::class, parentColumns = ["id"], childColumns = ["trackId"], onDelete = ForeignKey.CASCADE)],
     indices = [Index("trackId")]
 )
 data class HistoryEntity(
@@ -72,6 +55,29 @@ data class HistoryEntity(
 data class QueueEntity(
     @PrimaryKey val position: Int,
     val trackId: Long
+)
+
+@Entity(tableName = "soundcloud_favorites")
+data class SoundCloudFavoriteEntity(
+    @PrimaryKey val trackId: Long,
+    val title: String,
+    val artist: String,
+    val durationMs: Long,
+    val artworkUrl: String?,
+    val permalinkUrl: String,
+    val addedAt: Long
+)
+
+@Entity(tableName = "soundcloud_history", indices = [Index("trackId"), Index("playedAt")])
+data class SoundCloudHistoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val trackId: Long,
+    val title: String,
+    val artist: String,
+    val durationMs: Long,
+    val artworkUrl: String?,
+    val permalinkUrl: String,
+    val playedAt: Long
 )
 
 data class PlaylistSummary(

@@ -1,6 +1,5 @@
 package com.nexus.music.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,9 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -23,7 +20,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -34,17 +30,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
 import com.nexus.music.data.db.TrackEntity
-import com.nexus.music.data.soundcloud.SoundCloudTrack
 import com.nexus.music.ui.components.AddToPlaylistDialog
-import com.nexus.music.ui.components.RemoteArtworkImage
 import com.nexus.music.ui.components.EmptyHint
+import com.nexus.music.ui.components.SoundCloudTrackRow
 import com.nexus.music.ui.components.TrackRow
 import com.nexus.music.ui.components.trackMenu
 
@@ -53,7 +46,7 @@ fun SearchScreen(vm: AppViewModel) {
     var source by rememberSaveable { mutableStateOf("local") }
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilterChip(selected = source == "local", onClick = { source = "local" }, label = { Text("На устройстве") })
@@ -75,14 +68,12 @@ private fun LocalLibrarySearch(vm: AppViewModel) {
             value = query,
             onValueChange = { vm.searchQuery.value = it },
             singleLine = true,
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(24.dp),
             label = { Text("Название, исполнитель или альбом") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { vm.searchQuery.value = "" }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Очистить")
-                    }
+                if (query.isNotEmpty()) IconButton(onClick = { vm.searchQuery.value = "" }) {
+                    Icon(Icons.Default.Clear, contentDescription = "Очистить")
                 }
             },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
@@ -93,11 +84,11 @@ private fun LocalLibrarySearch(vm: AppViewModel) {
             EmptyHint("По этому запросу ничего не найдено.")
         } else {
             LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                itemsIndexed(results, key = { _, t -> t.id }) { index, t ->
+                itemsIndexed(results, key = { _, track -> track.id }) { index, track ->
                     TrackRow(
-                        track = t,
-                        isCurrent = current.mediaId == t.id.toString(),
-                        menuItems = trackMenu(vm, t) { pending = it },
+                        track = track,
+                        isCurrent = current.mediaId == track.id.toString(),
+                        menuItems = trackMenu(vm, track) { pending = it },
                         onClick = { vm.player.playTracks(results, index) }
                     )
                 }
@@ -113,22 +104,21 @@ private fun SoundCloudSearch(vm: AppViewModel) {
     val results by vm.soundCloudResults.collectAsStateWithLifecycle()
     val loading by vm.soundCloudLoading.collectAsStateWithLifecycle()
     val error by vm.soundCloudError.collectAsStateWithLifecycle()
+    val favorites by vm.soundCloudFavorites.collectAsStateWithLifecycle()
+    val current by vm.player.state.collectAsStateWithLifecycle()
 
     Column(modifier = Modifier.fillMaxSize()) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text("SoundCloud", style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("SoundCloud", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onTertiaryContainer)
                 Text(
-                    "Ищи публичные треки и запускай их в общем плеере AUVYX. Доступность зависит от ограничений SoundCloud.",
+                    "Публичный каталог SoundCloud в поиске AUVYX. Часть треков может быть недоступна для воспроизведения.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
             }
         }
@@ -143,10 +133,8 @@ private fun SoundCloudSearch(vm: AppViewModel) {
             placeholder = { Text("Например, название композиции") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { query = "" }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Очистить")
-                    }
+                if (query.isNotEmpty()) IconButton(onClick = { query = "" }) {
+                    Icon(Icons.Default.Clear, contentDescription = "Очистить")
                 }
             }
         )
@@ -155,25 +143,13 @@ private fun SoundCloudSearch(vm: AppViewModel) {
             enabled = query.isNotBlank() && !loading,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
         ) {
-            if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            } else {
-                Icon(Icons.Default.Search, contentDescription = null)
-            }
+            if (loading) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+            else Icon(Icons.Default.Search, contentDescription = null)
             Text(if (loading) "Ищем…" else "Найти")
         }
 
         if (error != null) {
-            Text(
-                text = error.orEmpty(),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
-            )
+            Text(error.orEmpty(), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(20.dp))
         } else if (results.isEmpty() && !loading) {
             EmptyHint("Введи запрос, чтобы искать музыку в SoundCloud.")
         } else if (results.isNotEmpty()) {
@@ -181,54 +157,14 @@ private fun SoundCloudSearch(vm: AppViewModel) {
                 itemsIndexed(results, key = { _, track -> track.id }) { index, track ->
                     SoundCloudTrackRow(
                         track = track,
+                        isCurrent = current.mediaId == "soundcloud:${track.id}",
+                        isFavorite = favorites.any { it.trackId == track.id },
                         onPlay = { vm.playSoundCloud(results, index) },
+                        onFavorite = { vm.toggleSoundCloudFavorite(track) },
                         onEnqueue = { vm.enqueueSoundCloud(track) }
                     )
                 }
             }
         }
     }
-}
-
-@Composable
-private fun SoundCloudTrackRow(
-    track: SoundCloudTrack,
-    onPlay: () -> Unit,
-    onEnqueue: () -> Unit
-) {
-    ListItem(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onPlay),
-        leadingContent = {
-            if (track.artworkUrl != null) {
-                RemoteArtworkImage(
-                    imageUrl = track.artworkUrl,
-                    contentDescription = "Обложка ${track.title}",
-                    modifier = Modifier.size(54.dp).clip(RoundedCornerShape(12.dp))
-                )
-            } else {
-                Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(42.dp))
-            }
-        },
-        headlineContent = {
-            Text(track.title, maxLines = 1, style = MaterialTheme.typography.titleSmall)
-        },
-        supportingContent = {
-            Text(
-                "${track.artist} · ${formatSoundCloudDuration(track.durationMs)}",
-                maxLines = 1,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        },
-        trailingContent = {
-            IconButton(onClick = onEnqueue) {
-                Icon(Icons.Default.Add, contentDescription = "Добавить в очередь")
-            }
-        }
-    )
-}
-
-private fun formatSoundCloudDuration(ms: Long): String {
-    val seconds = (ms / 1000L).coerceAtLeast(0L)
-    return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
 }

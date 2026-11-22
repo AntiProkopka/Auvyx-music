@@ -1,5 +1,5 @@
 name: Build AUVYX APK
-run-name: AUVYX Alpha 1.6 APK · ${{ github.event_name }}
+run-name: AUVYX Alpha 1.8 APK · ${{ github.event_name }}
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: auvyx-alpha-1-6-${{ github.ref }}
+  group: auvyx-alpha-1-8-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -45,7 +45,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: AUVYX-Alpha-1.6-debug
+          name: AUVYX-Alpha-1.8-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -50,14 +51,10 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
-            }
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Назад") }
             Text(
                 text = playlist?.name ?: "",
                 style = MaterialTheme.typography.titleLarge,
@@ -65,59 +62,49 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = { renaming = true }) {
-                Icon(Icons.Default.Edit, contentDescription = "Переименовать")
-            }
-            IconButton(onClick = {
-                vm.deletePlaylist(playlistId)
-                onBack()
-            }) {
-                Icon(Icons.Default.Delete, contentDescription = "Удалить плейлист")
-            }
+            IconButton(onClick = { renaming = true }) { Icon(Icons.Default.Edit, contentDescription = "Переименовать") }
+            IconButton(onClick = { vm.deletePlaylist(playlistId); onBack() }) { Icon(Icons.Default.Delete, contentDescription = "Удалить плейлист") }
         }
+
         Card(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            shape = RoundedCornerShape(26.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilledTonalButton(
-                    modifier = Modifier.weight(1f),
-                    enabled = tracks.isNotEmpty(),
-                    onClick = { vm.player.playTracks(tracks, 0) }
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Играть")
-                }
-                FilledTonalButton(
-                    modifier = Modifier.weight(1f),
-                    enabled = tracks.isNotEmpty(),
-                    onClick = { vm.player.playTracks(tracks, 0, shuffle = true) }
-                ) {
-                    Icon(Icons.Default.Shuffle, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Вперемешку")
-                }
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("ПЛЕЙЛИСТ", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(playlist?.name ?: "Моя музыка", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text("${tracks.size} треков", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
         }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilledTonalButton(modifier = Modifier.weight(1f), enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks, 0) }) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Играть", maxLines = 1)
+            }
+            FilledTonalButton(modifier = Modifier.weight(1f), enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks, 0, shuffle = true) }) {
+                Icon(Icons.Default.Shuffle, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Вперемешку", maxLines = 1)
+            }
+        }
+
         if (tracks.isEmpty()) {
             EmptyHint("В плейлисте пока нет треков. Добавьте их через меню «⋮» у трека в медиатеке.")
         } else {
             LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                itemsIndexed(tracks, key = { _, t -> t.id }) { index, t ->
+                itemsIndexed(tracks, key = { _, track -> track.id }) { index, track ->
                     TrackRow(
-                        track = t,
-                        isCurrent = current.mediaId == t.id.toString(),
+                        track = track,
+                        isCurrent = current.mediaId == track.id.toString(),
                         menuItems = listOf(
-                            MenuAction(if (t.isFavorite) "Убрать из избранного" else "В избранное") {
-                                vm.toggleFavorite(t)
-                            },
-                            MenuAction("Убрать из плейлиста") {
-                                vm.removeFromPlaylist(playlistId, t.id)
-                            }
+                            MenuAction(if (track.isFavorite) "Убрать из избранного" else "В избранное") { vm.toggleFavorite(track) },
+                            MenuAction("Убрать из плейлиста") { vm.removeFromPlaylist(playlistId, track.id) }
                         ),
                         onClick = { vm.player.playTracks(tracks, index) }
                     )
@@ -131,10 +118,7 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
             title = "Переименовать плейлист",
             initial = playlist?.name ?: "",
             confirmLabel = "Сохранить",
-            onConfirm = {
-                vm.renamePlaylist(playlistId, it)
-                renaming = false
-            },
+            onConfirm = { vm.renamePlaylist(playlistId, it); renaming = false },
             onDismiss = { renaming = false }
         )
     }

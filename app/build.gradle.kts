@@ -13,8 +13,8 @@ android {
         applicationId = "com.nexus.music"
         minSdk = 29
         targetSdk = 34
-        versionCode = 7
-        versionName = "Alpha 1.7"
+        versionCode = 8
+        versionName = "Alpha 1.8"
     }
 
     buildTypes {
@@ -28,16 +28,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-    buildFeatures {
-        compose = true
-    }
+    kotlinOptions { jvmTarget = "17" }
+    buildFeatures { compose = true }
     packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
+        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
 }
 

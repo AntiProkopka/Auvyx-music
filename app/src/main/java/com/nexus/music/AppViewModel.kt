@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.nexus.music.data.db.PlaylistEntity
 import com.nexus.music.data.db.PlaylistSummary
 import com.nexus.music.data.db.PlaylistTrackEntity
+import com.nexus.music.data.db.SoundCloudFavoriteEntity
+import com.nexus.music.data.db.SoundCloudHistoryEntity
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.data.soundcloud.SoundCloudRepository
 import com.nexus.music.data.soundcloud.SoundCloudTrack
@@ -31,7 +33,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val library = nexus.library
     private val settings = nexus.settings
     val player = nexus.playerController
-
     private val lazily = SharingStarted.WhileSubscribed(5_000)
 
     val tracks: StateFlow<List<TrackEntity>> =
@@ -40,6 +41,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         db.trackDao().observeFavorites().stateIn(viewModelScope, lazily, emptyList())
     val recent: StateFlow<List<TrackEntity>> =
         db.historyDao().observeRecent(50).stateIn(viewModelScope, lazily, emptyList())
+    val soundCloudFavorites: StateFlow<List<SoundCloudFavoriteEntity>> =
+        db.soundCloudFavoriteDao().observeAll().stateIn(viewModelScope, lazily, emptyList())
+    val soundCloudRecent: StateFlow<List<SoundCloudHistoryEntity>> =
+        db.soundCloudHistoryDao().observeRecent(50).stateIn(viewModelScope, lazily, emptyList())
     val playlists: StateFlow<List<PlaylistSummary>> =
         db.playlistDao().observePlaylists().stateIn(viewModelScope, lazily, emptyList())
 
@@ -52,10 +57,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val busy = MutableStateFlow(false)
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
-
     val searchQuery = MutableStateFlow("")
 
-    // SoundCloud catalogue state. Remote entries stay separate from the local Room library.
     val soundCloudResults = MutableStateFlow<List<SoundCloudTrack>>(emptyList())
     val soundCloudLoading = MutableStateFlow(false)
     val soundCloudError = MutableStateFlow<String?>(null)
@@ -69,8 +72,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         .stateIn(viewModelScope, lazily, emptyList())
 
-    // ---------- SoundCloud ----------
-
+    // SoundCloud catalogue
     fun searchSoundCloud(query: String) {
         val trimmed = query.trim()
         if (trimmed.isBlank()) {
@@ -105,8 +107,73 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         messages.tryEmit("Добавлено в очередь: ${track.title}")
     }
 
-    // ---------- Медиатека ----------
+    fun toggleSoundCloudFavorite(track: SoundCloudTrack) {
+        viewModelScope.launch {
+            val dao = db.soundCloudFavoriteDao()
+            if (dao.getById(track.id) != null) {
+                dao.delete(track.id)
+                messages.tryEmit("Убрано из избранного")
+            } else {
+                dao.upsert(
+                    SoundCloudFavoriteEntity(
+                        trackId = track.id,
+                        title = track.title,
+                        artist = track.artist,
+                        durationMs = track.durationMs,
+                        artworkUrl = track.artworkUrl,
+                        permalinkUrl = track.permalinkUrl,
+                        addedAt = System.currentTimeMillis()
+                    )
+                )
+                messages.tryEmit("Добавлено в избранное")
+            }
+        }
+    }
 
+    fun toggleCurrentFavorite() {
+        val state = player.state.value
+        val mediaId = state.mediaId ?: return
+        if (mediaId.startsWith("soundcloud:")) {
+            val id = mediaId.substringAfter(':').toLongOrNull() ?: return
+            val permalink = Uri.parse(state.sourceUri.orEmpty()).getQueryParameter("url") ?: return
+            toggleSoundCloudFavorite(
+                SoundCloudTrack(
+                    id = id,
+                    title = state.title,
+                    artist = state.artist,
+                    durationMs = state.durationMs,
+                    artworkUrl = state.artworkUri,
+                    permalinkUrl = permalink
+                )
+            )
+        } else {
+            val id = mediaId.toLongOrNull() ?: return
+            viewModelScope.launch {
+                val track = db.trackDao().getByIds(listOf(id)).firstOrNull() ?: return@launch
+                db.trackDao().setFavorite(track.id, !track.isFavorite)
+            }
+        }
+    }
+
+    fun playSoundCloudFavorite(item: SoundCloudFavoriteEntity) {
+        player.playSoundCloudTracks(
+            listOf(SoundCloudTrack(item.trackId, item.title, item.artist, item.durationMs, item.artworkUrl, item.permalinkUrl)),
+            0
+        )
+    }
+
+    fun enqueueSoundCloudFavorite(item: SoundCloudFavoriteEntity) {
+        enqueueSoundCloud(SoundCloudTrack(item.trackId, item.title, item.artist, item.durationMs, item.artworkUrl, item.permalinkUrl))
+    }
+
+    fun playSoundCloudHistory(item: SoundCloudHistoryEntity) {
+        player.playSoundCloudTracks(
+            listOf(SoundCloudTrack(item.trackId, item.title, item.artist, item.durationMs, item.artworkUrl, item.permalinkUrl)),
+            0
+        )
+    }
+
+    // Local library
     fun addFiles(uris: List<Uri>) {
         viewModelScope.launch {
             busy.value = true
@@ -161,10 +228,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ---------- Плейлисты ----------
-
+    // Playlists
     fun playlist(id: Long): Flow<PlaylistEntity?> = db.playlistDao().observePlaylist(id)
-
     fun playlistTracks(id: Long): Flow<List<TrackEntity>> = db.playlistDao().observeTracks(id)
 
     fun createPlaylist(name: String) {
@@ -196,13 +261,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (dao.contains(playlistId, trackId) > 0) {
                 messages.tryEmit("Трек уже в плейлисте")
             } else {
-                dao.insertLink(
-                    PlaylistTrackEntity(
-                        playlistId = playlistId,
-                        trackId = trackId,
-                        position = dao.nextPosition(playlistId)
-                    )
-                )
+                dao.insertLink(PlaylistTrackEntity(playlistId = playlistId, trackId = trackId, position = dao.nextPosition(playlistId)))
                 messages.tryEmit("Добавлено в плейлист")
             }
         }
@@ -212,10 +271,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { db.playlistDao().removeTrack(playlistId, trackId) }
     }
 
-    // ---------- Данные и настройки ----------
-
+    // Settings and history
     fun clearHistory() {
-        viewModelScope.launch { db.historyDao().clear() }
+        viewModelScope.launch {
+            db.historyDao().clear()
+            db.soundCloudHistoryDao().clear()
+            messages.tryEmit("История прослушивания очищена")
+        }
     }
 
     fun setTheme(mode: String) {

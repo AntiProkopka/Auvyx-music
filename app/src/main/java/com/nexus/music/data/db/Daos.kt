@@ -15,11 +15,7 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE isFavorite = 1 ORDER BY title COLLATE NOCASE")
     fun observeFavorites(): Flow<List<TrackEntity>>
 
-    @Query(
-        "SELECT * FROM tracks WHERE title LIKE '%' || :q || '%' " +
-            "OR artist LIKE '%' || :q || '%' OR album LIKE '%' || :q || '%' " +
-            "ORDER BY title COLLATE NOCASE"
-    )
+    @Query("SELECT * FROM tracks WHERE title LIKE '%' || :q || '%' OR artist LIKE '%' || :q || '%' OR album LIKE '%' || :q || '%' ORDER BY title COLLATE NOCASE")
     fun search(q: String): Flow<List<TrackEntity>>
 
     @Query("SELECT * FROM tracks")
@@ -43,20 +39,13 @@ interface TrackDao {
 
 @Dao
 interface PlaylistDao {
-    @Query(
-        "SELECT p.id AS id, p.name AS name, " +
-            "(SELECT COUNT(*) FROM playlist_tracks WHERE playlistId = p.id) AS trackCount " +
-            "FROM playlists p ORDER BY p.createdAt DESC"
-    )
+    @Query("SELECT p.id AS id, p.name AS name, (SELECT COUNT(*) FROM playlist_tracks WHERE playlistId = p.id) AS trackCount FROM playlists p ORDER BY p.createdAt DESC")
     fun observePlaylists(): Flow<List<PlaylistSummary>>
 
     @Query("SELECT * FROM playlists WHERE id = :id")
     fun observePlaylist(id: Long): Flow<PlaylistEntity?>
 
-    @Query(
-        "SELECT t.* FROM tracks t INNER JOIN playlist_tracks pt ON pt.trackId = t.id " +
-            "WHERE pt.playlistId = :playlistId ORDER BY pt.position"
-    )
+    @Query("SELECT t.* FROM tracks t INNER JOIN playlist_tracks pt ON pt.trackId = t.id WHERE pt.playlistId = :playlistId ORDER BY pt.position")
     fun observeTracks(playlistId: Long): Flow<List<TrackEntity>>
 
     @Insert
@@ -86,13 +75,37 @@ interface HistoryDao {
     @Insert
     suspend fun insert(item: HistoryEntity)
 
-    @Query(
-        "SELECT t.* FROM history h INNER JOIN tracks t ON t.id = h.trackId " +
-            "GROUP BY t.id ORDER BY MAX(h.playedAt) DESC LIMIT :limit"
-    )
+    @Query("SELECT t.* FROM history h INNER JOIN tracks t ON t.id = h.trackId GROUP BY t.id ORDER BY MAX(h.playedAt) DESC LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<TrackEntity>>
 
     @Query("DELETE FROM history")
+    suspend fun clear()
+}
+
+@Dao
+interface SoundCloudFavoriteDao {
+    @Query("SELECT * FROM soundcloud_favorites ORDER BY addedAt DESC")
+    fun observeAll(): Flow<List<SoundCloudFavoriteEntity>>
+
+    @Query("SELECT * FROM soundcloud_favorites WHERE trackId = :trackId LIMIT 1")
+    suspend fun getById(trackId: Long): SoundCloudFavoriteEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: SoundCloudFavoriteEntity)
+
+    @Query("DELETE FROM soundcloud_favorites WHERE trackId = :trackId")
+    suspend fun delete(trackId: Long)
+}
+
+@Dao
+interface SoundCloudHistoryDao {
+    @Insert
+    suspend fun insert(item: SoundCloudHistoryEntity)
+
+    @Query("SELECT * FROM soundcloud_history WHERE id IN (SELECT MAX(id) FROM soundcloud_history GROUP BY trackId) ORDER BY playedAt DESC LIMIT :limit")
+    fun observeRecent(limit: Int): Flow<List<SoundCloudHistoryEntity>>
+
+    @Query("DELETE FROM soundcloud_history")
     suspend fun clear()
 }
 

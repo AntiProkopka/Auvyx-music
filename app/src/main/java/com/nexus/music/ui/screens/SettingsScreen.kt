@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -37,26 +38,26 @@ fun SettingsScreen(vm: AppViewModel) {
     val tracks by vm.tracks.collectAsStateWithLifecycle()
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("AUVYX", style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer)
-                Text("Музыка, собранная вокруг тебя.", style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("AUVYX", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text("Музыка, собранная вокруг тебя.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text("PERSONAL MUSIC PLAYER", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column {
                 ListItem(
                     headlineContent = { Text("Оформление") },
-                    supportingContent = { Text("Material 3 · динамические цвета Android") },
+                    supportingContent = { Text("Фирменная палитра AUVYX · Material 3") },
                     leadingContent = { Icon(Icons.Default.Palette, contentDescription = null) }
                 )
                 listOf("system" to "Как в системе", "light" to "Светлая", "dark" to "Тёмная").forEach { (key, label) ->
@@ -71,51 +72,39 @@ fun SettingsScreen(vm: AppViewModel) {
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column {
                 ListItem(
                     headlineContent = { Text("Медиатека") },
                     supportingContent = { Text("${tracks.size} треков · ${folders.size} подключённых папок") },
                     leadingContent = { Icon(Icons.Default.Storage, contentDescription = null) }
                 )
-                OutlinedButton(
-                    onClick = { vm.refreshLibrary() },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
+                OutlinedButton(onClick = { vm.refreshLibrary() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Icon(Icons.Default.Refresh, contentDescription = null)
                     Text("Пересканировать папки")
                 }
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Данные", style = MaterialTheme.typography.titleMedium)
-                OutlinedButton(
-                    onClick = { vm.clearHistory() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Text("История хранит локальные треки и прослушивания SoundCloud.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(onClick = { vm.clearHistory() }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.DeleteSweep, contentDescription = null)
                     Text("Очистить историю прослушивания")
                 }
-                Button(onClick = { vm.resetSettings() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Сбросить настройки")
-                }
+                Button(onClick = { vm.resetSettings() }, modifier = Modifier.fillMaxWidth()) { Text("Сбросить настройки") }
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("О приложении", style = MaterialTheme.typography.titleMedium)
-                Text("AUVYX · Alpha 1.7", style = MaterialTheme.typography.titleLarge)
+                Text("AUVYX · Alpha 1.8", style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    "Локальная медиатека и единый плеер на Media3. Поиск SoundCloud работает через публичный веб-интерфейс сервиса.",
+                    "Локальная медиатека и единый плеер на Media3. SoundCloud-каталог работает через неофициальный публичный веб-интерфейс и может меняться.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "Веб-интерфейс SoundCloud неофициальный и может измениться. Некоторые треки недоступны для внешнего воспроизведения.",
-                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
