@@ -102,7 +102,7 @@ fun SearchScreen(vm: AppViewModel) {
             value = query,
             onValueChange = { query = it },
             singleLine = true,
-            shape = RoundedCornerShape(24.dp),
+            shape = MaterialTheme.shapes.extraLarge,
             label = { Text("Трек или исполнитель") },
             placeholder = { Text("Название композиции или артиста") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },

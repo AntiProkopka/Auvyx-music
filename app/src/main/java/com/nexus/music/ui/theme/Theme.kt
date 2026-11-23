@@ -114,7 +114,10 @@ fun NexusTheme(themeMode: String, style: String, content: @Composable () -> Unit
         "hyper" -> base.copy(surfaceContainer = base.surface.copy(alpha = .83f))
         "glass" -> base.copy(surfaceContainer = base.surface.copy(alpha = .62f),
             surfaceContainerLow = base.surfaceVariant.copy(alpha = .70f))
-        "lane" -> base.copy(primary = if (dark) Color(0xFFC4E96D) else Color(0xFF486500))
+        "lane" -> base.copy(
+            primary = if (dark) Color(0xFFC4E96D) else Color(0xFF486500),
+            onPrimary = if (dark) Color(0xFF253600) else Color.White
+        )
         else -> base
     }
     val view = LocalView.current

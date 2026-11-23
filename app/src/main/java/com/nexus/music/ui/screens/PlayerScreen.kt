@@ -347,7 +347,12 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                 IconButton(enabled = track != null, onClick = { showTrackMenu = true }) {
                     Icon(Icons.Default.MoreVert, "Действия с треком")
                 }
-                DropdownMenu(expanded = showTrackMenu, onDismissRequest = { showTrackMenu = false }) {
+                DropdownMenu(
+                    expanded = showTrackMenu,
+                    onDismissRequest = { showTrackMenu = false },
+                    shape = MaterialTheme.shapes.large,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
                     if (track?.source in listOf("soundcloud","local")) DropdownMenuItem(text = { Text("Исполнитель") }, onClick = {
                         track?.let(vm::openArtist)
                         showTrackMenu = false
@@ -426,7 +431,15 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                 Icon(Icons.Default.Shuffle, contentDescription = "Перемешать", tint = if (s.shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = { vm.player.previous() }) { Icon(Icons.Default.SkipPrevious, contentDescription = "Предыдущий", modifier = Modifier.size(36.dp)) }
-            FilledIconButton(onClick = { vm.player.togglePlayPause() }, modifier = Modifier.size(72.dp)) {
+            val playCorner by androidx.compose.animation.core.animateDpAsState(
+                targetValue = if (s.isPlaying) 22.dp else 36.dp,
+                label = "Play button shape"
+            )
+            FilledIconButton(
+                onClick = { vm.player.togglePlayPause() },
+                modifier = Modifier.size(72.dp),
+                shape = RoundedCornerShape(playCorner)
+            ) {
                 Icon(if (s.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.isPlaying) "Пауза" else "Играть", modifier = Modifier.size(40.dp))
             }
             IconButton(onClick = { vm.player.next() }) { Icon(Icons.Default.SkipNext, contentDescription = "Следующий", modifier = Modifier.size(36.dp)) }
