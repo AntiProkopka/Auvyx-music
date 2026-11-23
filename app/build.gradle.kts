@@ -21,13 +21,13 @@ require(spotifyClientId.isEmpty() || spotifyClientId.matches(Regex("[a-fA-F0-9]{
 
 android {
     namespace = "com.nexus.music"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.nexus.music"
         minSdk = 29
         targetSdk = 34
-        versionCode = 16
+        versionCode = 17
         versionName = "Alpha 2.0"
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$spotifyClientId\"")
     }
@@ -49,9 +49,9 @@ android {
             applicationIdSuffix = when {
                 libraryTest -> ".librarytest"
                 providerReview -> ".providerreview"
-                else -> ".preview"
+                else -> null
             }
-            versionNameSuffix = if (providerReview || libraryTest) " Library Test" else " Alpha Test"
+            versionNameSuffix = if (providerReview || libraryTest) " Library Test" else null
             // GitHub Actions uses this only after the owner adds the signing secrets.
             // Without them Android's normal debug key remains the fallback.
             if (hasStableSigning) signingConfig = signingConfigs.getByName("stableCi")
@@ -87,11 +87,11 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("org.robolectric:robolectric:4.14.1")
-    implementation(platform("androidx.compose:compose-bom:2024.09.00"))
+    implementation(platform("androidx.compose:compose-bom:2025.09.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material3:material3:1.4.0")
     implementation("androidx.compose.material:material-icons-extended")
 
     implementation("androidx.core:core-ktx:1.13.1")
