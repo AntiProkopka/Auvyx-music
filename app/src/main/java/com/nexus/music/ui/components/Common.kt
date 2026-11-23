@@ -72,11 +72,11 @@ fun TrackRow(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val style = com.nexus.music.ui.theme.LocalStyle.current
-    val shape = RoundedCornerShape(when (style) { "hyper" -> 20.dp; "glass" -> 28.dp; "lane" -> 4.dp; else -> 0.dp })
+    val shape = RoundedCornerShape(when (style) { "hyper" -> 20.dp; "glass" -> 28.dp; "lane" -> 4.dp; else -> 16.dp })
     ListItem(
         modifier = Modifier.fillMaxWidth().padding(horizontal = if (style in listOf("hyper","glass")) 10.dp else 0.dp,
             vertical = if (style in listOf("hyper","glass")) 3.dp else 0.dp).clip(shape).clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = if (style in listOf("hyper","glass")) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface),
+        colors = ListItemDefaults.colors(containerColor = if (isCurrent) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow),
         leadingContent = {
             Box(
                 modifier = Modifier

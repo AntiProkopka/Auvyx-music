@@ -193,24 +193,57 @@ class LibraryRegressionTest {
         assertNotEquals(OfflineAudio.file(context,"content://docs/2"),OfflineAudio.file(context,"content://docs/1"))
     }
 
-    @Test fun bassPresetBoostsRealPcmAndDisabledIsBitExact() {
-        val eq = SixBandEqualizer()
-        val processor = eq.audioProcessor
-        processor.configure(AudioFormat(48000,1,C.ENCODING_PCM_16BIT))
-        processor.flush()
-        val values = ShortArray(48000) { (sin(2 * PI * 60 * it / 48000) * 4000).toInt().toShort() }
-        fun render(): List<Short> {
-            val buffer = ByteBuffer.allocateDirect(values.size*2).order(ByteOrder.nativeOrder())
+    @Test fun bassPresetPreservesRelativeBoostWithoutClippingLoudBass() {
+        val equalizer = SixBandEqualizer()
+        fun render(values: ShortArray): List<Short> {
+            val processor = equalizer.newProcessor()
+            processor.configure(AudioFormat(48000, 1, C.ENCODING_PCM_16BIT))
+            processor.flush()
+            val buffer = ByteBuffer.allocateDirect(values.size * 2).order(ByteOrder.nativeOrder())
             values.forEach { buffer.putShort(it) }
             buffer.flip()
             processor.queueInput(buffer)
             val result = processor.output.order(ByteOrder.nativeOrder())
-            return List(result.remaining()/2) { result.short }
+            return List(result.remaining() / 2) { result.short }
         }
-        eq.setEnabled(false)
-        assertEquals(values.toList(),render())
-        eq.setEnabled(true)
-        val boosted = render()
-        assertTrue(boosted.drop(12000).max() > 6000)
+
+        fun samples(frequency: Int, amplitude: Int) = ShortArray(48000) {
+            (sin(2 * PI * frequency * it / 48000) * amplitude).toInt().toShort()
+        }
+
+        val bass = samples(60, 32750)
+        equalizer.setEnabled(false)
+        assertEquals(bass.toList(), render(bass))
+        equalizer.setEnabled(true)
+        val bassPeak = render(bass).drop(12000).max()
+        val midPeak = render(samples(1000, 32750)).drop(12000).max()
+        assertTrue(bassPeak > 27500)
+        assertTrue(bassPeak > midPeak * 1.4)
+        for (frequency in listOf(35, 60, 85, 150)) {
+            val output = render(samples(frequency, 32750)).drop(12000)
+            assertTrue(output.all { kotlin.math.abs(it.toInt()) < 31500 })
+        }
+        equalizer.setGains(SixBandEqualizer.DEFAULT)
+        assertEquals(bass.toList(), render(bass))
+    }
+
+    @Test fun treblePresetCorrectsSavedLegacyBassBand() = kotlinx.coroutines.runBlocking {
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
+        val settings = com.nexus.music.data.settings.SettingsStore(app)
+        settings.setEqualizerPreset("treble", listOf(-1f, 0f, 0f, 0f, 2f, 4f))
+        assertEquals(listOf(0f, 0f, 0f, 0f, 2f, 4f), settings.equalizerGains.first())
+        settings.setEqualizerPreset("bass_boost", SixBandEqualizer.BASS_BOOST)
+        assertEquals(SixBandEqualizer.BASS_BOOST, settings.equalizerGains.first())
+    }
+
+    @Test fun lyricsFollowForwardAndBackwardSeekAndHandleMissingText() {
+        val lines = com.nexus.music.playback.timedLyrics("[00:02.00]First\n[00:04.00]Second\n[00:08.00]Third")
+        fun active(position: Long) = com.nexus.music.playback.activeLyricIndex(lines, position)
+        assertEquals(-1, active(0))
+        assertEquals(0, active(2000))
+        assertEquals(2, active(9000))
+        assertEquals(1, active(4500))
+        assertEquals(-1, active(1000))
+        assertEquals(-1, com.nexus.music.playback.activeLyricIndex(emptyList(), 2000))
     }
 }

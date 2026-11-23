@@ -116,7 +116,7 @@ fun SettingsScreen(vm: AppViewModel) {
             Text("Кроссфейд · " + if (fade == 0) "выключен" else "$fade с")
             androidx.compose.material3.Slider(value = fade.toFloat(), onValueChange = { vm.setCrossfade(kotlin.math.round(it).toInt()) },
                 valueRange = 0f..12f, steps = 11)
-            Text("Автоматический переход между локальными треками", style = MaterialTheme.typography.bodySmall)
+            Text("Плавный переход между поддерживаемыми треками", style = MaterialTheme.typography.bodySmall)
         }
         AppIconSettingsSection()
 

@@ -22,6 +22,7 @@ class CrossfadeTest {
     private class Deck(val current: MediaItem, val next: MediaItem) {
         var position = 0L
         var playing = true
+        var playbackState = Player.STATE_READY
         var parameters = PlaybackParameters.DEFAULT
         var volume = 1f
         var released = false
@@ -37,7 +38,9 @@ class CrossfadeTest {
                 "getCurrentPosition" -> position
                 "getDuration" -> 10000L
                 "getRepeatMode" -> Player.REPEAT_MODE_OFF
-                "getPlaybackState" -> Player.STATE_READY
+                "getPlaybackState" -> playbackState
+                "isCurrentMediaItemLive" -> false
+                "isCurrentMediaItemSeekable" -> true
                 "getPlaybackParameters" -> parameters
                 "setPlaybackParameters" -> { parameters = args[0] as PlaybackParameters; null }
                 "setVolume" -> { volume = args[0] as Float; null }
@@ -71,13 +74,23 @@ class CrossfadeTest {
         } finally { mix.release() }
     }
 
-    @Test fun streamingBoundaryUsesSingleDeck() {
-        val deck=Deck(MediaItem.fromUri("content://test/a"),MediaItem.fromUri("auvyx-sc://track/42")).apply { position=9000 }
-        val mix=LocalCrossfade(deck.player) { error("Streaming track opened a second decoder") }
+    @Test fun onDemandStreamOverlapsAndReleasesIfIncomingStreamBuffers() {
+        val a = MediaItem.fromUri("auvyx-sc://track/41")
+        val b = MediaItem.fromUri("auvyx-sc://track/42")
+        val main = Deck(a, b).apply { position = 6000 }
+        val overlay = Deck(b, a).apply { playing = false }
+        val mix = LocalCrossfade(main.player) { overlay.player }
         try {
-            mix.seconds=4
+            mix.seconds = 4
             shadowOf(Looper.getMainLooper()).idle()
-            assertEquals(1f,deck.volume,0f)
+            main.position = 8000
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(40))
+            assertTrue(overlay.playing)
+            assertEquals(0.7071f, overlay.volume, 0.002f)
+            overlay.playbackState = Player.STATE_BUFFERING
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(40))
+            assertTrue(overlay.released)
+            assertEquals(1f, main.volume, 0f)
         } finally { mix.release() }
     }
 }

@@ -13,3 +13,13 @@ internal fun timedLyrics(content: String): List<Pair<Long, String>> {
         }
     }.sortedBy { it.first }.toList()
 }
+
+internal fun activeLyricIndex(lines: List<Pair<Long, String>>, positionMs: Long): Int {
+    var start = 0
+    var end = lines.size
+    while (start < end) {
+        val mid = start + (end - start) / 2
+        if (lines[mid].first <= positionMs) start = mid + 1 else end = mid
+    }
+    return start - 1
+}
