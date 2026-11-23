@@ -109,7 +109,9 @@ class ThemeNavigationTest {
             app.settings.saveLyrics(tracks[1].id.toString(), "[00:01.00]First verse\n[00:04.00]Second verse")
         }
         awaitState { savedLyrics.isCompleted }
-        compose.onNodeWithTag("mini-player").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        awaitState { compose.onAllNodesWithTag("mini-player", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("mini-player", useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        awaitState { compose.onAllNodesWithContentDescription("Текст песни").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Текст песни").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         awaitState { compose.onAllNodesWithText("First verse").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("First verse").assertIsSelected()
