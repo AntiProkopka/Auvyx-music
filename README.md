@@ -50,3 +50,28 @@ GitHub Actions workflow: **Build AUVYX APK**. It runs on pushes to `main`/`maste
 ## Verification status
 
 This source was adapted from the available Alpha 1.5 project archive. Android SDK and Gradle are not installed in this editing environment, so `assembleDebug` could not be run here. The GitHub Actions build and an install/playback test on the target phone are still required. A green Actions run will verify compilation, not SoundCloud availability or all runtime behaviour.
+
+## Сборки обновления Alpha 2.0
+
+Текущая сборка использует пакет `com.nexus.music` и `versionCode=17`.
+Для сборки нужны JDK 17, Android SDK 37.0 и Gradle Wrapper 9.3.1.
+
+```sh
+./gradlew :app:testDebugUnitTest :app:assembleDebug
+```
+
+Для подписанного релиза добавьте четыре секрета GitHub Actions:
+`AUVYX_SIGNING_KEYSTORE_BASE64`, `AUVYX_SIGNING_STORE_PASSWORD`,
+`AUVYX_SIGNING_KEY_ALIAS` и `AUVYX_SIGNING_KEY_PASSWORD`.
+Используйте ключ уже установленной основной версии, если он доступен.
+При полном наборе секретов CI проверит подпись и опубликует
+`auvyx-Alpha-2.0-release`. Для следующих сборок сохраняйте тот же ключ,
+пакет и увеличивайте `versionCode`.
+
+APK с отладочным ключом предназначен для тестирования. Если старая установка
+имеет суффикс `.preview`, `.librarytest` или `.providerreview`, установите
+новую основную версию рядом, экспортируйте JSON из старой и импортируйте его
+в новой. Если пакет старой установки уже `com.nexus.music`, а её ключ
+недоступен, сначала сохраните и проверьте резервную копию. После этого Android
+потребует удалить старую установку перед установкой APK с новым постоянным
+ключом. Резервная копия не переносит аудиофайлы и разрешения доступа к папкам.

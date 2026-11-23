@@ -67,7 +67,11 @@ fun AlbumScreen(vm: AppViewModel, album: AppViewModel.AlbumTarget) {
                     val details = listOfNotNull(year, formatTime(duration).takeIf { duration > 0 })
                     if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
                     Text(if (tracks.isEmpty()) "В медиатеке нет треков этого альбома" else "Треки уже в медиатеке")
-                    Button(enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks, 0) }) {
+                    Button(
+                        shapes = ButtonDefaults.shapes(),
+                        enabled = tracks.isNotEmpty(),
+                        onClick = { vm.player.playTracks(tracks, 0) }
+                    ) {
                         Text("Воспроизвести альбом")
                     }
                 }

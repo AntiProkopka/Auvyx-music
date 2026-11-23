@@ -365,7 +365,8 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                             transfer != null -> "Копирование: ${transfer.bytes / 1024} КБ"
                             selected.downloadedPath != null -> "Доступен офлайн"
                             selected.source == "local" -> "Офлайн-копии нет"
-                            else -> "Источник не разрешает офлайн-сохранение"
+                            selected.source == "soundcloud" -> "SoundCloud не разрешает офлайн-сохранение"
+                            else -> "Офлайн-сохранение недоступно"
                         }
                         DropdownMenuItem(text = { Text(offlineStatus) }, enabled = false, onClick = {})
                         when {
@@ -438,7 +439,10 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             FilledIconButton(
                 onClick = { vm.player.togglePlayPause() },
                 modifier = Modifier.size(72.dp),
-                shape = RoundedCornerShape(playCorner)
+                shapes = androidx.compose.material3.IconButtonDefaults.shapes(
+                    shape = RoundedCornerShape(playCorner),
+                    pressedShape = MaterialTheme.shapes.large
+                )
             ) {
                 Icon(if (s.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.isPlaying) "Пауза" else "Играть", modifier = Modifier.size(40.dp))
             }

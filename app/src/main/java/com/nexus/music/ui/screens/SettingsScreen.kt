@@ -74,7 +74,7 @@ fun SettingsScreen(vm: AppViewModel) {
                     supportingContent = { Text("${nickname?.ifBlank { "Имя не задано" } ?: "Имя не задано"} · используется в названии встроенного динамика") },
                     leadingContent = { Icon(Icons.Default.Storage, contentDescription = null) }
                 )
-                OutlinedButton(onClick = { editingNickname = true }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                OutlinedButton(shapes = androidx.compose.material3.ButtonDefaults.shapes(), onClick = { editingNickname = true }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text("Изменить никнейм")
                 }
             }
@@ -126,7 +126,7 @@ fun SettingsScreen(vm: AppViewModel) {
                     supportingContent = { Text("${tracks.size} треков · ${folders.size} подключённых папок") },
                     leadingContent = { Icon(Icons.Default.Storage, contentDescription = null) }
                 )
-                OutlinedButton(onClick = { vm.refreshLibrary() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                OutlinedButton(shapes = androidx.compose.material3.ButtonDefaults.shapes(), onClick = { vm.refreshLibrary() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Icon(Icons.Default.Refresh, contentDescription = null)
                     Text("Пересканировать папки")
                 }
@@ -136,18 +136,18 @@ fun SettingsScreen(vm: AppViewModel) {
         Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Данные", style = MaterialTheme.typography.titleMedium)
-                OutlinedButton(onClick = { backupPicker.launch("auvyx-backup.json") }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(shapes = androidx.compose.material3.ButtonDefaults.shapes(), onClick = { backupPicker.launch("auvyx-backup.json") }, modifier = Modifier.fillMaxWidth()) {
                     Text("Экспорт медиатеки и настроек")
                 }
-                OutlinedButton(onClick = { restorePicker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) }) {
+                OutlinedButton(shapes = androidx.compose.material3.ButtonDefaults.shapes(), onClick = { restorePicker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) }) {
                     Text("Объединить с резервной копией")
                 }
                 Text("История хранит локальные треки и прослушивания SoundCloud.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedButton(onClick = { vm.clearHistory() }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(shapes = androidx.compose.material3.ButtonDefaults.shapes(), onClick = { vm.clearHistory() }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.DeleteSweep, contentDescription = null)
                     Text("Очистить историю прослушивания")
                 }
-                Button(onClick = { vm.resetSettings() }, modifier = Modifier.fillMaxWidth()) { Text("Сбросить настройки интерфейса") }
+                Button(shapes = androidx.compose.material3.ButtonDefaults.shapes(), onClick = { vm.resetSettings() }, modifier = Modifier.fillMaxWidth()) { Text("Сбросить настройки интерфейса") }
             }
         }
 
