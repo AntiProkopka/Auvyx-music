@@ -54,7 +54,16 @@ jobs:
           AUVYX_SIGNING_STORE_PASSWORD: ${{ secrets.AUVYX_SIGNING_STORE_PASSWORD }}
           AUVYX_SIGNING_KEY_ALIAS: ${{ secrets.AUVYX_SIGNING_KEY_ALIAS }}
           AUVYX_SIGNING_KEY_PASSWORD: ${{ secrets.AUVYX_SIGNING_KEY_PASSWORD }}
-        run: gradle --no-daemon --stacktrace clean assembleDebug
+        run: gradle --no-daemon --stacktrace clean testDebugUnitTest assembleDebug
+
+      - name: Verify launcher resources in APK
+        run: |
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          aapt2="$ANDROID_HOME/build-tools/34.0.0/aapt2"
+          "$aapt2" dump resources "$apk" > "$RUNNER_TEMP/auvyx-resources.txt"
+          for resource in drawable/auvyx_default_icon drawable/auvyx_neon_icon drawable/auvyx_glass_icon mipmap/ic_launcher mipmap/ic_launcher_round mipmap/auvyx_icon_1 mipmap/auvyx_icon_2 mipmap/auvyx_icon_3; do
+            grep -F " $resource" "$RUNNER_TEMP/auvyx-resources.txt"
+          done
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7

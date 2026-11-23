@@ -68,7 +68,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    testOptions.unitTests.all { it.jvmArgs("--add-opens=java.base/java.io=ALL-UNNAMED") }
+    testOptions.unitTests.all {
+        it.jvmArgs("--add-opens=java.base/java.io=ALL-UNNAMED")
+        it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+        it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
     testOptions.unitTests.isIncludeAndroidResources = true
     buildFeatures {
         compose = true

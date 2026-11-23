@@ -12,9 +12,11 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -58,7 +60,12 @@ fun RemoteArtworkImage(
     contentDescription: String?,
     modifier: Modifier = Modifier
 ) {
-    val bitmap = produceState<Bitmap?>(null, imageUrl) {
+    RemoteArtworkBitmap(rememberRemoteArtwork(imageUrl), contentDescription, modifier)
+}
+
+@Composable
+internal fun rememberRemoteArtwork(imageUrl: String?): Bitmap? = key(imageUrl) {
+    produceState<Bitmap?>(null) {
         value = withContext(Dispatchers.IO) {
             if (imageUrl.isNullOrBlank() || !imageUrl.startsWith("https://", true)) null
             else artworkCandidates(imageUrl).firstNotNullOfOrNull { candidate ->
@@ -66,7 +73,10 @@ fun RemoteArtworkImage(
             }
         }
     }.value
+}
 
+@Composable
+internal fun RemoteArtworkBitmap(bitmap: Bitmap?, contentDescription: String?, modifier: Modifier) {
     if (bitmap != null) {
         Image(bitmap = bitmap.asImageBitmap(), contentDescription = contentDescription, modifier = modifier, contentScale = ContentScale.Crop)
     } else {
@@ -76,40 +86,33 @@ fun RemoteArtworkImage(
     }
 }
 
-/** Extract one representative saturated colour only when artwork changes, never per frame. */
 @Composable
-fun rememberArtworkAccent(artworkUri: String?, fallback: androidx.compose.ui.graphics.Color): androidx.compose.runtime.State<androidx.compose.ui.graphics.Color> {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    return produceState(initialValue = fallback, artworkUri, fallback) {
-        value = fallback
-        if (artworkUri.isNullOrBlank()) return@produceState
-        val found = withContext(Dispatchers.IO) {
-            runCatching {
-                val bitmap = if (artworkUri.startsWith("https://", true)) {
-                    artworkCandidates(artworkUri).firstNotNullOfOrNull { candidate ->
-                        runCatching { loadArtwork(candidate) }.getOrNull()
-                    }
-                } else {
-                    context.contentResolver.openInputStream(android.net.Uri.parse(artworkUri))?.use {
-                        BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = 8 })
-                    }
-                }
-                bitmap?.let(::vibrantArtworkColor)
-            }.getOrNull()
-        }
-        if (found != null) value = found
+internal fun rememberArtworkAccent(bitmap: Bitmap?, fallback: Color): Color? {
+    val accent = key(bitmap) {
+        produceState<Color?>(null) {
+            if (bitmap != null) {
+                value = withContext(Dispatchers.Default) { representativeArtworkColor(bitmap) }
+            }
+        }.value
     }
+    return if (bitmap == null) null else accent ?: fallback
 }
 
-private fun vibrantArtworkColor(bitmap: Bitmap): androidx.compose.ui.graphics.Color? {
+internal fun representativeArtworkColor(bitmap: Bitmap): Color? {
     val mini = Bitmap.createScaledBitmap(bitmap, 24, 24, true)
     try {
         val totals = FloatArray(12)
         val saturation = FloatArray(12)
         val brightness = FloatArray(12)
         val hsv = FloatArray(3)
+        var neutralBrightness = 0f
+        var visiblePixels = 0
         for (y in 0 until mini.height) for (x in 0 until mini.width) {
-            android.graphics.Color.colorToHSV(mini.getPixel(x, y), hsv)
+            val pixel = mini.getPixel(x, y)
+            if (android.graphics.Color.alpha(pixel) < 128) continue
+            android.graphics.Color.colorToHSV(pixel, hsv)
+            neutralBrightness += hsv[2]
+            visiblePixels++
             if (hsv[1] < .24f || hsv[2] < .22f) continue
             val bucket = ((hsv[0] / 30f).toInt()).coerceIn(0, 11)
             val weight = hsv[1] * hsv[1] * hsv[2]
@@ -118,13 +121,17 @@ private fun vibrantArtworkColor(bitmap: Bitmap): androidx.compose.ui.graphics.Co
             brightness[bucket] += hsv[2] * weight
         }
         val best = totals.indices.maxByOrNull(totals::get) ?: return null
-        if (totals[best] < .2f) return null
+        if (visiblePixels == 0) return null
+        if (totals[best] < .2f) {
+            val gray = (neutralBrightness / visiblePixels).coerceIn(.45f, .85f)
+            return Color(gray, gray, gray)
+        }
         val color = android.graphics.Color.HSVToColor(floatArrayOf(
             best * 30f + 15f,
             (saturation[best] / totals[best]).coerceIn(.40f, .85f),
             (brightness[best] / totals[best]).coerceIn(.50f, .90f)
         ))
-        return androidx.compose.ui.graphics.Color(color)
+        return Color(color)
     } finally {
         if (mini !== bitmap) mini.recycle()
     }

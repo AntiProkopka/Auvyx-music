@@ -37,9 +37,9 @@ fun AppIconSettingsSection() {
     var selected by remember { mutableStateOf(LauncherIconManager.current(context)) }
 
     val options = listOf(
-        Triple("1", "Вариант 1", R.mipmap.auvyx_icon_1),
-        Triple("2", "Вариант 2", R.mipmap.auvyx_icon_2),
-        Triple("3", "Вариант 3", R.mipmap.auvyx_icon_3)
+        Triple("3", "По умолчанию", R.drawable.auvyx_default_icon),
+        Triple("1", "Неон", R.drawable.auvyx_neon_icon),
+        Triple("2", "Стекло", R.drawable.auvyx_glass_icon)
     )
 
     Card(

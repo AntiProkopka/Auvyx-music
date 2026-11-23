@@ -42,6 +42,9 @@ class ThemeNavigationTest {
             compose.onNodeWithText("Пропустить").performClick()
         }
         compose.onNodeWithTag("nav-settings").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        compose.onNodeWithContentDescription("По умолчанию").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Неон").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Стекло").performScrollTo().assertIsDisplayed()
         for ((style,key) in listOf("HyperOS" to "hyper", "Liquid Glass" to "glass", "Studio · LANE" to "lane", "Material 3" to "material")) {
             compose.onNode(hasText(style) and hasClickAction()).performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
             compose.waitUntil(5000) {

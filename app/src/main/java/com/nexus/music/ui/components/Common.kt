@@ -36,6 +36,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -167,8 +168,13 @@ fun ArtworkImage(
     contentDescription: String?,
     modifier: Modifier = Modifier
 ) {
+    LocalArtworkImage(rememberLocalArtwork(artworkUri), contentDescription, modifier)
+}
+
+@Composable
+internal fun rememberLocalArtwork(artworkUri: String?): Bitmap? = key(artworkUri) {
     val context = LocalContext.current
-    val bitmap = produceState<Bitmap?>(null, artworkUri) {
+    produceState<Bitmap?>(null) {
         value = withContext(Dispatchers.IO) {
             if (artworkUri.isNullOrBlank()) null else runCatching {
                 val uri = Uri.parse(artworkUri)
@@ -191,6 +197,10 @@ fun ArtworkImage(
             }.getOrNull()
         }
     }.value
+}
+
+@Composable
+internal fun LocalArtworkImage(bitmap: Bitmap?, contentDescription: String?, modifier: Modifier) {
     if (bitmap != null) {
         Image(
             bitmap = bitmap.asImageBitmap(),

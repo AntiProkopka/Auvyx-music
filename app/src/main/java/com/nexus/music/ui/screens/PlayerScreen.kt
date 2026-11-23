@@ -108,11 +108,14 @@ import com.nexus.music.AppViewModel
 import com.nexus.music.playback.PlaybackAudioRouting
 import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.formatTime
-import com.nexus.music.ui.components.ArtworkImage
-import com.nexus.music.ui.components.RemoteArtworkImage
+import com.nexus.music.ui.components.LocalArtworkImage
+import com.nexus.music.ui.components.rememberLocalArtwork
+import com.nexus.music.ui.components.RemoteArtworkBitmap
+import com.nexus.music.ui.components.rememberRemoteArtwork
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
-import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import com.nexus.music.playback.LyricsRepository
 import com.nexus.music.ui.components.rememberArtworkAccent
@@ -238,24 +241,49 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             }
             return@Column
         }
-        val accentState = rememberArtworkAccent(artworkUri, MaterialTheme.colorScheme.primary)
-        val glowColor by animateColorAsState(targetValue = accentState.value, label = "Artwork glow")
-        BoxWithConstraints(modifier = (if (compact) Modifier.height(160.dp) else Modifier.weight(1f)).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                val artworkSize = minOf(maxWidth * (if (style == "lane") 1f else 0.86f), maxHeight)
-                // Blur only a stationary colour layer, never the artwork itself.
-                Box(Modifier.size(artworkSize * .94f)
-                    .blur(32.dp)
-                    .background(glowColor.copy(alpha = .55f), RoundedCornerShape(44.dp)))
+        val remoteArtwork = artworkUri?.startsWith("https://", ignoreCase = true) == true
+        val artwork = if (remoteArtwork) rememberRemoteArtwork(artworkUri) else rememberLocalArtwork(artworkUri)
+        val primary = MaterialTheme.colorScheme.primary
+        val accent = rememberArtworkAccent(artwork, primary)
+        val glowColor by animateColorAsState(
+            targetValue = accent?.copy(alpha = .48f) ?: primary.copy(alpha = 0f),
+            animationSpec = tween(durationMillis = 420),
+            label = "Artwork glow"
+        )
+        val artworkWidthFraction = if (style == "lane") 1f else .86f
+        BoxWithConstraints(
+            modifier = (if (compact) Modifier.height(160.dp) else Modifier.weight(1f))
+                .fillMaxWidth()
+                .drawBehind {
+                    val color = glowColor
+                    val radius = minOf(size.width * artworkWidthFraction, size.height) * .83f
+                    if (color.alpha > 0f && radius > 0f) {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                0f to color,
+                                .58f to color,
+                                .78f to color.copy(alpha = color.alpha * .45f),
+                                1f to color.copy(alpha = 0f),
+                                center = center,
+                                radius = radius
+                            ),
+                            radius = radius
+                        )
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+                val artworkSize = minOf(maxWidth * artworkWidthFraction, maxHeight)
                 Box(
                     modifier = Modifier.size(artworkSize).aspectRatio(1f).clip(RoundedCornerShape(when (style) { "glass" -> 52.dp; "hyper" -> 40.dp; "lane" -> 4.dp; else -> 30.dp }))
                         .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer))),
                     contentAlignment = Alignment.Center
                 ) {
                     if (!artworkUri.isNullOrBlank()) {
-                        if (artworkUri.startsWith("https://", ignoreCase = true)) {
-                            RemoteArtworkImage(artworkUri, "Обложка ${s.title}", Modifier.fillMaxSize())
+                        if (remoteArtwork) {
+                            RemoteArtworkBitmap(artwork, "Обложка ${s.title}", Modifier.fillMaxSize())
                         } else {
-                            ArtworkImage(artworkUri, "Обложка ${s.title}", Modifier.fillMaxSize())
+                            LocalArtworkImage(artwork, "Обложка ${s.title}", Modifier.fillMaxSize())
                         }
                     } else {
                         Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(96.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
