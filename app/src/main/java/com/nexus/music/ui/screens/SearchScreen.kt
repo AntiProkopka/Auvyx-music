@@ -201,6 +201,7 @@ fun SearchScreen(vm: AppViewModel) {
                                 onFavorite = { vm.toggleSoundCloudFavorite(track) },
                                 onEnqueue = { vm.enqueueSoundCloud(track) },
                                 onArtist = { vm.openArtist(track) },
+                                onAlbum = track.albumTitle?.let { { vm.openAlbum(track) } },
                                 onPlayNext = { vm.playNextSoundCloud(track) },
                                 onAddToPlaylist = { pendingSoundCloud = track }
                             )

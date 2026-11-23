@@ -14,6 +14,22 @@ import java.net.URL
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], application = android.app.Application::class)
 class SoundCloudLiveTest {
+    @Test fun officialAlbumHasTheSelectedTrackAndPreservesThePublishedOrder() = runBlocking {
+        assumeTrue(System.getenv("AUVYX_LIVE_SC") == "1")
+        val song = SoundCloudRepository.searchTracks("Coldplay Yellow").first {
+            it.title == "Yellow" && it.albumTitle == "Parachutes" && it.credit == "Coldplay"
+        }
+        val album = requireNotNull(SoundCloudRepository.album(song.id, song.permalinkUrl))
+        assertEquals("Parachutes", album.title)
+        assertEquals("Coldplay", album.artist)
+        assertEquals("2000-07-10", album.releaseDate)
+        assertEquals(10, album.tracks.size)
+        assertEquals(song.id, album.tracks[4].id)
+        assertTrue(album.tracks.any { it.title == "Trouble" })
+        assertNotNull(album.artworkUrl)
+        assertTrue(album.durationMs > 0)
+    }
+
     @Test fun publicCatalogProfileAndStream() = runBlocking {
         assumeTrue(System.getenv("AUVYX_LIVE_SC") == "1")
         for (query in listOf("Монеточка", "ODESZA")) {

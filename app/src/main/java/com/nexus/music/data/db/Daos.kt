@@ -63,9 +63,6 @@ interface TrackDao {
     @Query("UPDATE tracks SET isFavorite = NOT isFavorite WHERE id = :id")
     suspend fun toggleFavorite(id: Long)
 
-    @Query("UPDATE tracks SET downloadedPath = :path WHERE id = :id")
-    suspend fun setDownloaded(id: Long, path: String?)
-
     @Query("UPDATE tracks SET downloadedPath = :path WHERE id = :id AND uri = :uri")
     suspend fun setDownloadedForUri(id: Long, uri: String, path: String?): Int
 

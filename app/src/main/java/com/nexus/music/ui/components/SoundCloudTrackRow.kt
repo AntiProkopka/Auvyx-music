@@ -41,19 +41,24 @@ fun SoundCloudTrackRow(
     onEnqueue: () -> Unit,
     onPlayNext: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
-    onArtist: (() -> Unit)? = null
+    onArtist: (() -> Unit)? = null,
+    onAlbum: (() -> Unit)? = null,
+    onAddToLibrary: (() -> Unit)? = null,
+    playEnabled: Boolean = true
 ) {
     CatalogResultRow(track.title, if (track.full) track.artist else "Полная версия недоступна · ${track.artist}", track.durationMs, track.artworkUrl, "soundcloud",
-        isCurrent, isFavorite, onPlay, onFavorite, onEnqueue, onPlayNext, onAddToPlaylist, onArtist = onArtist)
+        isCurrent, isFavorite, onPlay, onFavorite, onEnqueue, onPlayNext, onAddToPlaylist,
+        onArtist = onArtist, onAlbum = onAlbum, onAddToLibrary = onAddToLibrary, playEnabled = playEnabled)
 }
 
 @Composable
 fun CatalogResultRow(title: String, artist: String, durationMs: Long, artwork: String?, platform: String,
     isCurrent: Boolean, isFavorite: Boolean, onPlay: () -> Unit, onFavorite: () -> Unit, onEnqueue: () -> Unit,
-    onPlayNext: (() -> Unit)?, onAddToPlaylist: (() -> Unit)?, onOpenSpotify: (() -> Unit)? = null, onArtist: (() -> Unit)? = null) {
+    onPlayNext: (() -> Unit)?, onAddToPlaylist: (() -> Unit)?, onOpenSpotify: (() -> Unit)? = null, onArtist: (() -> Unit)? = null,
+    onAlbum: (() -> Unit)? = null, onAddToLibrary: (() -> Unit)? = null, playEnabled: Boolean = true) {
     var menuExpanded by remember(title, artist) { mutableStateOf(false) }
     ListItem(
-        modifier = Modifier.clickable(onClick = onPlay),
+        modifier = Modifier.clickable(enabled = playEnabled, onClick = onPlay),
         leadingContent = {
             if (!artwork.isNullOrBlank()) {
                 Box(modifier = Modifier.size(56.dp)) {
@@ -95,7 +100,7 @@ fun CatalogResultRow(title: String, artist: String, durationMs: Long, artwork: S
                         tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = onEnqueue) {
+                IconButton(onClick = onEnqueue, enabled = playEnabled) {
                     Icon(Icons.Default.Add, contentDescription = "Добавить в очередь")
                 }
                 Box {
@@ -105,6 +110,10 @@ fun CatalogResultRow(title: String, artist: String, durationMs: Long, artwork: S
                     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false },
                             shape = MaterialTheme.shapes.large, containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
                         onArtist?.let { DropdownMenuItem(text = { Text("Исполнитель") }, onClick = { menuExpanded = false; it() }) }
+                        onAlbum?.let { DropdownMenuItem(text = { Text("Альбом") }, onClick = { menuExpanded = false; it() }) }
+                        onAddToLibrary?.let {
+                            DropdownMenuItem(text = { Text("Добавить в медиатеку") }, onClick = { menuExpanded = false; it() })
+                        }
                         onOpenSpotify?.let { action ->
                             DropdownMenuItem(
                                 text = { Text("Открыть в Spotify") },
@@ -117,11 +126,13 @@ fun CatalogResultRow(title: String, artist: String, durationMs: Long, artwork: S
                         onPlayNext?.let { action ->
                             DropdownMenuItem(
                                 text = { Text("Играть следующим") },
+                                enabled = playEnabled,
                                 onClick = { menuExpanded = false; action() }
                             )
                         }
                         DropdownMenuItem(
                             text = { Text("В конец очереди") },
+                            enabled = playEnabled,
                             onClick = { menuExpanded = false; onEnqueue() }
                         )
                         onAddToPlaylist?.let { action ->

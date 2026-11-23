@@ -18,12 +18,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.data.local.OfflineAudio
+import com.nexus.music.data.soundcloud.SoundCloudRepository
+import com.nexus.music.data.soundcloud.SoundCloudTrack
 import com.nexus.music.ui.components.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
 fun AlbumScreen(vm: AppViewModel, album: AppViewModel.AlbumTarget) {
+    val soundCloud = album.soundCloud
+    if (soundCloud != null) {
+        SoundCloudAlbumScreen(vm, soundCloud)
+        return
+    }
     val library by vm.tracks.collectAsStateWithLifecycle()
     val player by vm.player.state.collectAsStateWithLifecycle()
     val members = remember(library, album) { library.filter(album::contains) }
@@ -69,30 +77,14 @@ fun AlbumScreen(vm: AppViewModel, album: AppViewModel.AlbumTarget) {
     ) {
         item { TextButton(onClick = { vm.albumTarget.value = null }) { Text("← Назад") } }
         item {
-            Card(shape = MaterialTheme.shapes.extraLarge) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ArtworkImage(artwork, "Обложка ${album.title}", Modifier.size(144.dp).clip(MaterialTheme.shapes.large))
-                    Text(album.title, style = MaterialTheme.typography.headlineSmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    if (first != null && album.artist.isNotBlank()) {
-                        TextButton(onClick = { vm.openArtist(first) }) {
-                            Text(album.artist, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                    val duration = tracks.takeIf { it.all { track -> track.durationMs > 0 } }?.sumOf { it.durationMs } ?: 0
-                    val details = listOfNotNull(year, formatTime(duration).takeIf { duration > 0 })
-                    if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
-                    if (tracks.isEmpty()) Text("В медиатеке нет треков этого альбома")
-                    Button(
-                        shapes = ButtonDefaults.shapes(),
-                        enabled = tracks.isNotEmpty(),
-                        onClick = { vm.player.playTracks(tracks, 0) }
-                    ) {
-                        Text("Воспроизвести альбом")
-                    }
-                    OutlinedButton(
-                        shapes = ButtonDefaults.shapes(),
-                        onClick = { filePicker.launch(arrayOf("audio/*", "application/ogg")) }
-                    ) { Text("Добавить треки в медиатеку") }
+            val duration = tracks.takeIf { it.all { track -> track.durationMs > 0 } }?.sumOf { it.durationMs } ?: 0
+            AlbumHeader(album.title, album.artist, artwork, year, duration, first?.let { { vm.openArtist(it) } }) {
+                if (tracks.isEmpty()) Text("В медиатеке нет треков этого альбома")
+                Button(shapes = ButtonDefaults.shapes(), enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks, 0) }) {
+                    Text("Воспроизвести альбом")
+                }
+                OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { filePicker.launch(arrayOf("audio/*", "application/ogg")) }) {
+                    Text("Добавить треки в медиатеку")
                 }
             }
         }
@@ -106,6 +98,104 @@ fun AlbumScreen(vm: AppViewModel, album: AppViewModel.AlbumTarget) {
         }
     }
     playlistTrack?.let { track -> AddToPlaylistDialog(vm, track, onDismiss = { playlistTrack = null }) }
+}
+
+@Composable
+private fun SoundCloudAlbumScreen(vm: AppViewModel, target: AppViewModel.AlbumTarget.SoundCloudAlbumTrack) {
+    var attempt by remember { mutableIntStateOf(0) }
+    val response by produceState<Result<SoundCloudRepository.Album?>?>(null, target, attempt) {
+        value = null
+        value = try {
+            Result.success(SoundCloudRepository.album(target.id, target.permalink))
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+    }
+    val album = response?.getOrNull()
+    val library by vm.knownTracks.collectAsStateWithLifecycle()
+    val playback by vm.player.state.collectAsStateWithLifecycle()
+    val saved = remember(library) { library.filter { it.source == "soundcloud" }.associateBy { it.sourceId } }
+    val tracks = album?.tracks.orEmpty()
+    val playable = remember(tracks) { tracks.filter { it.full } }
+    val unsaved = remember(tracks, saved) { tracks.filterNot { saved.containsKey(it.id.toString()) } }
+    var playlistTrack by remember { mutableStateOf<SoundCloudTrack?>(null) }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item { TextButton(onClick = { vm.albumTarget.value = null }) { Text("← Назад") } }
+        item {
+            when {
+                response == null -> CircularProgressIndicator()
+                response?.isFailure == true -> {
+                    Text("Не удалось загрузить альбом SoundCloud.")
+                    TextButton(onClick = { attempt++ }) { Text("Повторить") }
+                }
+                album == null -> Text("Данные альбома отсутствуют.")
+                else -> {
+                    val artistTrack = tracks.firstOrNull { it.id == target.id } ?: tracks.firstOrNull()
+                    AlbumHeader(album.title, album.artist, album.artworkUrl, album.releaseDate, album.durationMs,
+                        artistTrack?.let { { vm.openArtist(it) } }) {
+                        if (tracks.size < album.trackCount) Text("SoundCloud предоставил ${tracks.size} из ${album.trackCount} треков")
+                        Button(shapes = ButtonDefaults.shapes(), enabled = playable.isNotEmpty(), onClick = { vm.playSoundCloud(playable, 0) }) {
+                            Text("Воспроизвести альбом")
+                        }
+                        OutlinedButton(shapes = ButtonDefaults.shapes(), enabled = unsaved.isNotEmpty(), onClick = { vm.addSoundCloudToLibrary(unsaved) }) {
+                            Text("Добавить треки в медиатеку")
+                        }
+                    }
+                }
+            }
+        }
+        itemsIndexed(tracks, key = { index, track -> "${track.id}:$index" }) { _, track ->
+            val entry = saved[track.id.toString()]
+            SoundCloudTrackRow(
+                track = track,
+                isCurrent = entry != null && playback.mediaId == entry.id.toString(),
+                isFavorite = entry?.isFavorite == true,
+                playEnabled = track.full,
+                onPlay = { vm.playSoundCloud(playable, playable.indexOf(track)) },
+                onFavorite = { vm.toggleSoundCloudFavorite(track) },
+                onEnqueue = { vm.enqueueSoundCloud(track) },
+                onPlayNext = { vm.playNextSoundCloud(track) },
+                onAddToPlaylist = { playlistTrack = track },
+                onArtist = { vm.openArtist(track) },
+                onAddToLibrary = if (entry == null) ({ vm.addSoundCloudToLibrary(listOf(track)) }) else null
+            )
+        }
+    }
+    playlistTrack?.let { AddSoundCloudToPlaylistDialog(vm, it, onDismiss = { playlistTrack = null }) }
+}
+
+@Composable
+private fun AlbumHeader(
+    title: String,
+    artist: String,
+    artwork: String?,
+    date: String?,
+    duration: Long,
+    onArtist: (() -> Unit)?,
+    actions: @Composable () -> Unit
+) {
+    Card(shape = MaterialTheme.shapes.extraLarge) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val cover = Modifier.size(144.dp).clip(MaterialTheme.shapes.large)
+            if (artwork?.startsWith("https://") == true) RemoteArtworkImage(artwork, "Обложка $title", cover)
+            else ArtworkImage(artwork, "Обложка $title", cover)
+            Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            if (artist.isNotBlank()) {
+                if (onArtist != null) TextButton(onClick = onArtist) { Text(artist, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                else Text(artist, style = MaterialTheme.typography.titleMedium)
+            }
+            val details = listOfNotNull(date, formatTime(duration).takeIf { duration > 0 })
+            if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
+            actions()
+        }
+    }
 }
 
 private data class AlbumTrackTags(val number: Int?, val disc: Int?, val year: String?)

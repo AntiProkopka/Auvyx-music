@@ -216,7 +216,9 @@ class LibraryRegressionTest {
         assertTrue(album.contains(track(2).copy(album = " album ", artist = "ARTIST")))
         assertFalse(album.contains(track(3).copy(artist = "Other artist")))
         assertNull(AppViewModel.AlbumTarget.from(local.copy(album = "")))
-        assertNull(AppViewModel.AlbumTarget.from(local.copy(album = "SoundCloud", source = "soundcloud")))
+        val cloud = local.copy(album = "SoundCloud", source = "soundcloud", sourceId = "99", sourceUrl = "https://soundcloud.com/u/t")
+        assertEquals("", AppViewModel.AlbumTarget.from(cloud)?.title)
+        assertFalse(album.contains(cloud))
         assertFalse(OfflineAudio.canSave(local.copy(source = "soundcloud")))
     }
 

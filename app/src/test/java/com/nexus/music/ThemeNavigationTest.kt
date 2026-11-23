@@ -2,6 +2,7 @@ package com.nexus.music
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import org.junit.Rule
@@ -104,9 +105,10 @@ class ThemeNavigationTest {
         compose.runOnUiThread { controller.moveQueueItem(1,0); controller.toggleShuffle(); controller.cycleRepeat() }
         awaitState { controller.state.value.queue.firstOrNull()?.title == "Audio 2" && controller.state.value.shuffle }
 
-        kotlinx.coroutines.runBlocking {
+        val savedLyrics = app.appScope.launch {
             app.settings.saveLyrics(tracks[1].id.toString(), "[00:01.00]First verse\n[00:04.00]Second verse")
         }
+        awaitState { savedLyrics.isCompleted }
         compose.onNodeWithTag("mini-player").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         compose.onNodeWithContentDescription("Текст песни").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         awaitState { compose.onAllNodesWithText("First verse").fetchSemanticsNodes().isNotEmpty() }

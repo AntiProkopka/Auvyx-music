@@ -37,7 +37,7 @@ fun ExpressiveSlider(
 ) {
     val state = remember(steps, valueRange) { SliderState(value, steps, valueRange) }
     state.value = value
-    val colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+    val colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.outline)
     Slider(
         state = state,
         onValueChange = onValueChange,

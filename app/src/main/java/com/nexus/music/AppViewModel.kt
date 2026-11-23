@@ -77,16 +77,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.Eagerly, true
     )
 
-    data class AlbumTarget(val title: String, val artist: String) {
+    data class AlbumTarget(val title: String, val artist: String, val soundCloud: SoundCloudAlbumTrack? = null) {
+        data class SoundCloudAlbumTrack(val id: Long, val permalink: String)
+
         companion object {
             fun from(track: TrackEntity): AlbumTarget? {
                 val title = track.album.trim()
+                if (track.source == "soundcloud") {
+                    val id = track.sourceId?.toLongOrNull() ?: return null
+                    val permalink = track.sourceUrl?.takeIf { it.startsWith("https://") } ?: return null
+                    return AlbumTarget(title.takeUnless { it.equals("SoundCloud", true) }.orEmpty(), track.artist,
+                        SoundCloudAlbumTrack(id, permalink))
+                }
                 if (track.source != "local" || title.isEmpty() || title == "Неизвестный альбом") return null
                 return AlbumTarget(title, track.artist.trim())
             }
         }
 
         fun contains(track: TrackEntity): Boolean {
+            if (soundCloud != null || track.source != "local") return false
             val album = from(track) ?: return false
             return title.equals(album.title, ignoreCase = true) && artist.equals(album.artist, ignoreCase = true)
         }
@@ -95,6 +104,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val albumTarget = MutableStateFlow<AlbumTarget?>(null)
     fun openAlbum(track: TrackEntity) {
         albumTarget.value = AlbumTarget.from(track)
+        artistTarget.value = null
+    }
+
+    fun openAlbum(track: SoundCloudTrack) {
+        val target = AlbumTarget.SoundCloudAlbumTrack(track.id, track.permalinkUrl)
+        albumTarget.value = AlbumTarget(track.albumTitle.orEmpty(), track.artist, target)
         artistTarget.value = null
     }
 
@@ -322,7 +337,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 sourceId = sourceId,
                 title = track.title,
                 artist = track.artist,
-                album = "",
+                album = track.albumTitle ?: existing.album,
                 durationMs = track.durationMs,
                 artworkUri = track.artworkUrl,
                 artistId = track.artistId?.toString(),
@@ -336,7 +351,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 uri = "auvyx-sc://track/$sourceId",
                 title = track.title,
                 artist = track.artist,
-                album = "",
+                album = track.albumTitle.orEmpty(),
                 durationMs = track.durationMs,
                 addedAt = System.currentTimeMillis(),
                 artworkUri = track.artworkUrl,
@@ -348,6 +363,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
         return dao.getBySourceId("soundcloud", sourceId)
             ?: error("SoundCloud-трек не удалось сохранить в медиатеку")
+    }
+
+    fun addSoundCloudToLibrary(tracks: List<SoundCloudTrack>) {
+        viewModelScope.launch {
+            try {
+                db.withTransaction { tracks.forEach { ensureSoundCloudTrack(it) } }
+                messages.tryEmit(if (tracks.size == 1) "Трек в медиатеке" else "Альбом добавлен в медиатеку")
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                messages.tryEmit("Не удалось сохранить треки в медиатеке")
+            }
+        }
     }
 
     fun addSoundCloudToPlaylist(playlistId: Long, track: SoundCloudTrack) {

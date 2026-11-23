@@ -21,7 +21,8 @@ data class SoundCloudTrack(
     val permalinkUrl: String,
     val credit: String = "",
     val full: Boolean = true,
-    val artistId: Long? = null
+    val artistId: Long? = null,
+    val albumTitle: String? = null
 )
 
 /**
@@ -59,13 +60,59 @@ object SoundCloudRepository {
     suspend fun creditedArtist(permalink: String): String? = withContext(Dispatchers.IO) {
         if (!isTrustedTrackUrl(permalink)) return@withContext null
         val track = getJson("$API/resolve?url=${encode(permalink)}&client_id=${clientId()}")
-        val publisher = track.optJSONObject("publisher_metadata") ?: return@withContext null
-        if (publisher.isNull("artist")) return@withContext null
-        publisher.optString("artist").trim().takeIf { it.isNotEmpty() }
+        track.optJSONObject("publisher_metadata")?.label("artist")
     }
 
     data class Artist(val name: String, val avatar: String?, val description: String, val id: Long)
     data class ArtistPage(val tracks: List<SoundCloudTrack>, val next: String?)
+    data class Album(
+        val title: String,
+        val artist: String,
+        val artworkUrl: String?,
+        val releaseDate: String?,
+        val durationMs: Long,
+        val trackCount: Int,
+        val tracks: List<SoundCloudTrack>
+    )
+
+    suspend fun album(trackId: Long, permalink: String): Album? = withContext(Dispatchers.IO) {
+        if (!isTrustedTrackUrl(permalink)) return@withContext null
+        val key = clientId()
+        val track = getJson("$API/resolve?url=${encode(permalink)}&client_id=$key")
+        if (track.optLong("id") != trackId) return@withContext null
+        val publisher = track.optJSONObject("publisher_metadata") ?: return@withContext null
+        val title = publisher.albumTitle() ?: return@withContext null
+        val artist = publisher.label("artist") ?: track.optJSONObject("user")?.label("username")
+            ?: return@withContext null
+        val owner = track.optJSONObject("user")?.optLong("id")?.takeIf { it > 0L } ?: return@withContext null
+        val results = getJson("$API/search/playlists?q=${encode("$title $artist")}&client_id=$key&limit=25&linked_partitioning=1")
+        for (candidate in (results.optJSONArray("collection") ?: JSONArray()).objects()) {
+            if (!candidate.optBoolean("is_album") || candidate.optLong("user_id") != owner ||
+                !title.equals(candidate.optString("title").trim(), ignoreCase = true)) continue
+            val id = candidate.optLong("id").takeIf { it > 0L } ?: continue
+            val album = getJson("$API/playlists/$id?client_id=$key")
+            if (!album.optBoolean("is_album") || album.optLong("user_id") != owner ||
+                !title.equals(album.label("title"), ignoreCase = true)) continue
+            val entries = album.optJSONArray("tracks")?.objects().orEmpty()
+            if (entries.none { it.optLong("id") == trackId }) continue
+            val existing = entries.mapNotNull(::parseTrack).associateBy { it.id }
+            val ids = entries.map { it.optLong("id") }.filter { it > 0L }
+            val remaining = ids.distinct().filterNot(existing::containsKey).chunked(50).flatMap { chunk ->
+                JSONArray(readUrl("$API/tracks?ids=${chunk.joinToString(",")}&client_id=$key"))
+                    .objects().mapNotNull(::parseTrack)
+            }.associateBy { it.id }
+            return@withContext Album(
+                title = album.label("title") ?: title,
+                artist = artist,
+                artworkUrl = album.label("artwork_url")?.takeIf(::isTrustedMediaUrl),
+                releaseDate = album.label("release_date")?.substringBefore('T'),
+                durationMs = album.optLong("duration").coerceAtLeast(0),
+                trackCount = album.optInt("track_count").coerceAtLeast(ids.size),
+                tracks = ids.mapNotNull { existing[it] ?: remaining[it] }
+            )
+        }
+        null
+    }
 
     suspend fun artist(id: Long?, permalink: String?): Artist = withContext(Dispatchers.IO) {
         val key = clientId()
@@ -88,38 +135,36 @@ object SoundCloudRepository {
         ArtistPage(parseTracks(data), data.optString("next_href").takeIf { isTrustedApiUrl(it) })
     }
 
-    private fun parseTracks(root: JSONObject): List<SoundCloudTrack> {
-        val collection = root.optJSONArray("collection") ?: JSONArray()
-        return buildList {
-            for (index in 0 until collection.length()) {
-                val item = collection.optJSONObject(index) ?: continue
-                val id = item.optLong("id", -1L)
-                val title = item.optString("title").trim()
-                val permalink = item.optString("permalink_url").trim()
-                if (id <= 0L || title.isBlank() || !isTrustedTrackUrl(permalink)) continue
+    private fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull(::optJSONObject)
 
-                val user = item.optJSONObject("user")
-                val artist = user?.optString("username")?.takeIf { !it.isNullOrBlank() }
-                    ?: "Неизвестный исполнитель"
-                val artwork = item.optString("artwork_url")
-                    .takeIf { it.startsWith("https://", ignoreCase = true) }
-                    ?: user?.optString("avatar_url")?.takeIf { it.startsWith("https://", ignoreCase = true) }
+    private fun JSONObject.label(key: String): String? =
+        if (isNull(key)) null else optString(key).trim().takeIf(String::isNotEmpty)
 
-                add(
-                    SoundCloudTrack(
-                        id = id,
-                        title = title,
-                        artist = artist,
-                        durationMs = item.optLong("duration", 0L).coerceAtLeast(0L),
-                        artworkUrl = artwork,
-                        artistId = user?.optLong("id")?.takeIf { it > 0 },
-                        credit = item.optJSONObject("publisher_metadata")?.optString("artist").orEmpty(),
-                        full = item.optString("policy") !in setOf("SNIP", "BLOCK"),
-                        permalinkUrl = permalink
-                    )
-                )
-            }
-        }
+    private fun JSONObject.albumTitle(): String? = label("album_title")?.takeUnless { it.equals("SoundCloud", ignoreCase = true) }
+
+    private fun parseTracks(root: JSONObject): List<SoundCloudTrack> =
+        root.optJSONArray("collection")?.objects().orEmpty().mapNotNull(::parseTrack)
+
+    private fun parseTrack(item: JSONObject): SoundCloudTrack? {
+        val id = item.optLong("id", -1L)
+        val title = item.label("title") ?: return null
+        val permalink = item.label("permalink_url") ?: return null
+        if (id <= 0L || !isTrustedTrackUrl(permalink)) return null
+        val user = item.optJSONObject("user")
+        val publisher = item.optJSONObject("publisher_metadata")
+        return SoundCloudTrack(
+            id = id,
+            title = title,
+            artist = user?.label("username") ?: "Неизвестный исполнитель",
+            durationMs = item.optLong("duration", 0L).coerceAtLeast(0L),
+            artworkUrl = item.label("artwork_url")?.takeIf { it.startsWith("https://", ignoreCase = true) }
+                ?: user?.label("avatar_url")?.takeIf { it.startsWith("https://", ignoreCase = true) },
+            artistId = user?.optLong("id")?.takeIf { it > 0 },
+            credit = publisher?.label("artist").orEmpty(),
+            full = item.optString("policy") !in setOf("SNIP", "BLOCK"),
+            permalinkUrl = permalink,
+            albumTitle = publisher?.albumTitle()
+        )
     }
 
     /** Called by Media3's ResolvingDataSource on its loader thread. */
