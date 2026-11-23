@@ -636,8 +636,6 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
         }
     }
     val lyrics = content.orEmpty()
-    val lines = remember(lyrics) { com.nexus.music.playback.timedLyrics(lyrics) }
-    val active = com.nexus.music.playback.activeLyricIndex(lines, position)
     ModalBottomSheet(onDismissRequest = onDismiss, shape = MaterialTheme.shapes.extraLarge,
         containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
@@ -649,24 +647,30 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
                 TextButton(onClick = { lookupAttempt++ }) { Text("Повторить поиск") }
             }
             TextButton(onClick = { requestedId = mediaId; picker.launch(arrayOf("text/*", "application/octet-stream")) }) { Text("Импортировать LRC или TXT") }
-            if (lines.isEmpty()) {
-                if (lyrics.isNotBlank()) {
-                    Text(lyrics, modifier = Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()))
-                }
-            } else {
-                val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-                LaunchedEffect(active) { listState.scrollToItem(active.coerceAtLeast(0)) }
-                LazyColumn(state = listState, modifier = Modifier.heightIn(max = 430.dp)) {
-                    itemsIndexed(lines) { index, line ->
-                        val highlighted = index == active
-                        Text(
-                            line.second,
-                            modifier = Modifier.padding(vertical = 7.dp).semantics { selected = highlighted },
-                            color = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
+            LyricsContent(lyrics, position)
+        }
+    }
+}
+
+@Composable
+internal fun LyricsContent(lyrics: String, position: Long) {
+    if (lyrics.isBlank()) return
+    val lines = remember(lyrics) { com.nexus.music.playback.timedLyrics(lyrics) }
+    if (lines.isEmpty()) {
+        Text(lyrics, modifier = Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()))
+        return
+    }
+    val active = com.nexus.music.playback.activeLyricIndex(lines, position)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(active) { listState.scrollToItem(active.coerceAtLeast(0)) }
+    LazyColumn(state = listState, modifier = Modifier.heightIn(max = 430.dp)) {
+        itemsIndexed(lines) { index, line ->
+            val highlighted = index == active
+            Text(
+                line.second,
+                modifier = Modifier.padding(vertical = 7.dp).semantics { selected = highlighted },
+                color = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

@@ -263,8 +263,7 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = MaterialTheme.shapes.large,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
-            .testTag("mini-player").clickable(onClick = onOpen)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable(onClick = onOpen)
     ) {
         Column {
             Row(
