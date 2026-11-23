@@ -2,7 +2,14 @@ package com.nexus.music.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
+import android.os.Build
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.Typography
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.Shapes
@@ -81,6 +88,17 @@ private val AUVYXShapes = Shapes(
     extraLarge = RoundedCornerShape(30.dp)
 )
 
+private val expressiveTypography = Typography().run {
+    copy(
+        headlineMedium = headlineMedium.copy(fontWeight = FontWeight.SemiBold),
+        headlineSmall = headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+        titleLarge = titleLarge.copy(fontWeight = FontWeight.SemiBold),
+        titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold),
+        labelLarge = labelLarge.copy(fontWeight = FontWeight.SemiBold)
+    )
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun NexusTheme(themeMode: String, style: String, content: @Composable () -> Unit) {
     val dark = when (themeMode) {
@@ -88,7 +106,10 @@ fun NexusTheme(themeMode: String, style: String, content: @Composable () -> Unit
         "light" -> false
         else -> isSystemInDarkTheme()
     }
-    val base = if (dark) AUVYXDark else AUVYXLight
+    val context = LocalContext.current
+    val base = if (Build.VERSION.SDK_INT >= 31) {
+        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else if (dark) AUVYXDark else AUVYXLight
     val colors = when (style) {
         "hyper" -> base.copy(surfaceContainer = base.surface.copy(alpha = .83f))
         "glass" -> base.copy(surfaceContainer = base.surface.copy(alpha = .62f),
@@ -110,8 +131,9 @@ fun NexusTheme(themeMode: String, style: String, content: @Composable () -> Unit
     }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalStyle provides style) {
-        MaterialTheme(
+        MaterialExpressiveTheme(
             colorScheme = colors,
+            typography = expressiveTypography,
             shapes = when (style) {
                 "lane" -> Shapes(small = RoundedCornerShape(3.dp), medium = RoundedCornerShape(4.dp), large = RoundedCornerShape(6.dp))
                 "glass" -> Shapes(medium = RoundedCornerShape(30.dp), large = RoundedCornerShape(40.dp))
