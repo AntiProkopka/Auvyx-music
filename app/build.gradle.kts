@@ -20,7 +20,9 @@ require(spotifyClientId.isEmpty() || spotifyClientId.matches(Regex("[a-fA-F0-9]{
 
 android {
     namespace = "com.nexus.music"
-    compileSdk = 37
+    compileSdk {
+        version = release(37)
+    }
 
     defaultConfig {
         applicationId = "com.nexus.music"
