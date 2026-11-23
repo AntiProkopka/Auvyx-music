@@ -53,7 +53,12 @@ class LibraryRepository(
             db.trackDao().deleteByIds(chunk)
             removed.mapNotNull { it.artworkUri?.let { value -> Uri.parse(value) } }
                 .filter { it.scheme == "file" }
-                .forEach { uri -> runCatching { uri.path?.let { path -> File(path).delete() } } }
+                .forEach { uri ->
+                    runCatching {
+                        val file = uri.path?.let(::File)?.canonicalFile ?: return@runCatching
+                        if (file.parentFile == File(context.filesDir, "album_art").canonicalFile) file.delete()
+                    }
+                }
         }
     }
 
@@ -121,7 +126,7 @@ class LibraryRepository(
             val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
                 ?.takeIf { it.isNotBlank() } ?: "Неизвестный исполнитель"
             val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
-                ?.takeIf { it.isNotBlank() } ?: "Неизвестный альбом"
+                ?.takeIf { it.isNotBlank() } ?: ""
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
             val artwork = runCatching { retriever.embeddedPicture }.getOrNull()

@@ -1,6 +1,7 @@
 package com.nexus.music.data.settings
 
 import android.content.Context
+import com.nexus.music.playback.SixBandEqualizer
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -73,7 +74,7 @@ class SettingsStore(private val context: Context) {
     val equalizerEnabled: Flow<Boolean> = store.data.map { it[Keys.EQ_ENABLED] ?: true }
     val equalizerPreset: Flow<String> = store.data.map { it[Keys.EQ_PRESET] ?: "bass_boost" }
     val equalizerGains: Flow<List<Float>> = store.data.map { prefs ->
-        listOf(
+        val gains = listOf(
             prefs[Keys.EQ_60] ?: DEFAULT_EQ_GAINS[0],
             prefs[Keys.EQ_150] ?: DEFAULT_EQ_GAINS[1],
             prefs[Keys.EQ_400] ?: DEFAULT_EQ_GAINS[2],
@@ -81,6 +82,9 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.EQ_2400] ?: DEFAULT_EQ_GAINS[4],
             prefs[Keys.EQ_15000] ?: DEFAULT_EQ_GAINS[5]
         )
+        if (prefs[Keys.EQ_PRESET] == "treble" && gains == listOf(-1f, 0f, 0f, 0f, 2f, 4f)) {
+            SixBandEqualizer.TREBLE_BOOST
+        } else gains
     }
 
     val catalogPages = store.data.map { prefs ->

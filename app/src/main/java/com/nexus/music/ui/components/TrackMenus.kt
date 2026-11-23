@@ -50,6 +50,7 @@ fun trackMenu(
     t: TrackEntity,
     onAddToPlaylist: (TrackEntity) -> Unit
 ): List<MenuAction> = listOfNotNull(
+    if (AppViewModel.AlbumTarget.from(t) != null) MenuAction("Альбом") { vm.openAlbum(t) } else null,
     if (t.source in setOf("local", "soundcloud")) MenuAction("Исполнитель") { vm.openArtist(t) } else null,
     MenuAction(if (t.isFavorite) "Убрать из избранного" else "В избранное") { vm.toggleFavorite(t) },
     if (t.source == "local" && t.downloadedPath == null) MenuAction("Сохранить офлайн") { vm.saveOffline(t) } else null,

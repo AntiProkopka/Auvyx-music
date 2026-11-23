@@ -135,6 +135,8 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     var showEqualizer by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showTrackMenu by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<com.nexus.music.data.db.TrackEntity?>(null) }
+    val offlineTransfers by vm.offlineTransfers.collectAsStateWithLifecycle()
     var showPlaylist by remember { mutableStateOf(false) }
     val disliked by vm.dislikedTracks.collectAsStateWithLifecycle()
     var showOutput by remember { mutableStateOf(false) }
@@ -350,6 +352,39 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                         track?.let(vm::openArtist)
                         showTrackMenu = false
                     })
+                    track?.let { selected ->
+                        val transfer = offlineTransfers[selected.id]
+                        val offlineStatus = when {
+                            transfer != null && transfer.total > 0 ->
+                                "Копирование: ${(100.0 * transfer.bytes / transfer.total).toInt().coerceIn(0, 100)}%"
+                            transfer != null -> "Копирование: ${transfer.bytes / 1024} КБ"
+                            selected.downloadedPath != null -> "Доступен офлайн"
+                            selected.source == "local" -> "Офлайн-копии нет"
+                            else -> "Источник не разрешает офлайн-сохранение"
+                        }
+                        DropdownMenuItem(text = { Text(offlineStatus) }, enabled = false, onClick = {})
+                        when {
+                            transfer != null -> DropdownMenuItem(
+                                text = { Text("Отменить копирование") }, onClick = { vm.cancelOffline(selected) }
+                            )
+                            selected.downloadedPath != null && selected.source == "local" -> DropdownMenuItem(
+                                text = { Text("Удалить офлайн-копию") }, onClick = { vm.removeOffline(selected); showTrackMenu = false }
+                            )
+                            selected.source == "local" -> DropdownMenuItem(
+                                text = { Text("Сохранить офлайн") }, onClick = { vm.saveOffline(selected); showTrackMenu = false }
+                            )
+                        }
+                        if (com.nexus.music.AppViewModel.AlbumTarget.from(selected) != null) {
+                            DropdownMenuItem(text = { Text("Альбом") }, onClick = {
+                                vm.openAlbum(selected)
+                                showTrackMenu = false
+                            })
+                        }
+                        DropdownMenuItem(text = { Text("Удалить из медиатеки") }, onClick = {
+                            deleteTarget = selected
+                            showTrackMenu = false
+                        })
+                    }
                     DropdownMenuItem(text = { Text("Добавить в плейлист") }, onClick = {
                         showTrackMenu = false
                         showPlaylist = true
@@ -434,6 +469,17 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         Spacer(Modifier.height(6.dp))
     }
 
+    deleteTarget?.let { selected ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Удалить из медиатеки?") },
+            text = { Text("«${selected.title}» будет удалён из медиатеки AUVYX. Исходный файл останется на устройстве.") },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteTrack(selected); deleteTarget = null }) { Text("Удалить") }
+            },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Отмена") } }
+        )
+    }
     if (showPlaylist && track != null) {
         AddToPlaylistDialog(vm, track, onDismiss = { showPlaylist = false })
     }
@@ -561,7 +607,7 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
     }
     val lyrics = content.orEmpty()
     val lines = remember(lyrics) { com.nexus.music.playback.timedLyrics(lyrics) }
-    val active = lines.indexOfLast { it.first <= position }
+    val active = com.nexus.music.playback.activeLyricIndex(lines, position)
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
             Text(title, style = MaterialTheme.typography.headlineSmall)
@@ -577,7 +623,7 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
                     modifier = Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()))
             } else {
                 val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-                LaunchedEffect(active) { if (active >= 0) listState.animateScrollToItem(active) }
+                LaunchedEffect(active) { listState.scrollToItem(active.coerceAtLeast(0)) }
                 LazyColumn(state = listState, modifier = Modifier.heightIn(max = 430.dp)) {
                     itemsIndexed(lines) { index, line ->
                         Text(line.second, modifier = Modifier.padding(vertical = 7.dp),
@@ -653,8 +699,8 @@ private val SUPPORTED_OUTPUT_TYPES = setOf(
 
 private fun audioDeviceLabel(device: AudioDeviceInfo, nickname: String?): String {
     if (device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
-        val owner = nickname?.takeIf { it.isNotBlank() }
-        return if (owner == null) "Телефон" else "Телефон · $owner"
+        val owner = nickname?.trim()?.takeIf { it.isNotEmpty() }
+        return if (owner == null) "Телефон" else "$owner's phone"
     }
     val typeLabel = when (device.type) {
         AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,

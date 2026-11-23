@@ -124,7 +124,7 @@ fun NexusRoot(vm: AppViewModel) {
                     if (style == "lane") {
                         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            navItems.forEach { item -> IconButton(modifier = Modifier.testTag("nav-${item.route}"), onClick = { vm.artistTarget.value = null; navigateTo(nav, item.route) }) {
+                            navItems.forEach { item -> IconButton(modifier = Modifier.testTag("nav-${item.route}"), onClick = { vm.albumTarget.value = null; vm.artistTarget.value = null; navigateTo(nav, item.route) }) {
                                 Icon(item.icon, item.label, tint = if (route == item.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                             } }
                         }
@@ -148,7 +148,7 @@ fun NexusRoot(vm: AppViewModel) {
             bottomBar = {
                 if (route != "player") {
                     Column {
-                        if (player.mediaId != null) MiniPlayer(vm = vm, onOpen = { vm.artistTarget.value = null; nav.navigate("player") })
+                        if (player.mediaId != null) MiniPlayer(vm = vm, onOpen = { vm.albumTarget.value = null; vm.artistTarget.value = null; nav.navigate("player") })
                         if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
                             modifier = when (style) {
                                 "glass" -> Modifier.padding(horizontal = 14.dp, vertical = 6.dp).shadow(8.dp, RoundedCornerShape(36.dp))
@@ -165,7 +165,7 @@ fun NexusRoot(vm: AppViewModel) {
                                     modifier = Modifier.testTag("nav-${item.route}"),
                                     alwaysShowLabel = style != "glass",
                                     selected = selected,
-                                    onClick = { vm.artistTarget.value = null; navigateTo(nav, item.route) },
+                                    onClick = { vm.albumTarget.value = null; vm.artistTarget.value = null; navigateTo(nav, item.route) },
                                     icon = { Icon(item.icon, contentDescription = item.label) },
                                     label = { Text(item.label, maxLines = 1) }
                                 )
@@ -176,6 +176,7 @@ fun NexusRoot(vm: AppViewModel) {
             }
         ) { padding ->
             val artist by vm.artistTarget.collectAsStateWithLifecycle()
+            val album by vm.albumTarget.collectAsStateWithLifecycle()
             Box(Modifier.padding(padding).fillMaxSize()) {
                 NavHost(navController = nav, startDestination = "home") {
                     composable("home") { HomeScreen(vm) }
@@ -186,6 +187,12 @@ fun NexusRoot(vm: AppViewModel) {
                         PlaylistScreen(vm, entry.arguments?.getLong("id") ?: 0L, onBack = { nav.popBackStack() })
                     }
                     composable("player") { PlayerScreen(vm, onClose = { nav.popBackStack() }) }
+                }
+                album?.let { target ->
+                    androidx.activity.compose.BackHandler(enabled = artist == null) { vm.albumTarget.value = null }
+                    Surface(Modifier.fillMaxSize()) {
+                        androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.AlbumScreen(vm, target) }
+                    }
                 }
                 artist?.let { target ->
                     androidx.activity.compose.BackHandler { vm.artistTarget.value = null }

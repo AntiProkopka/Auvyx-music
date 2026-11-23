@@ -77,6 +77,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.Eagerly, true
     )
 
+    data class AlbumTarget(val title: String, val artist: String) {
+        companion object {
+            fun from(track: TrackEntity): AlbumTarget? {
+                val title = track.album.trim()
+                if (track.source != "local" || title.isEmpty() || title == "Неизвестный альбом") return null
+                return AlbumTarget(title, track.artist.trim())
+            }
+        }
+
+        fun contains(track: TrackEntity): Boolean {
+            val album = from(track) ?: return false
+            return title.equals(album.title, ignoreCase = true) && artist.equals(album.artist, ignoreCase = true)
+        }
+    }
+
+    val albumTarget = MutableStateFlow<AlbumTarget?>(null)
+    fun openAlbum(track: TrackEntity) {
+        albumTarget.value = AlbumTarget.from(track)
+        artistTarget.value = null
+    }
+
     data class ArtistTarget(val name: String, val cloud: Boolean, val owner: Long?, val permalink: String?)
     val artistTarget = MutableStateFlow<ArtistTarget?>(null)
     fun openArtist(track: TrackEntity) {

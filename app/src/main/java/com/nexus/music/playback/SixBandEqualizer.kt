@@ -7,7 +7,9 @@ import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.sign
 import kotlin.math.pow
 import kotlin.math.sin
 
@@ -34,8 +36,9 @@ class SixBandEqualizer {
         gains = values.map { it.coerceIn(-12f, 12f) }.toFloatArray()
     }
 
-    internal fun coefficients(sampleRate: Int): Array<Coefficients> {
-        val current = gains
+    internal fun currentGains(): FloatArray = gains
+
+    internal fun coefficients(sampleRate: Int, current: FloatArray): Array<Coefficients> {
         return Array(BAND_COUNT) { index ->
             val frequency = FREQUENCIES[index].coerceAtMost(sampleRate * 0.44f)
             peakingCoefficients(sampleRate.toDouble(), frequency.toDouble(), 1.0, current[index].toDouble())
@@ -75,7 +78,7 @@ class SixBandEqualizer {
         val FREQUENCIES = floatArrayOf(60f, 150f, 400f, 1_000f, 2_400f, 15_000f)
         val BASS_BOOST = listOf(5f, 3f, 0f, 1f, 0f, 2f)
         val DEFAULT = listOf(0f, 0f, 0f, 0f, 0f, 0f)
-        val TREBLE_BOOST = listOf(-1f, 0f, 0f, 0f, 2f, 4f)
+        val TREBLE_BOOST = listOf(0f, 0f, 0f, 0f, 2f, 4f)
         val VOCAL = listOf(-2f, -1f, 1.5f, 3f, 2f, 0f)
     }
 }
@@ -87,6 +90,35 @@ private class EqualizerProcessor(
     private var sampleRate = 48_000
     private var channels = 2
     private var states: Array<Array<FilterState>> = emptyArray()
+    private var configuredGains: FloatArray? = null
+    private var filters: Array<SixBandEqualizer.Coefficients> = emptyArray()
+    private var preamp = 1.0
+
+    private fun updateFilters(gains: FloatArray) {
+        filters = equalizer.coefficients(sampleRate, gains)
+        configuredGains = gains
+        if (gains.none { it > 0f }) {
+            preamp = 1.0
+            return
+        }
+        // Measure the combined response. Overlapping boosts can exceed the largest band gain.
+        val peak = (0..256).maxOf { step ->
+            val omega = PI * (20.0 / (sampleRate / 2.0)).pow(1.0 - step / 256.0)
+            val c1 = cos(omega)
+            val c2 = cos(omega * 2.0)
+            val s1 = sin(omega)
+            val s2 = sin(omega * 2.0)
+            filters.fold(1.0) { power, f ->
+                fun magnitudeSquared(a: Double, b: Double, c: Double): Double {
+                    val real = a + b * c1 + c * c2
+                    val imaginary = b * s1 + c * s2
+                    return real * real + imaginary * imaginary
+                }
+                power * magnitudeSquared(f.b0, f.b1, f.b2) / magnitudeSquared(1.0, f.a1, f.a2)
+            }
+        }
+        preamp = 0.94 / kotlin.math.sqrt(peak.coerceAtLeast(1.0))
+    }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT &&
@@ -94,6 +126,7 @@ private class EqualizerProcessor(
         ) {
             return AudioProcessor.AudioFormat.NOT_SET
         }
+        configuredGains = null
         sampleRate = inputAudioFormat.sampleRate.coerceAtLeast(8_000)
         channels = inputAudioFormat.channelCount.coerceAtLeast(1)
         states = Array(SixBandEqualizer.BAND_COUNT) { Array(channels) { FilterState() } }
@@ -105,12 +138,17 @@ private class EqualizerProcessor(
         val bytesPerSample = if (encoding == C.ENCODING_PCM_FLOAT) 4 else 2
         val input = inputBuffer.order(ByteOrder.nativeOrder())
         val output = replaceOutputBuffer(input.remaining()).order(ByteOrder.nativeOrder())
-        if (!equalizer.enabled) {
+        val gains = equalizer.currentGains()
+        if (!equalizer.enabled || gains.all { it == 0f }) {
+            if (configuredGains != null) {
+                resetFilterState()
+                configuredGains = null
+            }
             output.put(input)
             output.flip()
             return
         }
-        val filters = equalizer.coefficients(sampleRate)
+        if (configuredGains !== gains) updateFilters(gains)
         var sampleIndex = 0
 
         while (input.remaining() >= bytesPerSample) {
@@ -119,14 +157,16 @@ private class EqualizerProcessor(
             } else {
                 input.short.toDouble() / 32768.0
             }
-            var value = source
-            if (equalizer.enabled && states.isNotEmpty()) {
+            var value = source * preamp
+            if (states.isNotEmpty()) {
                 val channel = sampleIndex % channels
                 for (band in filters.indices) {
                     value = states[band][channel].process(value, filters[band])
                 }
             }
-            val safe = value.coerceIn(-0.999969, 0.999969)
+            // Smoothly absorb rare transients above the headroom ceiling.
+            val safe = if (abs(value) <= 0.95) value else
+                sign(value) * (0.95 + 0.0499 * (1.0 - kotlin.math.exp(-(abs(value) - 0.95) / 0.0499)))
             if (encoding == C.ENCODING_PCM_FLOAT) {
                 output.putFloat(safe.toFloat())
             } else {
