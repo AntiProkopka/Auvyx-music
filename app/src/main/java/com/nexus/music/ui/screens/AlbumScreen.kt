@@ -2,6 +2,8 @@ package com.nexus.music.ui.screens
 
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -24,28 +26,41 @@ import kotlinx.coroutines.withContext
 fun AlbumScreen(vm: AppViewModel, album: AppViewModel.AlbumTarget) {
     val library by vm.tracks.collectAsStateWithLifecycle()
     val player by vm.player.state.collectAsStateWithLifecycle()
-    val tracks = remember(library, album) { library.filter(album::contains) }
-    val first = tracks.firstOrNull()
+    val members = remember(library, album) { library.filter(album::contains) }
     val context = LocalContext.current
-    val year by produceState<String?>(null, first?.uri) {
+    val metadata by produceState(emptyMap<Long, AlbumTrackTags>(), members) {
         value = withContext(Dispatchers.IO) {
-            first?.let { track ->
+            members.mapNotNull { track ->
                 runCatching {
                     MediaMetadataRetriever().use { retriever ->
                         val original = Uri.parse(track.uri)
                         val copy = OfflineAudio.file(context, track.uri)
                         if (copy.isFile) retriever.setDataSource(copy.absolutePath)
                         else retriever.setDataSource(context, original)
-                        val metadata = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
-                            ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)
-                        metadata?.let { Regex("^\\d{4}").find(it)?.value }
+                        val year = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
+                        val date = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)
+                        track.id to AlbumTrackTags(
+                            number = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER).tagNumber(),
+                            disc = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER).tagNumber(),
+                            year = sequenceOf(year, date).filterNotNull().firstNotNullOfOrNull { Regex("^\\d{4}").find(it)?.value }
+                        )
                     }
                 }.getOrNull()
-            }
+            }.toMap()
         }
     }
+    val tracks = remember(members, metadata) {
+        members.sortedWith(compareBy<TrackEntity> { metadata[it.id]?.disc ?: 1 }
+            .thenBy { metadata[it.id]?.number ?: Int.MAX_VALUE }
+            .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+    }
+    val first = tracks.firstOrNull()
+    val year = tracks.firstNotNullOfOrNull { metadata[it.id]?.year }
     var playlistTrack by remember { mutableStateOf<TrackEntity?>(null) }
     val artwork = tracks.firstNotNullOfOrNull { it.artworkUri?.takeIf(String::isNotBlank) }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) vm.addFiles(uris, album)
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -63,10 +78,10 @@ fun AlbumScreen(vm: AppViewModel, album: AppViewModel.AlbumTarget) {
                             Text(album.artist, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
-                    val duration = tracks.sumOf { it.durationMs }
+                    val duration = tracks.takeIf { it.all { track -> track.durationMs > 0 } }?.sumOf { it.durationMs } ?: 0
                     val details = listOfNotNull(year, formatTime(duration).takeIf { duration > 0 })
                     if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
-                    Text(if (tracks.isEmpty()) "В медиатеке нет треков этого альбома" else "Треки уже в медиатеке")
+                    if (tracks.isEmpty()) Text("В медиатеке нет треков этого альбома")
                     Button(
                         shapes = ButtonDefaults.shapes(),
                         enabled = tracks.isNotEmpty(),
@@ -74,6 +89,10 @@ fun AlbumScreen(vm: AppViewModel, album: AppViewModel.AlbumTarget) {
                     ) {
                         Text("Воспроизвести альбом")
                     }
+                    OutlinedButton(
+                        shapes = ButtonDefaults.shapes(),
+                        onClick = { filePicker.launch(arrayOf("audio/*", "application/ogg")) }
+                    ) { Text("Добавить треки в медиатеку") }
                 }
             }
         }
@@ -88,3 +107,7 @@ fun AlbumScreen(vm: AppViewModel, album: AppViewModel.AlbumTarget) {
     }
     playlistTrack?.let { track -> AddToPlaylistDialog(vm, track, onDismiss = { playlistTrack = null }) }
 }
+
+private data class AlbumTrackTags(val number: Int?, val disc: Int?, val year: String?)
+
+private fun String?.tagNumber() = this?.substringBefore('/')?.trim()?.toIntOrNull()?.takeIf { it > 0 }

@@ -139,10 +139,14 @@ class LibraryRegressionTest {
         val data = ByteArray(32768) { (it % 127).toByte() }
         val doc = Uri.parse("content://test-offline/song.wav")
         val original = File(context.cacheDir, "original.wav").apply { writeBytes(data) }
+        var opens = 0
         val provider = object : android.content.ContentProvider() {
             override fun onCreate() = true
             override fun getType(uri: Uri) = "audio/wav"
-            override fun openFile(uri: Uri, mode: String) = android.os.ParcelFileDescriptor.open(original,android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+            override fun openFile(uri: Uri, mode: String): android.os.ParcelFileDescriptor {
+                opens++
+                return android.os.ParcelFileDescriptor.open(original, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+            }
             override fun query(uri: Uri, projection: Array<String>?, selection: String?, args: Array<String>?, order: String?): android.database.Cursor? = null
             override fun insert(uri: Uri, values: android.content.ContentValues?): Uri? = null
             override fun update(uri: Uri, values: android.content.ContentValues?, selection: String?, args: Array<String>?) = 0
@@ -162,6 +166,10 @@ class LibraryRegressionTest {
                 kotlinx.coroutines.delay(10)
             }
         }
+        val initialOpens = opens
+        manager.save(t) { failure.complete(it) }
+        kotlinx.coroutines.delay(100)
+        assertEquals(initialOpens, opens)
         db.close()
         original.delete()
         val reopened = NexusDatabase.create(context)
@@ -191,6 +199,39 @@ class LibraryRegressionTest {
         assertTrue(timedLyrics("plain TXT").isEmpty())
         assertEquals(OfflineAudio.file(context,"content://docs/1"), OfflineAudio.file(context,"content://docs/1"))
         assertNotEquals(OfflineAudio.file(context,"content://docs/2"),OfflineAudio.file(context,"content://docs/1"))
+    }
+
+    @Test fun discoveredLyricsDoNotReplaceAnImport() = runBlocking {
+        val settings = SettingsStore(context)
+        settings.saveLyrics("1", "Imported lyrics")
+        settings.saveLyricsIfMissing("1", "Discovered lyrics")
+        settings.saveLyricsIfMissing("2", "[00:01.20]Discovered lyrics")
+        assertEquals("Imported lyrics", settings.lyrics("1").first())
+        assertEquals("[00:01.20]Discovered lyrics", settings.lyrics("2").first())
+    }
+
+    @Test fun albumMembershipUsesOnlyRealLocalMetadata() {
+        val local = track(1)
+        val album = requireNotNull(AppViewModel.AlbumTarget.from(local))
+        assertTrue(album.contains(track(2).copy(album = " album ", artist = "ARTIST")))
+        assertFalse(album.contains(track(3).copy(artist = "Other artist")))
+        assertNull(AppViewModel.AlbumTarget.from(local.copy(album = "")))
+        assertNull(AppViewModel.AlbumTarget.from(local.copy(album = "SoundCloud", source = "soundcloud")))
+        assertFalse(OfflineAudio.canSave(local.copy(source = "soundcloud")))
+    }
+
+    @Test fun deletingLibraryEntryLeavesOriginalFileIntact() = runBlocking {
+        val db = memoryDb()
+        val file = File(context.cacheDir, "source.wav").apply { writeText("original audio") }
+        try {
+            val id = db.trackDao().insertOrIgnore(track(1).copy(uri = Uri.fromFile(file).toString()))
+            val library = com.nexus.music.data.local.LibraryRepository(context, db, SettingsStore(context))
+            library.deleteTracks(listOf(id))
+            assertTrue(db.trackDao().getByIds(listOf(id)).isEmpty())
+            assertEquals("original audio", file.readText())
+        } finally {
+            db.close()
+        }
     }
 
     @Test fun bassPresetPreservesRelativeBoostWithoutClippingLoudBass() {

@@ -72,7 +72,7 @@ fun TrackRow(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val style = com.nexus.music.ui.theme.LocalStyle.current
-    val shape = RoundedCornerShape(when (style) { "hyper" -> 20.dp; "glass" -> 28.dp; "lane" -> 4.dp; else -> 16.dp })
+    val shape = MaterialTheme.shapes.medium
     ListItem(
         modifier = Modifier.fillMaxWidth().padding(horizontal = if (style in listOf("hyper","glass")) 10.dp else 0.dp,
             vertical = if (style in listOf("hyper","glass")) 3.dp else 0.dp).clip(shape).clickable(onClick = onClick),
@@ -144,7 +144,8 @@ fun TrackRow(
                         IconButton(onClick = { expanded = true }) {
                             Icon(Icons.Default.MoreVert, contentDescription = "Меню")
                         }
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
+                            shape = MaterialTheme.shapes.large, containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
                             menuItems.forEach { item ->
                                 DropdownMenuItem(
                                     text = { Text(item.label) },
@@ -259,6 +260,8 @@ fun NameDialog(
 ) {
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -297,6 +300,8 @@ fun PlaylistPickerDialog(
         return
     }
     AlertDialog(
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
         title = { Text("Добавить в плейлист") },
         text = {

@@ -22,10 +22,10 @@ class LibraryRepository(
     private val audioExtensions = setOf("mp3", "flac", "wav", "aac", "m4a", "ogg", "oga", "opus")
 
     /** Добавляет отдельные файлы, выбранные через системный выбор файлов. */
-    suspend fun addFiles(uris: List<Uri>): Int = withContext(Dispatchers.IO) {
+    suspend fun addFiles(uris: List<Uri>, accepts: (TrackEntity) -> Boolean = { true }): Int = withContext(Dispatchers.IO) {
         uris.forEach { uri -> persistPermission(uri) }
         val items = uris.map { uri -> uri to DocumentFile.fromSingleUri(context, uri)?.name }
-        insertNew(items)
+        insertNew(items, accepts)
     }
 
     /** Запоминает папку и рекурсивно добавляет из неё аудиофайлы. */
@@ -104,18 +104,18 @@ class LibraryRepository(
         return ext in audioExtensions
     }
 
-    private suspend fun insertNew(items: List<Pair<Uri, String?>>): Int {
+    private suspend fun insertNew(items: List<Pair<Uri, String?>>, accepts: (TrackEntity) -> Boolean = { true }): Int {
         val existing = db.trackDao().allUris().toHashSet()
         val now = System.currentTimeMillis()
         val tracks = items
             .filter { it.first.toString() !in existing }
-            .mapNotNull { (uri, name) -> readTrack(uri, name, now) }
+            .mapNotNull { (uri, name) -> readTrack(uri, name, now, accepts) }
         if (tracks.isEmpty()) return 0
         val ids = db.trackDao().insertAll(tracks)
         return ids.count { it != -1L }
     }
 
-    private fun readTrack(uri: Uri, name: String?, addedAt: Long): TrackEntity? {
+    private fun readTrack(uri: Uri, name: String?, addedAt: Long, accepts: (TrackEntity) -> Boolean): TrackEntity? {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, uri)
@@ -129,7 +129,6 @@ class LibraryRepository(
                 ?.takeIf { it.isNotBlank() } ?: ""
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
-            val artwork = runCatching { retriever.embeddedPicture }.getOrNull()
             TrackEntity(
                 uri = uri.toString(),
                 sourceId = uri.toString(),
@@ -137,9 +136,11 @@ class LibraryRepository(
                 artist = artist,
                 album = album,
                 durationMs = duration,
-                addedAt = addedAt,
-                artworkUri = saveArtwork(uri, artwork)
-            )
+                addedAt = addedAt
+            ).takeIf(accepts)?.let { track ->
+                val artwork = runCatching { retriever.embeddedPicture }.getOrNull()
+                track.copy(artworkUri = saveArtwork(uri, artwork))
+            }
         } catch (e: Exception) {
             null
         } finally {

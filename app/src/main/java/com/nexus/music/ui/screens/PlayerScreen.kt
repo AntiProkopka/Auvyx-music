@@ -72,19 +72,21 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Switch
+import com.nexus.music.ui.components.ExpressiveFilterChip
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
+import com.nexus.music.ui.components.ExpressiveSlider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -105,6 +107,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.Player
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.data.local.OfflineAudio
 import com.nexus.music.playback.PlaybackAudioRouting
 import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.formatTime
@@ -308,7 +311,8 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             it.isNotBlank() && !(track?.source == "soundcloud" && it.equals("SoundCloud", true)) &&
                 !it.equals(sourceLabel, true)
         }
-        val secondaryMetadata = listOfNotNull(albumLabel, sourceLabel.takeIf { it.isNotBlank() })
+        val albumInfo = albumLabel ?: "Альбом не указан".takeIf { track?.source in setOf("local", "soundcloud") }
+        val secondaryMetadata = listOfNotNull(albumInfo, sourceLabel.takeIf { it.isNotBlank() })
             .distinctBy { it.lowercase() }.joinToString(" · ")
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -323,7 +327,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                 overflow = TextOverflow.Ellipsis
             )
             if (secondaryMetadata.isNotBlank()) {
-                Text(" · $secondaryMetadata", style = MaterialTheme.typography.bodyMedium,
+                Text(" · $secondaryMetadata", modifier = Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
             }
@@ -364,8 +368,8 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                                 "Копирование: ${(100.0 * transfer.bytes / transfer.total).toInt().coerceIn(0, 100)}%"
                             transfer != null -> "Копирование: ${transfer.bytes / 1024} КБ"
                             selected.downloadedPath != null -> "Доступен офлайн"
-                            selected.source == "local" -> "Офлайн-копии нет"
-                            selected.source == "soundcloud" -> "SoundCloud не разрешает офлайн-сохранение"
+                            OfflineAudio.canSave(selected) -> "Офлайн-копии нет"
+                            selected.source == "soundcloud" -> "В AUVYX офлайн-копии SoundCloud недоступны"
                             else -> "Офлайн-сохранение недоступно"
                         }
                         DropdownMenuItem(text = { Text(offlineStatus) }, enabled = false, onClick = {})
@@ -376,7 +380,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                             selected.downloadedPath != null && selected.source == "local" -> DropdownMenuItem(
                                 text = { Text("Удалить офлайн-копию") }, onClick = { vm.removeOffline(selected); showTrackMenu = false }
                             )
-                            selected.source == "local" -> DropdownMenuItem(
+                            OfflineAudio.canSave(selected) -> DropdownMenuItem(
                                 text = { Text("Сохранить офлайн") }, onClick = { vm.saveOffline(selected); showTrackMenu = false }
                             )
                         }
@@ -411,7 +415,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             }
         }
 
-        Slider(
+        ExpressiveSlider(
             value = sliderValue,
             enabled = s.canSeek,
             onValueChange = { dragging = true; dragValue = it },
@@ -433,18 +437,19 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             }
             IconButton(onClick = { vm.player.previous() }) { Icon(Icons.Default.SkipPrevious, contentDescription = "Предыдущий", modifier = Modifier.size(36.dp)) }
             val playCorner by androidx.compose.animation.core.animateDpAsState(
-                targetValue = if (s.isPlaying) 22.dp else 36.dp,
+                targetValue = if (s.isPlaying) 20.dp else 32.dp,
+                animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
                 label = "Play button shape"
             )
             FilledIconButton(
                 onClick = { vm.player.togglePlayPause() },
-                modifier = Modifier.size(72.dp),
+                modifier = Modifier.size(64.dp),
                 shapes = androidx.compose.material3.IconButtonDefaults.shapes(
                     shape = RoundedCornerShape(playCorner),
                     pressedShape = MaterialTheme.shapes.large
                 )
             ) {
-                Icon(if (s.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.isPlaying) "Пауза" else "Играть", modifier = Modifier.size(40.dp))
+                Icon(if (s.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.isPlaying) "Пауза" else "Играть", modifier = Modifier.size(36.dp))
             }
             IconButton(onClick = { vm.player.next() }) { Icon(Icons.Default.SkipNext, contentDescription = "Следующий", modifier = Modifier.size(36.dp)) }
             IconButton(onClick = { vm.player.cycleRepeat() }) {
@@ -460,7 +465,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             IconButton(onClick = { setVolume(volume - 1) }, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.Default.VolumeDown, "Тише")
             }
-            Slider(value = volume, onValueChange = ::setVolume, valueRange = 0f..maxVolume.toFloat(),
+            ExpressiveSlider(value = volume, onValueChange = ::setVolume, valueRange = 0f..maxVolume.toFloat(),
                 modifier = Modifier.weight(1f))
             IconButton(onClick = { setVolume(volume + 1) }, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.Default.VolumeUp, "Громче")
@@ -501,7 +506,9 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         AddToPlaylistDialog(vm, track, onDismiss = { showPlaylist = false })
     }
     if (showLyrics && s.mediaId != null) {
-        TrackLyricsSheet(vm, s.mediaId.orEmpty(), s.title, s.artist, s.durationMs, pos) { showLyrics = false }
+        key(s.mediaId) {
+            TrackLyricsSheet(vm, s.mediaId.orEmpty(), s.title, s.artist, s.durationMs, pos) { showLyrics = false }
+        }
     }
     if (showEqualizer) {
         SoundToolsSheet(vm, eqGains, eqEnabled, eqPreset, s.speed, s.pitch) { showEqualizer = false }
@@ -526,23 +533,24 @@ private fun SoundToolsSheet(
     pitch: Float,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Эквалайзер", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                Checkbox(checked = enabled, onCheckedChange = vm::setEqualizerEnabled)
+                Switch(checked = enabled, onCheckedChange = vm::setEqualizerEnabled)
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("default" to "Default", "bass_boost" to "Bass Boosted", "treble" to "Treble Bass",
                     "vocal" to "Vocal Boost", "custom" to "Custom").forEach { (key, label) ->
-                    FilterChip(selected = preset == key, onClick = { vm.setEqualizerPreset(key) }, label = { Text(label) })
+                    ExpressiveFilterChip(selected = preset == key, onClick = { vm.setEqualizerPreset(key) }, label = { Text(label) })
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 listOf("60", "150", "400", "1k", "2.4k", "15k").forEachIndexed { index, name ->
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         val gain = gains.getOrElse(index) { 0f }.coerceIn(-12f, 12f)
-                        Slider(value = gain, enabled = enabled, valueRange = -12f..12f,
+                        ExpressiveSlider(value = gain, enabled = enabled, valueRange = -12f..12f,
                             onValueChange = { vm.setEqualizerBand(index, it) },
                             modifier = Modifier.width(44.dp).height(126.dp).layout { measurable, constraints ->
                                 val width = constraints.maxWidth
@@ -560,9 +568,9 @@ private fun SoundToolsSheet(
             Spacer(Modifier.height(20.dp))
             Text("Speed Lab", style = MaterialTheme.typography.titleLarge)
             Text("Скорость · %.2f×".format(speed))
-            Slider(value = speed.coerceIn(0.5f, 2f), onValueChange = vm.player::setSpeed, valueRange = 0.5f..2f)
+            ExpressiveSlider(value = speed.coerceIn(0.5f, 2f), onValueChange = vm.player::setSpeed, valueRange = 0.5f..2f)
             Text("Тон · %.2f×".format(pitch))
-            Slider(value = pitch.coerceIn(0.5f, 2f), onValueChange = vm.player::setPitch, valueRange = 0.5f..2f)
+            ExpressiveSlider(value = pitch.coerceIn(0.5f, 2f), onValueChange = vm.player::setPitch, valueRange = 0.5f..2f)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 TextButton(onClick = { vm.player.setSpeedAndPitch(0.8f, 0.85f) }) { Text("Slowed") }
                 TextButton(onClick = vm.player::resetSpeedLab) { Text("Original") }
@@ -582,13 +590,15 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
     val content by remember(mediaId) { vm.lyrics(mediaId).map { it as String? } }
         .collectAsStateWithLifecycle(initialValue = null)
     var lookupState by remember(mediaId) { mutableStateOf("idle") }
-    LaunchedEffect(mediaId, content, lookupState) {
-        if (content == "" && lookupState == "idle") {
+    var lookupAttempt by remember(mediaId) { mutableIntStateOf(0) }
+    val hasReadSavedLyrics = content != null
+    LaunchedEffect(mediaId, hasReadSavedLyrics, lookupAttempt) {
+        if (hasReadSavedLyrics && content.isNullOrEmpty()) {
             lookupState = "loading"
             try {
                 val result = LyricsRepository.find(title, artist, durationMs)
                 if (result != null) {
-                    vm.saveLyrics(mediaId, result)
+                    vm.saveDiscoveredLyrics(mediaId, result)
                     lookupState = "found"
                 } else lookupState = "missing"
             } catch (cancel: kotlinx.coroutines.CancellationException) {
@@ -625,19 +635,21 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
     val lyrics = content.orEmpty()
     val lines = remember(lyrics) { com.nexus.music.playback.timedLyrics(lyrics) }
     val active = com.nexus.music.playback.activeLyricIndex(lines, position)
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
             Text(title, style = MaterialTheme.typography.headlineSmall)
             if (error) Text("Не удалось прочитать файл текста.")
             if (lookupState == "loading") Text("Ищем текст и синхронизацию…")
             if (lookupState == "missing" && lyrics.isBlank()) {
                 Text("Автоматически найти текст не удалось.")
-                TextButton(onClick = { lookupState = "idle" }) { Text("Повторить поиск") }
+                TextButton(onClick = { lookupAttempt++ }) { Text("Повторить поиск") }
             }
             TextButton(onClick = { requestedId = mediaId; picker.launch(arrayOf("text/*", "application/octet-stream")) }) { Text("Импортировать LRC или TXT") }
             if (lines.isEmpty()) {
-                Text(lyrics.ifBlank { "Текст пока не найден." },
-                    modifier = Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()))
+                if (lyrics.isNotBlank()) {
+                    Text(lyrics, modifier = Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()))
+                }
             } else {
                 val listState = androidx.compose.foundation.lazy.rememberLazyListState()
                 LaunchedEffect(active) { listState.scrollToItem(active.coerceAtLeast(0)) }

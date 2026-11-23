@@ -3,7 +3,7 @@ run-name: auvyx Alpha 2.0 APK · ${{ github.event_name }}
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, alpha-2.0-bugfix-cloud ]
   pull_request:
   workflow_dispatch:
 
@@ -41,6 +41,7 @@ jobs:
 
       - name: Restore stable signing key
         id: signing
+        if: github.event_name != 'pull_request'
         env:
           AUVYX_SIGNING_KEYSTORE_BASE64: ${{ secrets.AUVYX_SIGNING_KEYSTORE_BASE64 }}
           AUVYX_SIGNING_STORE_PASSWORD: ${{ secrets.AUVYX_SIGNING_STORE_PASSWORD }}
@@ -67,11 +68,14 @@ jobs:
           AUVYX_SIGNING_KEY_PASSWORD: ${{ secrets.AUVYX_SIGNING_KEY_PASSWORD }}
         run: gradle --no-daemon --stacktrace clean testDebugUnitTest assembleDebug
 
+      - name: Check resolved Material 3 dependencies
+        run: gradle --no-daemon :app:dependencyInsight --configuration debugRuntimeClasspath --dependency androidx.compose.material3:material3
+
       - name: Verify launcher resources in APK
         run: |
           apk=app/build/outputs/apk/debug/app-debug.apk
           aapt2="$ANDROID_HOME/build-tools/36.0.0/aapt2"
-          "$aapt2" dump badging "$apk" | grep -E "^package: name='com\.nexus\.music' versionCode='[0-9]+' versionName='Alpha 2\.0'"
+          "$aapt2" dump badging "$apk" | grep -F "package: name='com.nexus.music' versionCode='16' versionName='Alpha 2.0'"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk"
           "$aapt2" dump resources "$apk" > "$RUNNER_TEMP/auvyx-resources.txt"
           for resource in drawable/auvyx_default_icon drawable/auvyx_neon_icon drawable/auvyx_glass_icon mipmap/ic_launcher mipmap/ic_launcher_round mipmap/auvyx_icon_1 mipmap/auvyx_icon_2 mipmap/auvyx_icon_3; do
@@ -95,7 +99,7 @@ jobs:
         run: |
           gradle --no-daemon assembleRelease
           apk=app/build/outputs/apk/release/app-release.apk
-          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$apk" | grep -E "^package: name='com\.nexus\.music' versionCode='[0-9]+' versionName='Alpha 2\.0'"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$apk" | grep -F "package: name='com.nexus.music' versionCode='16' versionName='Alpha 2.0'"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk"
 
       - name: Upload signed release APK
@@ -105,6 +109,16 @@ jobs:
           name: auvyx-Alpha-2.0-release
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: auvyx-Alpha-2.0-unit-tests
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/test-results/testDebugUnitTest/
           retention-days: 14
 
       - name: Check live SoundCloud and LRCLIB endpoints

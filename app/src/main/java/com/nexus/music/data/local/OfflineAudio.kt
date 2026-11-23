@@ -9,11 +9,15 @@ import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class OfflineAudio(private val context: Context, private val dao: TrackDao, private val scope: CoroutineScope) {
     data class Transfer(val bytes: Long, val total: Long)
     val progress = MutableStateFlow<Map<Long, Transfer>>(emptyMap())
     private val jobs = mutableMapOf<Long, Job>()
+    private val removals = Mutex()
+    private val removing = mutableSetOf<Long>()
 
     private val recovery = scope.async(Dispatchers.IO) {
         val directory = File(context.filesDir, "offline")
@@ -28,14 +32,17 @@ class OfflineAudio(private val context: Context, private val dao: TrackDao, priv
 
     // Only user-selected documents are eligible. Streaming URLs are never copied.
     fun save(track: TrackEntity, onError: (String) -> Unit) {
-        if (track.source != "local" || jobs.containsKey(track.id)) return
+        if (!canSave(track) || track.id in jobs || track.id in removing) return
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 recovery.await()
                 withContext(Dispatchers.IO) {
                     val uri = Uri.parse(track.uri)
-                    require(uri.scheme == "content")
                     val dest = file(context, track.uri)
+                    if (dest.isFile && dest.length() > 0L) {
+                        dao.setDownloadedForUri(track.id, track.uri, dest.absolutePath)
+                        return@withContext
+                    }
                     dest.parentFile!!.mkdirs()
                     val part = File.createTempFile("audio", ".part", dest.parentFile)
                     try {
@@ -60,7 +67,12 @@ class OfflineAudio(private val context: Context, private val dao: TrackDao, priv
                         ensureActive()
                         withContext(NonCancellable) {
                             check(part.renameTo(dest))
-                            dao.setDownloaded(track.id, dest.absolutePath)
+                            try {
+                                check(dao.setDownloadedForUri(track.id, track.uri, dest.absolutePath) == 1)
+                            } catch (error: Exception) {
+                                dest.delete()
+                                throw error
+                            }
                         }
                     } finally { part.delete() }
                 }
@@ -82,17 +94,30 @@ class OfflineAudio(private val context: Context, private val dao: TrackDao, priv
 
     fun cancel(id: Long) { jobs[id]?.cancel() }
 
-    suspend fun remove(track: TrackEntity) {
-        recovery.await()
-        jobs[track.id]?.cancelAndJoin()
-        withContext(Dispatchers.IO) {
-            val dest = file(context, track.uri)
-            check(!dest.exists() || dest.delete())
-            dao.setDownloaded(track.id, null)
+    suspend fun remove(track: TrackEntity, afterRemoval: suspend () -> Unit = {}) {
+        removals.withLock {
+            removing.add(track.id)
+            try {
+                recovery.await()
+                jobs[track.id]?.cancelAndJoin()
+                withContext(Dispatchers.IO) {
+                    val current = dao.getByIds(listOf(track.id)).singleOrNull() ?: return@withContext
+                    if (current.source == "local") {
+                        val dest = file(context, current.uri)
+                        check(!dest.exists() || dest.delete())
+                        dao.setDownloadedForUri(current.id, current.uri, null)
+                    }
+                }
+                afterRemoval()
+            } finally {
+                removing.remove(track.id)
+            }
         }
     }
 
     companion object {
+        fun canSave(track: TrackEntity) = track.source == "local" && Uri.parse(track.uri).scheme == "content"
+
         fun file(context: Context, uri: String) =
             File(context.filesDir, "offline/" + UUID.nameUUIDFromBytes(uri.toByteArray(Charsets.UTF_8)))
     }

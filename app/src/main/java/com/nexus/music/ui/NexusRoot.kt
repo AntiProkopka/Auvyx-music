@@ -1,5 +1,7 @@
 package com.nexus.music.ui
 
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -182,7 +184,13 @@ fun NexusRoot(vm: AppViewModel) {
             val artist by vm.artistTarget.collectAsStateWithLifecycle()
             val album by vm.albumTarget.collectAsStateWithLifecycle()
             Box(Modifier.padding(padding).fillMaxSize()) {
-                NavHost(navController = nav, startDestination = "home") {
+                val motion = MaterialTheme.motionScheme
+                NavHost(
+                    navController = nav,
+                    startDestination = "home",
+                    enterTransition = { fadeIn(motion.defaultEffectsSpec()) },
+                    exitTransition = { fadeOut(motion.fastEffectsSpec()) }
+                ) {
                     composable("home") { HomeScreen(vm) }
                     composable("search") { SearchScreen(vm) }
                     composable("library") { LibraryScreen(vm, onOpenPlaylist = { id -> nav.navigate("playlist/$id") }) }
@@ -254,7 +262,7 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(22.dp),
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable(onClick = onOpen)
     ) {
         Column {

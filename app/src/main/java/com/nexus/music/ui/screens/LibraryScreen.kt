@@ -28,10 +28,11 @@ import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
+import com.nexus.music.ui.components.ExpressiveFilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -106,7 +107,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         Card(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            shape = RoundedCornerShape(26.dp),
+            shape = MaterialTheme.shapes.extraLarge,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
         ) {
             Row(
@@ -114,6 +115,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilledTonalButton(
+                    shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 7.dp, vertical = 10.dp),
                     onClick = { filePicker.launch(arrayOf("audio/*", "application/ogg", "application/octet-stream")) }
@@ -125,6 +127,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                     Text("Файлы", maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
                 }
                 FilledTonalButton(
+                    shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 7.dp, vertical = 10.dp),
                     onClick = { folderPicker.launch(null) }
@@ -136,6 +139,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                     Text("Папка", maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
                 }
                 FilledTonalButton(
+                    shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 7.dp, vertical = 10.dp),
                     onClick = { vm.refreshLibrary() }
@@ -156,7 +160,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             listOf("Треки", "Избранное", "Плейлисты", "История", "Каталоги", "Офлайн", "Исполнители").forEachIndexed { index, label ->
-                FilterChip(
+                ExpressiveFilterChip(
                     selected = tab == index,
                     onClick = { tab = index },
                     label = { Text(label, maxLines = 1) }
@@ -207,7 +211,8 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                             Spacer(Modifier.width(6.dp))
                             Text("${collection.size} · $sortLabel")
                         }
-                        DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                        DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false },
+                            shape = MaterialTheme.shapes.large, containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
                             listOf("added" to "Недавно добавленные", "title" to "По названию", "artist" to "По исполнителю").forEach { (key, label) ->
                                 DropdownMenuItem(text = { Text(label) }, onClick = {
                                     sortMenu = false

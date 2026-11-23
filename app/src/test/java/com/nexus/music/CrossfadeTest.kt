@@ -23,6 +23,7 @@ class CrossfadeTest {
         var position = 0L
         var playing = true
         var playbackState = Player.STATE_READY
+        var seekable = true
         var parameters = PlaybackParameters.DEFAULT
         var volume = 1f
         var released = false
@@ -40,7 +41,7 @@ class CrossfadeTest {
                 "getRepeatMode" -> Player.REPEAT_MODE_OFF
                 "getPlaybackState" -> playbackState
                 "isCurrentMediaItemLive" -> false
-                "isCurrentMediaItemSeekable" -> true
+                "isCurrentMediaItemSeekable" -> seekable
                 "getPlaybackParameters" -> parameters
                 "setPlaybackParameters" -> { parameters = args[0] as PlaybackParameters; null }
                 "setVolume" -> { volume = args[0] as Float; null }
@@ -65,7 +66,7 @@ class CrossfadeTest {
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(40))
             assertTrue(overlay.playing)
             assertEquals(main.parameters,overlay.parameters)
-            assertEquals(0.7071f,main.volume,0.002f)
+            assertEquals(0.5f,main.volume,0.002f)
             assertEquals(main.volume,overlay.volume,0.002f)
             main.playing=false
             mix.onIsPlayingChanged(false)
@@ -86,9 +87,28 @@ class CrossfadeTest {
             main.position = 8000
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(40))
             assertTrue(overlay.playing)
-            assertEquals(0.7071f, overlay.volume, 0.002f)
+            assertEquals(0.5f, overlay.volume, 0.002f)
+            assertEquals(1f, main.volume + overlay.volume, 0f)
             overlay.playbackState = Player.STATE_BUFFERING
             shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(40))
+            assertTrue(overlay.released)
+            assertEquals(1f, main.volume, 0f)
+        } finally { mix.release() }
+    }
+
+    @Test fun stopReleasesPreloadedIncomingTrack() {
+        val a = MediaItem.fromUri("content://test/a")
+        val b = MediaItem.fromUri("auvyx-sc://track/42")
+        val main = Deck(a, b).apply { position = 4000 }
+        val overlay = Deck(b, a).apply { playing = false; playbackState = Player.STATE_BUFFERING }
+        val mix = LocalCrossfade(main.player) { overlay.player }
+        try {
+            mix.seconds = 4
+            shadowOf(Looper.getMainLooper()).idle()
+            assertFalse(overlay.playing)
+            assertFalse(overlay.released)
+            main.playing = false
+            mix.onPlaybackStateChanged(Player.STATE_IDLE)
             assertTrue(overlay.released)
             assertEquals(1f, main.volume, 0f)
         } finally { mix.release() }

@@ -162,6 +162,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settings.saveLyrics(id, content) }
     }
 
+    suspend fun saveDiscoveredLyrics(id: String, content: String) = settings.saveLyricsIfMissing(id, content)
+
     fun importLibrary(uri: Uri) {
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) {
@@ -404,12 +406,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Local library
-    fun addFiles(uris: List<Uri>) {
+    fun addFiles(uris: List<Uri>, album: AlbumTarget? = null) {
         viewModelScope.launch {
             busy.value = true
             try {
-                val n = library.addFiles(uris)
-                messages.tryEmit(if (n > 0) "Добавлено треков: $n" else "Новых треков не найдено")
+                val n = library.addFiles(uris) { album == null || album.contains(it) }
+                messages.tryEmit(when {
+                    n > 0 -> "Добавлено треков: $n"
+                    album != null -> "Среди выбранных файлов нет новых треков этого альбома"
+                    else -> "Новых треков не найдено"
+                })
             } catch (e: Exception) {
                 messages.tryEmit("Ошибка при добавлении файлов")
             } finally {
@@ -472,10 +478,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteTrack(t: TrackEntity) {
         viewModelScope.launch {
-            player.removeTracks(setOf(t.id))
-            if (t.source == "local") nexus.offline.remove(t)
-            library.deleteTracks(listOf(t.id))
-            messages.tryEmit("Удалено из медиатеки (файл на устройстве не тронут)")
+            try {
+                nexus.offline.remove(t) { library.deleteTracks(listOf(t.id)) }
+                player.removeTracks(setOf(t.id))
+                messages.tryEmit("Трек удалён из медиатеки")
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                messages.tryEmit("Не удалось удалить трек из медиатеки")
+            }
         }
     }
 

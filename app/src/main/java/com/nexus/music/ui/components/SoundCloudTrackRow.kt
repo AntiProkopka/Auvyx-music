@@ -102,7 +102,8 @@ fun CatalogResultRow(title: String, artist: String, durationMs: Long, artwork: S
                     IconButton(onClick = { menuExpanded = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "Меню трека")
                     }
-                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false },
+                            shape = MaterialTheme.shapes.large, containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
                         onArtist?.let { DropdownMenuItem(text = { Text("Исполнитель") }, onClick = { menuExpanded = false; it() }) }
                         onOpenSpotify?.let { action ->
                             DropdownMenuItem(

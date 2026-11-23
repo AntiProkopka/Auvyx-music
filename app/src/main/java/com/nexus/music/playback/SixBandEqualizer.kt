@@ -33,7 +33,8 @@ class SixBandEqualizer {
 
     fun setGains(values: List<Float>) {
         if (values.size != BAND_COUNT) return
-        gains = values.map { it.coerceIn(-12f, 12f) }.toFloatArray()
+        val updated = values.map { if (it.isFinite()) it.coerceIn(-12f, 12f) else 0f }.toFloatArray()
+        if (!gains.contentEquals(updated)) gains = updated
     }
 
     internal fun currentGains(): FloatArray = gains
@@ -95,6 +96,7 @@ private class EqualizerProcessor(
     private var preamp = 1.0
 
     private fun updateFilters(gains: FloatArray) {
+        resetFilterState()
         filters = equalizer.coefficients(sampleRate, gains)
         configuredGains = gains
         if (gains.none { it > 0f }) {

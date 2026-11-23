@@ -116,6 +116,11 @@ class SettingsStore(private val context: Context) {
         store.edit { it[stringPreferencesKey("lyrics_$id")] = content }
     }
 
+    suspend fun saveLyricsIfMissing(id: String, content: String) {
+        val key = stringPreferencesKey("lyrics_$id")
+        store.edit { if (it[key].isNullOrBlank()) it[key] = content }
+    }
+
     suspend fun backupSettings(): JSONObject = JSONObject().apply {
         for ((key, value) in store.data.first().asMap()) {
             put(key.name, if (value is Set<*>) JSONArray(value) else value)

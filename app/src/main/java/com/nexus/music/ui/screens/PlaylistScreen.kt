@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -82,12 +83,12 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilledTonalButton(modifier = Modifier.weight(1f), enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks, 0) }) {
+            FilledTonalButton(shapes = ButtonDefaults.shapes(), modifier = Modifier.weight(1f), enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks, 0) }) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
                 Text("Играть", maxLines = 1)
             }
-            FilledTonalButton(modifier = Modifier.weight(1f), enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks, 0, shuffle = true) }) {
+            FilledTonalButton(shapes = ButtonDefaults.shapes(), modifier = Modifier.weight(1f), enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks, 0, shuffle = true) }) {
                 Icon(Icons.Default.Shuffle, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
                 Text("Вперемешку", maxLines = 1)

@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.ui.components.ExpressiveSlider
 import com.nexus.music.ui.components.NameDialog
 
 @Composable
@@ -113,7 +114,7 @@ fun SettingsScreen(vm: AppViewModel) {
         val fade by vm.crossfade.collectAsStateWithLifecycle()
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("Кроссфейд · " + if (fade == 0) "выключен" else "$fade с")
-            androidx.compose.material3.Slider(value = fade.toFloat(), onValueChange = { vm.setCrossfade(kotlin.math.round(it).toInt()) },
+            ExpressiveSlider(value = fade.toFloat(), onValueChange = { vm.setCrossfade(kotlin.math.round(it).toInt()) },
                 valueRange = 0f..12f, steps = 11)
             Text("Плавный переход между поддерживаемыми треками", style = MaterialTheme.typography.bodySmall)
         }

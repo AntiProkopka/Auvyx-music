@@ -66,6 +66,9 @@ interface TrackDao {
     @Query("UPDATE tracks SET downloadedPath = :path WHERE id = :id")
     suspend fun setDownloaded(id: Long, path: String?)
 
+    @Query("UPDATE tracks SET downloadedPath = :path WHERE id = :id AND uri = :uri")
+    suspend fun setDownloadedForUri(id: Long, uri: String, path: String?): Int
+
     @Query("UPDATE tracks SET uri = :uri WHERE id = :id AND source = 'local'")
     suspend fun relink(id: Long, uri: String)
 

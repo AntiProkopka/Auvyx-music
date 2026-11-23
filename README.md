@@ -35,30 +35,17 @@ SoundCloud playback is separate from the native local Media3 player. It is not c
 
 Spotify, YouTube Music and Yandex Music are not connected. There is no native SoundCloud stream resolver, unified cross-provider queue, crossfade, equalizer, synced lyrics, cloud backup, or account sync.
 
-## Build
-
-Requirements: JDK 17, Android SDK Platform 34, Android Build Tools 34.0.0, and Gradle 8.7.
-
-```bash
-gradle --no-daemon clean assembleDebug
-```
-
-The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
-
-GitHub Actions workflow: **Build AUVYX APK**. It runs on pushes to `main`/`master`, pull requests, and manual dispatch. The artifact is **AUVYX-Alpha-1.6-debug**.
-
-## Verification status
-
-This source was adapted from the available Alpha 1.5 project archive. Android SDK and Gradle are not installed in this editing environment, so `assembleDebug` could not be run here. The GitHub Actions build and an install/playback test on the target phone are still required. A green Actions run will verify compilation, not SoundCloud availability or all runtime behaviour.
-
 ## Сборки обновления Alpha 2.0
 
-Текущая сборка использует пакет `com.nexus.music` и `versionCode=17`.
-Для сборки нужны JDK 17, Android SDK 37.0 и Gradle Wrapper 9.3.1.
+Текущая сборка использует пакет `com.nexus.music` и `versionCode=16`.
+Для сборки нужны JDK 17 и Android SDK 37.0 с Build Tools 36.0.0. Gradle Wrapper использует версию 9.3.1.
 
 ```sh
 ./gradlew :app:testDebugUnitTest :app:assembleDebug
 ```
+
+GitHub Actions проверяет ветку `alpha-2.0-bugfix-cloud` при публикации коммитов.
+Результаты тестов и APK доступны в артефактах запуска.
 
 Для подписанного релиза добавьте четыре секрета GitHub Actions:
 `AUVYX_SIGNING_KEYSTORE_BASE64`, `AUVYX_SIGNING_STORE_PASSWORD`,
@@ -75,3 +62,11 @@ APK с отладочным ключом предназначен для тес�
 недоступен, сначала сохраните и проверьте резервную копию. После этого Android
 потребует удалить старую установку перед установкой APK с новым постоянным
 ключом. Резервная копия не переносит аудиофайлы и разрешения доступа к папкам.
+
+## SoundCloud в Alpha 2.0
+
+Офлайн-копии в AUVYX доступны для локальных аудиофайлов из системного выбора документов. [Условия API SoundCloud](https://developers.soundcloud.com/docs/api/terms-of-use#caching) запрещают сторонним приложениям сохранять аудио для офлайн-доступа.
+
+Кроссфейд поддерживает перематываемые потоки SoundCloud по запросу, если следующий трек успел загрузиться. При недоступности потока используется обычный переход очереди. SoundCloud не предоставляет этому клиенту надёжный список треков альбома. Страницы альбомов собираются из метаданных локальных файлов.
+
+Автоматический поиск текстов обращается к LRCLIB по названию, исполнителю и длительности, когда она известна. Наличие текста зависит от каталога и совпадения метаданных.

@@ -14,11 +14,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
+import com.nexus.music.ui.components.ExpressiveFilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -91,11 +92,11 @@ fun SearchScreen(vm: AppViewModel) {
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilterChip(selected = source == "all", onClick = { source = "all" }, label = { Text("Все") })
-            FilterChip(selected = source == "local", onClick = { source = "local" }, label = { Text("На устройстве") })
-            FilterChip(selected = source == "spotify", onClick = { source = "spotify" }, label = { Text("Spotify") })
-            FilterChip(selected = source == "youtube", onClick = { source = "youtube" }, label = { Text("YouTube Music") })
-            FilterChip(selected = source == "soundcloud", onClick = { source = "soundcloud" }, label = { Text("SoundCloud") })
+            ExpressiveFilterChip(selected = source == "all", onClick = { source = "all" }, label = { Text("Все") })
+            ExpressiveFilterChip(selected = source == "local", onClick = { source = "local" }, label = { Text("На устройстве") })
+            ExpressiveFilterChip(selected = source == "spotify", onClick = { source = "spotify" }, label = { Text("Spotify") })
+            ExpressiveFilterChip(selected = source == "youtube", onClick = { source = "youtube" }, label = { Text("YouTube Music") })
+            ExpressiveFilterChip(selected = source == "soundcloud", onClick = { source = "soundcloud" }, label = { Text("SoundCloud") })
         }
 
         OutlinedTextField(
@@ -103,6 +104,11 @@ fun SearchScreen(vm: AppViewModel) {
             onValueChange = { query = it },
             singleLine = true,
             shape = MaterialTheme.shapes.extraLarge,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+            ),
             label = { Text("Трек или исполнитель") },
             placeholder = { Text("Название композиции или артиста") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },

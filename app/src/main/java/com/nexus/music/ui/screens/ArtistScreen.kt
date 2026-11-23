@@ -58,7 +58,7 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget) {
         }
     }
 
-    val shape = RoundedCornerShape(22.dp)
+    val shape = MaterialTheme.shapes.medium
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 36.dp),
@@ -70,7 +70,7 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget) {
         item {
             val colors = MaterialTheme.colorScheme
             Column(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))
+                modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge)
                     .background(Brush.verticalGradient(listOf(colors.primaryContainer, colors.surfaceContainerHigh)))
                     .padding(20.dp),
                 horizontalAlignment = Alignment.Start,
@@ -99,6 +99,7 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget) {
                 }
                 val canPlay = if (target.cloud) rows.isNotEmpty() else songs.isNotEmpty()
                 Button(
+                    shapes = ButtonDefaults.shapes(),
                     enabled = canPlay,
                     onClick = {
                         if (target.cloud && rows.isNotEmpty()) vm.playSoundCloud(rows, 0)

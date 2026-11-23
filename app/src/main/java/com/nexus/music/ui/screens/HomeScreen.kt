@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
@@ -68,7 +69,7 @@ fun HomeScreen(vm: AppViewModel) {
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        FilledTonalButton(onClick = { if (tracks.isNotEmpty()) vm.player.playTracks(tracks, 0) }, enabled = tracks.isNotEmpty()) {
+                        FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = { if (tracks.isNotEmpty()) vm.player.playTracks(tracks, 0) }, enabled = tracks.isNotEmpty()) {
                             Icon(Icons.Default.PlayArrow, contentDescription = null)
                             Text("Слушать")
                         }
