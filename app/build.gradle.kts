@@ -12,6 +12,13 @@ val stableKeyPassword = System.getenv("AUVYX_SIGNING_KEY_PASSWORD") ?: ""
 val hasStableSigning = stableSigningFile.exists() && stableStorePassword.isNotBlank() &&
     stableKeyAlias.isNotBlank() && stableKeyPassword.isNotBlank()
 
+val spotifyClientId = providers.gradleProperty("auvyx.spotifyClientId")
+    .orElse(providers.environmentVariable("AUVYX_SPOTIFY_CLIENT_ID"))
+    .getOrElse("").trim()
+require(spotifyClientId.isEmpty() || spotifyClientId.matches(Regex("[a-fA-F0-9]{32}"))) {
+    "AUVYX_SPOTIFY_CLIENT_ID must be the public Client ID of AUVYX's Spotify application."
+}
+
 android {
     namespace = "com.nexus.music"
     compileSdk = 34
@@ -20,9 +27,13 @@ android {
         applicationId = "com.nexus.music"
         minSdk = 29
         targetSdk = 34
-        versionCode = 10
+        versionCode = 16
         versionName = "Alpha 2.0"
+        buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$spotifyClientId\"")
     }
+
+    val libraryTest = providers.gradleProperty("auvyx.libraryTest").isPresent
+    val providerReview = providers.gradleProperty("auvyx.providerReview").isPresent
 
     signingConfigs {
         create("stableCi") {
@@ -35,6 +46,12 @@ android {
 
     buildTypes {
         debug {
+            applicationIdSuffix = when {
+                libraryTest -> ".librarytest"
+                providerReview -> ".providerreview"
+                else -> ".preview"
+            }
+            versionNameSuffix = if (providerReview || libraryTest) " Library Test" else " Alpha Test"
             // GitHub Actions uses this only after the owner adds the signing secrets.
             // Without them Android's normal debug key remains the fallback.
             if (hasStableSigning) signingConfig = signingConfigs.getByName("stableCi")
@@ -51,13 +68,21 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    testOptions.unitTests.all { it.jvmArgs("--add-opens=java.base/java.io=ALL-UNNAMED") }
+    testOptions.unitTests.isIncludeAndroidResources = true
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("org.robolectric:robolectric:4.14.1")
     implementation(platform("androidx.compose:compose-bom:2024.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")

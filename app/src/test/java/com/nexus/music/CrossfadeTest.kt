@@ -1,0 +1,83 @@
+package com.nexus.music
+
+import android.os.Looper
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import com.nexus.music.playback.LocalCrossfade
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import java.lang.reflect.Proxy
+import java.time.Duration
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33], application = android.app.Application::class)
+class CrossfadeTest {
+    // Controllable playheads let the test measure the mix at exact media times.
+    private class Deck(val current: MediaItem, val next: MediaItem) {
+        var position = 0L
+        var playing = true
+        var parameters = PlaybackParameters.DEFAULT
+        var volume = 1f
+        var released = false
+        val player = Proxy.newProxyInstance(ExoPlayer::class.java.classLoader, arrayOf(ExoPlayer::class.java)) { _, m, args ->
+            when (m.name) {
+                "getApplicationLooper" -> Looper.getMainLooper()
+                "isPlaying","getPlayWhenReady" -> playing
+                "getPlayerError" -> null
+                "getCurrentMediaItemIndex" -> 0
+                "getNextMediaItemIndex" -> 1
+                "getCurrentMediaItem" -> current
+                "getMediaItemAt" -> next
+                "getCurrentPosition" -> position
+                "getDuration" -> 10000L
+                "getRepeatMode" -> Player.REPEAT_MODE_OFF
+                "getPlaybackState" -> Player.STATE_READY
+                "getPlaybackParameters" -> parameters
+                "setPlaybackParameters" -> { parameters = args[0] as PlaybackParameters; null }
+                "setVolume" -> { volume = args[0] as Float; null }
+                "play" -> { playing = true; null }
+                "release" -> { released = true; null }
+                "setMediaItem", "prepare", "addListener", "removeListener" -> null
+                else -> error(m.name)
+            }
+        } as ExoPlayer
+    }
+
+    @Test fun overlappingLocalDecksShareSpeedAndReleaseOnPause() {
+        val a = MediaItem.fromUri("content://test/a")
+        val b = MediaItem.fromUri("content://test/b")
+        val main = Deck(a,b).apply { position=6000; parameters=PlaybackParameters(1.25f,1.25f) }
+        val overlay = Deck(b,a).apply { playing=false }
+        val mix = LocalCrossfade(main.player) { overlay.player }
+        try {
+            mix.seconds=4
+            shadowOf(Looper.getMainLooper()).idle()
+            main.position=8000
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(40))
+            assertTrue(overlay.playing)
+            assertEquals(main.parameters,overlay.parameters)
+            assertEquals(0.7071f,main.volume,0.002f)
+            assertEquals(main.volume,overlay.volume,0.002f)
+            main.playing=false
+            mix.onIsPlayingChanged(false)
+            assertTrue(overlay.released)
+            assertEquals(1f,main.volume,0f)
+        } finally { mix.release() }
+    }
+
+    @Test fun streamingBoundaryUsesSingleDeck() {
+        val deck=Deck(MediaItem.fromUri("content://test/a"),MediaItem.fromUri("auvyx-sc://track/42")).apply { position=9000 }
+        val mix=LocalCrossfade(deck.player) { error("Streaming track opened a second decoder") }
+        try {
+            mix.seconds=4
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(1f,deck.volume,0f)
+        } finally { mix.release() }
+    }
+}

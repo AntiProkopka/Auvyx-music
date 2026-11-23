@@ -1,5 +1,14 @@
 package com.nexus.music.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import com.nexus.music.ui.theme.LocalStyle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,6 +48,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -73,6 +83,12 @@ private val navItems = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NexusRoot(vm: AppViewModel) {
+    val relink by vm.relinkTarget.collectAsStateWithLifecycle()
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        relink?.let { if (uri != null) vm.relink(it, uri) }
+        vm.relinkTarget.value = null
+    }
+    LaunchedEffect(relink) { if (relink != null) picker.launch(arrayOf("audio/*", "application/ogg")) }
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
@@ -92,60 +108,94 @@ fun NexusRoot(vm: AppViewModel) {
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(vm.player) { vm.player.errors.collect { snackbar.showSnackbar(it) } }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            if (route != "player" && route?.startsWith("playlist") != true) {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Text(
-                            title,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground
-                    )
-                )
-            }
-        },
-        bottomBar = {
-            if (route != "player") {
-                Column {
-                    if (player.mediaId != null) MiniPlayer(vm = vm, onOpen = { nav.navigate("player") })
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        tonalElevation = 0.dp
-                    ) {
-                        navItems.forEach { item ->
-                            val selected = route == item.route || (item.route == "library" && route?.startsWith("playlist") == true)
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { navigateTo(nav, item.route) },
-                                icon = { Icon(item.icon, contentDescription = item.label) },
-                                label = { Text(item.label, maxLines = 1) }
+    val style = LocalStyle.current
+    val glass = style in listOf("hyper", "glass")
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        if (glass) {
+            Box(Modifier.fillMaxSize().blur(if (style == "hyper") 35.dp else 14.dp).background(
+                Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.background,
+                    MaterialTheme.colorScheme.tertiaryContainer))))
+        }
+        Scaffold(
+            containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(snackbar) },
+            topBar = {
+                if (route != "player" && route?.startsWith("playlist") != true) {
+                    if (style == "lane") {
+                        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            navItems.forEach { item -> IconButton(modifier = Modifier.testTag("nav-${item.route}"), onClick = { vm.artistTarget.value = null; navigateTo(nav, item.route) }) {
+                                Icon(item.icon, item.label, tint = if (route == item.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                            } }
+                        }
+                    } else if (style == "hyper") {
+                        Text(title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.statusBarsPadding().padding(horizontal = 22.dp, vertical = 10.dp))
+                    } else CenterAlignedTopAppBar(
+                        title = {
+                            Text(
+                                title,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold
                             )
+                        },
+                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                            containerColor = if (glass) Color.Transparent else MaterialTheme.colorScheme.background,
+                            titleContentColor = MaterialTheme.colorScheme.onBackground
+                        )
+                    )
+                }
+            },
+            bottomBar = {
+                if (route != "player") {
+                    Column {
+                        if (player.mediaId != null) MiniPlayer(vm = vm, onOpen = { vm.artistTarget.value = null; nav.navigate("player") })
+                        if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
+                            modifier = when (style) {
+                                "glass" -> Modifier.padding(horizontal = 14.dp, vertical = 6.dp).shadow(8.dp, RoundedCornerShape(36.dp))
+                                    .border(1.dp, Color.White.copy(alpha = .55f), RoundedCornerShape(36.dp)).clip(RoundedCornerShape(36.dp))
+                                "hyper" -> Modifier.padding(horizontal = 8.dp).clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                                else -> Modifier
+                            },
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            tonalElevation = 0.dp
+                        ) {
+                            navItems.forEach { item ->
+                                val selected = route == item.route || (item.route == "library" && route?.startsWith("playlist") == true)
+                                NavigationBarItem(
+                                    modifier = Modifier.testTag("nav-${item.route}"),
+                                    alwaysShowLabel = style != "glass",
+                                    selected = selected,
+                                    onClick = { vm.artistTarget.value = null; navigateTo(nav, item.route) },
+                                    icon = { Icon(item.icon, contentDescription = item.label) },
+                                    label = { Text(item.label, maxLines = 1) }
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
-    ) { padding ->
-        NavHost(navController = nav, startDestination = "home", modifier = Modifier.padding(padding)) {
-            composable("home") { HomeScreen(vm) }
-            composable("search") { SearchScreen(vm) }
-            composable("library") { LibraryScreen(vm, onOpenPlaylist = { id -> nav.navigate("playlist/$id") }) }
-            composable("settings") { SettingsScreen(vm) }
-            composable(route = "playlist/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
-                PlaylistScreen(vm, entry.arguments?.getLong("id") ?: 0L, onBack = { nav.popBackStack() })
+        ) { padding ->
+            val artist by vm.artistTarget.collectAsStateWithLifecycle()
+            Box(Modifier.padding(padding).fillMaxSize()) {
+                NavHost(navController = nav, startDestination = "home") {
+                    composable("home") { HomeScreen(vm) }
+                    composable("search") { SearchScreen(vm) }
+                    composable("library") { LibraryScreen(vm, onOpenPlaylist = { id -> nav.navigate("playlist/$id") }) }
+                    composable("settings") { SettingsScreen(vm) }
+                    composable(route = "playlist/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
+                        PlaylistScreen(vm, entry.arguments?.getLong("id") ?: 0L, onBack = { nav.popBackStack() })
+                    }
+                    composable("player") { PlayerScreen(vm, onClose = { nav.popBackStack() }) }
+                }
+                artist?.let { target ->
+                    androidx.activity.compose.BackHandler { vm.artistTarget.value = null }
+                    Surface(Modifier.fillMaxSize()) {
+                        androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.ArtistScreen(vm, target) }
+                    }
+                }
             }
-            composable("player") { PlayerScreen(vm, onClose = { nav.popBackStack() }) }
         }
     }
-
     FirstRunNicknameDialog(vm)
 }
 
@@ -154,7 +204,7 @@ private fun FirstRunNicknameDialog(vm: AppViewModel) {
     val nickname by vm.nickname.collectAsStateWithLifecycle()
     val ready by vm.nicknameReady.collectAsStateWithLifecycle()
     var draft by remember { mutableStateOf("") }
-    if (ready && nickname.isNullOrBlank()) {
+    if (ready && nickname == null) {
         AlertDialog(
             onDismissRequest = {},
             title = { Text("Как к вам обращаться?") },
@@ -167,6 +217,7 @@ private fun FirstRunNicknameDialog(vm: AppViewModel) {
                     placeholder = { Text("Например, Alex") }
                 )
             },
+            dismissButton = { TextButton(onClick = { vm.setNickname("") }) { Text("Пропустить") } },
             confirmButton = {
                 Button(onClick = { vm.setNickname(draft) }, enabled = draft.isNotBlank()) {
                     Text("Продолжить")

@@ -35,5 +35,5 @@ object LauncherIconManager {
     }
 
     private fun component(context: Context, className: String) =
-        ComponentName(context, "${context.packageName}.$className")
+        ComponentName(context, "${LauncherIconManager::class.java.packageName}.$className")
 }

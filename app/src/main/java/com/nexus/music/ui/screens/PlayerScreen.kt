@@ -1,9 +1,39 @@
 package com.nexus.music.ui.screens
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.HeartBroken
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.VolumeDown
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.nexus.music.ui.components.AddToPlaylistDialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import androidx.compose.foundation.background
@@ -41,7 +71,6 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
@@ -51,9 +80,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +93,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,42 +110,77 @@ import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.formatTime
 import com.nexus.music.ui.components.ArtworkImage
 import com.nexus.music.ui.components.RemoteArtworkImage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.map
+import androidx.compose.ui.draw.blur
+import androidx.compose.animation.animateColorAsState
+import com.nexus.music.playback.LyricsRepository
+import com.nexus.music.ui.components.rememberArtworkAccent
 
 @OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
+    val style = com.nexus.music.ui.theme.LocalStyle.current
     val s by vm.player.state.collectAsStateWithLifecycle()
-    val tracks by vm.tracks.collectAsStateWithLifecycle()
-    val cloudFavorites by vm.soundCloudFavorites.collectAsStateWithLifecycle()
+    val tracks by vm.knownTracks.collectAsStateWithLifecycle()
     val pos by vm.player.position.collectAsStateWithLifecycle()
     val eqGains by vm.equalizerGains.collectAsStateWithLifecycle()
     val eqEnabled by vm.equalizerEnabled.collectAsStateWithLifecycle()
     val eqPreset by vm.equalizerPreset.collectAsStateWithLifecycle()
     val nickname by vm.nickname.collectAsStateWithLifecycle()
     var showQueue by remember { mutableStateOf(false) }
-    var showSpeedLab by remember { mutableStateOf(false) }
     var showEqualizer by remember { mutableStateOf(false) }
+    var showLyrics by remember { mutableStateOf(false) }
+    var showTrackMenu by remember { mutableStateOf(false) }
+    var showPlaylist by remember { mutableStateOf(false) }
+    val disliked by vm.dislikedTracks.collectAsStateWithLifecycle()
     var showOutput by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val bluetoothPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         showOutput = true
     }
+    val audioManager = remember(context) { context.getSystemService(AudioManager::class.java) }
+    val mediaStream = AudioManager.STREAM_MUSIC
+    val maxVolume = audioManager.getStreamMaxVolume(mediaStream).coerceAtLeast(1)
+    var volume by remember(audioManager) { mutableStateOf(audioManager.getStreamVolume(mediaStream).toFloat()) }
+    fun setVolume(value: Float) {
+        volume = value.roundToInt().coerceIn(0, maxVolume).toFloat()
+        audioManager.setStreamVolume(mediaStream, volume.toInt(), 0)
+    }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var currentOutput by remember { mutableStateOf<AudioDeviceInfo?>(null) }
+    LaunchedEffect(lifecycle, audioManager, showOutput, s.isPlaying) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                volume = audioManager.getStreamVolume(mediaStream).toFloat()
+                currentOutput = mediaOutput(audioManager, s.isPlaying)
+                delay(500)
+            }
+        }
+    }
+    BackHandler(showQueue) { showQueue = false }
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
 
     val track = remember(tracks, s.mediaId) { tracks.firstOrNull { it.id.toString() == s.mediaId } }
-    val isCloudTrack = s.mediaId?.startsWith("soundcloud:") == true
-    val cloudId = s.mediaId?.substringAfter(':')?.toLongOrNull()
-    val isFavorite = if (isCloudTrack) cloudFavorites.any { it.trackId == cloudId } else track?.isFavorite == true
+    val isFavorite = track?.isFavorite == true
     val artworkUri = track?.artworkUri ?: s.artworkUri
     val duration = s.durationMs.coerceAtLeast(1L)
     val sliderValue = if (dragging) dragValue else pos.toFloat().coerceIn(0f, duration.toFloat())
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+    val config = androidx.compose.ui.platform.LocalConfiguration.current
+    val compact = (config.screenHeightDp < 520 || config.fontScale > 1.5f) && !showQueue
+    val scroll = rememberScrollState()
+    Column(modifier = Modifier.fillMaxSize()
+        .then(if (compact) Modifier.verticalScroll(scroll) else Modifier)
+        .padding(horizontal = 20.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onClose) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Свернуть") }
+            IconButton(onClick = { if (showQueue) showQueue = false else onClose() }) {
+                Icon(if (showQueue) Icons.Default.Close else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (showQueue) "Закрыть очередь" else "Свернуть")
+            }
             Text(
-                text = if (showQueue) "Очередь" else "Сейчас играет",
+                text = if (showQueue) "Очередь" else "сейчас играет",
                 style = MaterialTheme.typography.titleMedium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f)
@@ -129,22 +195,59 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             else LazyColumn(modifier = Modifier.weight(1f)) {
                 itemsIndexed(s.queue) { index, item ->
                     val isCurrent = index == s.currentIndex
+                    val rowHeight = with(LocalDensity.current) { 60.dp.toPx() }
+                    var dragOffset by remember(index, item) { mutableFloatStateOf(0f) }
                     Row(
-                        modifier = Modifier.fillMaxWidth().clickable { vm.player.playQueueIndex(index) }.padding(vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().height(60.dp)
+                            .zIndex(if (dragOffset != 0f) 1f else 0f)
+                            .graphicsLayer { translationY = dragOffset }
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isCurrent || dragOffset != 0f) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent)
+                            .clickable { vm.player.playQueueIndex(index) }
+                            .padding(start = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(item.title, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.Unspecified)
+                            Text(item.title, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                             Text(item.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        Icon(
+                            Icons.Default.DragHandle,
+                            contentDescription = "Перетащить трек",
+                            modifier = Modifier.size(44.dp).pointerInput(index, s.queue, rowHeight) {
+                                detectVerticalDragGestures(
+                                    onDragStart = { dragOffset = 0f },
+                                    onDragCancel = { dragOffset = 0f },
+                                    onDragEnd = {
+                                        val target = (index + (dragOffset / rowHeight).roundToInt())
+                                            .coerceIn(s.queue.indices)
+                                        vm.player.moveQueueItem(index, target)
+                                        dragOffset = 0f
+                                    }
+                                ) { change, amount ->
+                                    change.consume()
+                                    dragOffset = (dragOffset + amount).coerceIn(
+                                        -index * rowHeight, (s.queue.lastIndex - index) * rowHeight
+                                    )
+                                }
+                            }.padding(10.dp)
+                        )
                         IconButton(onClick = { vm.player.removeFromQueue(index) }) { Icon(Icons.Default.Close, contentDescription = "Убрать из очереди") }
                     }
                 }
             }
-        } else {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            return@Column
+        }
+        val accentState = rememberArtworkAccent(artworkUri, MaterialTheme.colorScheme.primary)
+        val glowColor by animateColorAsState(targetValue = accentState.value, label = "Artwork glow")
+        BoxWithConstraints(modifier = (if (compact) Modifier.height(160.dp) else Modifier.weight(1f)).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                val artworkSize = minOf(maxWidth * (if (style == "lane") 1f else 0.86f), maxHeight)
+                // Blur only a stationary colour layer, never the artwork itself.
+                Box(Modifier.size(artworkSize * .94f)
+                    .blur(32.dp)
+                    .background(glowColor.copy(alpha = .55f), RoundedCornerShape(44.dp)))
                 Box(
-                    modifier = Modifier.fillMaxWidth(0.88f).aspectRatio(1f).clip(RoundedCornerShape(30.dp))
+                    modifier = Modifier.size(artworkSize).aspectRatio(1f).clip(RoundedCornerShape(when (style) { "glass" -> 52.dp; "hyper" -> 40.dp; "lane" -> 4.dp; else -> 30.dp }))
                         .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer))),
                     contentAlignment = Alignment.Center
                 ) {
@@ -157,22 +260,91 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                     } else {
                         Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(96.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
+                    track?.let { Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)) { com.nexus.music.ui.components.PlatformArtworkBadge(it.source) } }
+                }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Text(s.title.ifBlank { "Ничего не играет" }, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // The provider label is not an album. Older builds stored "SoundCloud" as a fake album.
+        val sourceLabel = s.audioProvider?.takeIf { it.isNotBlank() } ?: when (track?.source) {
+            "soundcloud" -> "SoundCloud"
+            "youtube" -> "YouTube Music"
+            "spotify" -> "Каталог Spotify"
+            "local" -> "На устройстве"
+            else -> ""
+        }
+        val albumLabel = s.album.takeIf {
+            it.isNotBlank() && !(track?.source == "soundcloud" && it.equals("SoundCloud", true)) &&
+                !it.equals(sourceLabel, true)
+        }
+        val secondaryMetadata = listOfNotNull(albumLabel, sourceLabel.takeIf { it.isNotBlank() })
+            .distinctBy { it.lowercase() }.joinToString(" · ")
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = s.artist,
+                modifier = Modifier.weight(1f, fill = false).then(
+                    if (track != null && s.artist.isNotBlank()) Modifier.clickable { vm.openArtist(track) }
+                    else Modifier
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (track != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (secondaryMetadata.isNotBlank()) {
+                Text(" · $secondaryMetadata", style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
+            }
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            IconButton(enabled = s.mediaId != null, onClick = { vm.toggleCurrentFavorite() }) {
+                Icon(
+                    if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (isFavorite) "Убрать из избранного" else "В избранное",
+                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(enabled = s.mediaId != null, onClick = {
+                s.mediaId?.let(vm::toggleDisliked)
+            }) {
+                Icon(Icons.Default.HeartBroken, "Не нравится",
+                    tint = if (s.mediaId in disliked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Box {
+                IconButton(enabled = track != null, onClick = { showTrackMenu = true }) {
+                    Icon(Icons.Default.MoreVert, "Действия с треком")
+                }
+                DropdownMenu(expanded = showTrackMenu, onDismissRequest = { showTrackMenu = false }) {
+                    if (track?.source in listOf("soundcloud","local")) DropdownMenuItem(text = { Text("Исполнитель") }, onClick = {
+                        track?.let(vm::openArtist)
+                        showTrackMenu = false
+                    })
+                    DropdownMenuItem(text = { Text("Добавить в плейлист") }, onClick = {
+                        showTrackMenu = false
+                        showPlaylist = true
+                    })
+                    DropdownMenuItem(text = { Text("Играть следующим") }, onClick = {
+                        track?.let(vm.player::playNext)
+                        showTrackMenu = false
+                    })
+                    DropdownMenuItem(text = { Text("Остановить воспроизведение") }, onClick = {
+                        vm.player.stop()
+                        showTrackMenu = false
+                    })
+                    DropdownMenuItem(text = { Text("В конец очереди") }, onClick = {
+                        track?.let(vm.player::enqueue)
+                        showTrackMenu = false
+                    })
                 }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-        Text(s.title.ifBlank { "Ничего не играет" }, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(
-            listOf(s.artist, s.album).filter { it.isNotBlank() }.joinToString(" · "),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
         Slider(
             value = sliderValue,
+            enabled = s.canSeek,
             onValueChange = { dragging = true; dragValue = it },
             onValueChangeFinished = { vm.player.seekTo(dragValue.toLong()); dragging = false },
             valueRange = 0f..duration.toFloat()
@@ -204,67 +376,45 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             }
         }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(enabled = s.mediaId != null, onClick = { vm.toggleCurrentFavorite() }) {
-                Icon(
-                    if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = if (isFavorite) "Убрать из избранного" else "В избранное",
-                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { setVolume(volume - 1) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.VolumeDown, "Тише")
             }
-            FilledTonalButton(enabled = s.mediaId != null, onClick = { showSpeedLab = true }) {
-                Icon(Icons.Default.Tune, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Speed Lab")
-            }
-            FilledTonalButton(enabled = true, onClick = { showEqualizer = true }) { Text("EQ") }
-            IconButton(onClick = {
-                if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                    bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                } else {
-                    showOutput = true
-                }
-            }) {
-                Icon(Icons.Default.Speaker, contentDescription = "Вывод звука")
+            Slider(value = volume, onValueChange = ::setVolume, valueRange = 0f..maxVolume.toFloat(),
+                modifier = Modifier.weight(1f))
+            IconButton(onClick = { setVolume(volume + 1) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.VolumeUp, "Громче")
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(enabled = s.mediaId != null, onClick = { showLyrics = true }) {
+                Icon(Icons.Default.Lyrics, "Текст песни")
+            }
+            val outputLabel = currentOutput?.let { audioDeviceLabel(it, nickname) } ?: "Системный вывод"
+            TextButton(modifier = Modifier.weight(1f), onClick = {
+                if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                } else showOutput = true
+            }) {
+                Text(outputLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Icon(Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(16.dp))
+            }
+            IconButton(onClick = { showEqualizer = true }) {
+                Icon(Icons.Default.Tune, "Эквалайзер и Speed Lab")
+            }
+        }
+        Spacer(Modifier.height(6.dp))
     }
 
-    if (showSpeedLab) {
-        AlertDialog(
-            onDismissRequest = { showSpeedLab = false },
-            title = { Text("Speed Lab") },
-            text = {
-                Column {
-                    Text("Скорость · ${"%.2f".format(s.speed)}×", style = MaterialTheme.typography.titleSmall)
-                    Slider(value = s.speed.coerceIn(0.5f, 2f), onValueChange = vm.player::setSpeed, valueRange = 0.5f..2f)
-                    Text("Высота тона · ${"%.2f".format(s.pitch)}×", style = MaterialTheme.typography.titleSmall)
-                    Slider(value = s.pitch.coerceIn(0.5f, 2f), onValueChange = vm.player::setPitch, valueRange = 0.5f..2f)
-                    Text("Скорость и высота тона меняются независимо.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TextButton(onClick = { vm.player.setSpeedAndPitch(0.8f, 0.85f) }) { Text("Slowed") }
-                        TextButton(onClick = vm.player::resetSpeedLab) { Text("Original") }
-                        TextButton(onClick = { vm.player.setSpeedAndPitch(1.25f, 1.25f) }) { Text("Speed Up") }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { showSpeedLab = false }) { Text("Готово") } }
-        )
+    if (showPlaylist && track != null) {
+        AddToPlaylistDialog(vm, track, onDismiss = { showPlaylist = false })
     }
-
+    if (showLyrics && s.mediaId != null) {
+        TrackLyricsSheet(vm, s.mediaId.orEmpty(), s.title, s.artist, s.durationMs, pos) { showLyrics = false }
+    }
     if (showEqualizer) {
-        EqualizerDialog(
-            gains = eqGains,
-            enabled = eqEnabled,
-            preset = eqPreset,
-            onEnabledChange = vm::setEqualizerEnabled,
-            onPreset = vm::setEqualizerPreset,
-            onBandChange = vm::setEqualizerBand,
-            onDismiss = { showEqualizer = false }
-        )
+        SoundToolsSheet(vm, eqGains, eqEnabled, eqPreset, s.speed, s.pitch) { showEqualizer = false }
     }
-
     if (showOutput) {
         AudioOutputDialog(
             nickname = nickname,
@@ -274,50 +424,141 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun EqualizerDialog(
+private fun SoundToolsSheet(
+    vm: AppViewModel,
     gains: List<Float>,
     enabled: Boolean,
     preset: String,
-    onEnabledChange: (Boolean) -> Unit,
-    onPreset: (String) -> Unit,
-    onBandChange: (Int, Float) -> Unit,
+    speed: Float,
+    pitch: Float,
     onDismiss: () -> Unit
 ) {
-    val names = listOf("60 Hz", "150 Hz", "400 Hz", "1 kHz", "2.4 kHz", "15 kHz")
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("6-band EQ") },
-        text = {
-            Column(Modifier.heightIn(max = 470.dp).verticalScroll(rememberScrollState())) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = enabled, onCheckedChange = onEnabledChange)
-                    Text("Эквалайзер включён")
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    FilterChip(selected = preset == "bass_boost", onClick = { onPreset("bass_boost") }, label = { Text("Bass Boost") })
-                    FilterChip(selected = preset == "default", onClick = { onPreset("default") }, label = { Text("Default") })
-                    FilterChip(selected = preset == "treble", onClick = { onPreset("treble") }, label = { Text("Treble") })
-                    FilterChip(selected = preset == "vocal", onClick = { onPreset("vocal") }, label = { Text("Vocal") })
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    FilterChip(selected = preset == "custom", onClick = { onPreset("custom") }, label = { Text("Custom") })
-                }
-                names.forEachIndexed { index, name ->
-                    val value = gains.getOrElse(index) { 0f }
-                    Text("$name · ${if (value > 0) "+" else ""}${"%.1f".format(value)} dB", style = MaterialTheme.typography.labelLarge)
-                    Slider(
-                        value = value.coerceIn(-12f, 12f),
-                        onValueChange = { onBandChange(index, it) },
-                        valueRange = -12f..12f,
-                        enabled = enabled
-                    )
-                }
-                Text("Диапазон ±12 dB. Обработка применяется к декодированному PCM-звуку.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Эквалайзер", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Checkbox(checked = enabled, onCheckedChange = vm::setEqualizerEnabled)
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Готово") } }
-    )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("default" to "Default", "bass_boost" to "Bass Boosted", "treble" to "Treble Bass",
+                    "vocal" to "Vocal Boost", "custom" to "Custom").forEach { (key, label) ->
+                    FilterChip(selected = preset == key, onClick = { vm.setEqualizerPreset(key) }, label = { Text(label) })
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                listOf("60", "150", "400", "1k", "2.4k", "15k").forEachIndexed { index, name ->
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        val gain = gains.getOrElse(index) { 0f }.coerceIn(-12f, 12f)
+                        Slider(value = gain, enabled = enabled, valueRange = -12f..12f,
+                            onValueChange = { vm.setEqualizerBand(index, it) },
+                            modifier = Modifier.width(44.dp).height(126.dp).layout { measurable, constraints ->
+                                val width = constraints.maxWidth
+                                val height = constraints.maxHeight
+                                val item = measurable.measure(Constraints.fixed(height, width))
+                                layout(width, height) {
+                                    item.placeRelative((width - height) / 2, (height - width) / 2)
+                                }
+                            }.rotate(-90f))
+                        Text(name, style = MaterialTheme.typography.labelSmall)
+                        Text("%+.1f".format(gain), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    }
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+            Text("Speed Lab", style = MaterialTheme.typography.titleLarge)
+            Text("Скорость · %.2f×".format(speed))
+            Slider(value = speed.coerceIn(0.5f, 2f), onValueChange = vm.player::setSpeed, valueRange = 0.5f..2f)
+            Text("Тон · %.2f×".format(pitch))
+            Slider(value = pitch.coerceIn(0.5f, 2f), onValueChange = vm.player::setPitch, valueRange = 0.5f..2f)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(onClick = { vm.player.setSpeedAndPitch(0.8f, 0.85f) }) { Text("Slowed") }
+                TextButton(onClick = vm.player::resetSpeedLab) { Text("Original") }
+                TextButton(onClick = { vm.player.setSpeedAndPitch(1.25f, 1.25f) }) { Text("Speed Up") }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, artist: String,
+                             durationMs: Long, position: Long, onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    // Null means DataStore has not produced its first value yet: never overwrite a saved LRC.
+    val content by remember(mediaId) { vm.lyrics(mediaId).map { it as String? } }
+        .collectAsStateWithLifecycle(initialValue = null)
+    var lookupState by remember(mediaId) { mutableStateOf("idle") }
+    LaunchedEffect(mediaId, content, lookupState) {
+        if (content == "" && lookupState == "idle") {
+            lookupState = "loading"
+            try {
+                val result = LyricsRepository.find(title, artist, durationMs)
+                if (result != null) {
+                    vm.saveLyrics(mediaId, result)
+                    lookupState = "found"
+                } else lookupState = "missing"
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                lookupState = "missing"
+            }
+        }
+    }
+    var error by remember(mediaId) { mutableStateOf(false) }
+    var requestedId by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val owner = requestedId
+        if (uri != null && owner != null) scope.launch {
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { input ->
+                        val buffer = CharArray(65_537)
+                        var count = 0
+                        while (count < buffer.size) {
+                            val read = input.read(buffer, count, buffer.size - count)
+                            if (read < 0) break
+                            count += read
+                        }
+                        check(count < buffer.size)
+                        String(buffer, 0, count).trim().also { check(it.isNotEmpty()) }
+                    }
+                }.getOrNull()
+            }
+            error = loaded == null
+            if (loaded != null) vm.saveLyrics(owner, loaded)
+        }
+    }
+    val lyrics = content.orEmpty()
+    val lines = remember(lyrics) { com.nexus.music.playback.timedLyrics(lyrics) }
+    val active = lines.indexOfLast { it.first <= position }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+            Text(title, style = MaterialTheme.typography.headlineSmall)
+            if (error) Text("Не удалось прочитать файл текста.")
+            if (lookupState == "loading") Text("Ищем текст и синхронизацию…")
+            if (lookupState == "missing" && lyrics.isBlank()) {
+                Text("Автоматически найти текст не удалось.")
+                TextButton(onClick = { lookupState = "idle" }) { Text("Повторить поиск") }
+            }
+            TextButton(onClick = { requestedId = mediaId; picker.launch(arrayOf("text/*", "application/octet-stream")) }) { Text("Импортировать LRC или TXT") }
+            if (lines.isEmpty()) {
+                Text(lyrics.ifBlank { "Текст пока не найден." },
+                    modifier = Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()))
+            } else {
+                val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                LaunchedEffect(active) { if (active >= 0) listState.animateScrollToItem(active) }
+                LazyColumn(state = listState, modifier = Modifier.heightIn(max = 430.dp)) {
+                    itemsIndexed(lines) { index, line ->
+                        Text(line.second, modifier = Modifier.padding(vertical = 7.dp),
+                            color = if (index == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -328,7 +569,19 @@ private fun AudioOutputDialog(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    val outputs = remember(nickname) {
+    var revision by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    androidx.compose.runtime.DisposableEffect(audioManager) {
+        val callback = object : android.media.AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(devices: Array<AudioDeviceInfo>) { revision++ }
+            override fun onAudioDevicesRemoved(devices: Array<AudioDeviceInfo>) {
+                if (devices.any { it.id == PlaybackAudioRouting.preferredDeviceId }) PlaybackAudioRouting.select(null)
+                revision++
+            }
+        }
+        audioManager.registerAudioDeviceCallback(callback, null)
+        onDispose { audioManager.unregisterAudioDeviceCallback(callback) }
+    }
+    val outputs = remember(revision) {
         audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             .filter { it.isSink && it.type in SUPPORTED_OUTPUT_TYPES }
             .sortedWith(compareBy<AudioDeviceInfo> { if (it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) 0 else 1 }.thenBy { it.id })
@@ -360,7 +613,6 @@ private val SUPPORTED_OUTPUT_TYPES = setOf(
     AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
     AudioDeviceInfo.TYPE_WIRED_HEADSET,
     AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-    AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
     AudioDeviceInfo.TYPE_USB_HEADSET,
     AudioDeviceInfo.TYPE_USB_DEVICE,
     AudioDeviceInfo.TYPE_HDMI,
@@ -373,13 +625,12 @@ private val SUPPORTED_OUTPUT_TYPES = setOf(
 
 private fun audioDeviceLabel(device: AudioDeviceInfo, nickname: String?): String {
     if (device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
-        val owner = nickname?.takeIf { it.isNotBlank() } ?: "Phone"
-        return if (owner == "Phone") owner else "$owner's phone"
+        val owner = nickname?.takeIf { it.isNotBlank() }
+        return if (owner == null) "Телефон" else "Телефон · $owner"
     }
     val typeLabel = when (device.type) {
         AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-        AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_BLE_HEADSET,
         AudioDeviceInfo.TYPE_BLE_SPEAKER -> "Bluetooth"
         AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
         AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Проводные наушники"
@@ -392,5 +643,26 @@ private fun audioDeviceLabel(device: AudioDeviceInfo, nickname: String?): String
         else -> "Аудиоустройство"
     }
     val name = runCatching { device.productName.toString().takeIf { it.isNotBlank() } }.getOrNull()
-    return if (name.isNullOrBlank() || name == "0") typeLabel else "$name · $typeLabel"
+    return if (name.isNullOrBlank() || name == "0") typeLabel else name
+}
+
+private fun mediaOutput(manager: AudioManager, playing: Boolean): AudioDeviceInfo? {
+    val outputs = manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+    if (Build.VERSION.SDK_INT >= 31 && playing) {
+        val active = runCatching {
+            manager.activePlaybackConfigurations.filter { it.audioAttributes.usage == AudioAttributes.USAGE_MEDIA }
+                .mapNotNull { it.audioDeviceInfo }.distinctBy { it.id }
+        }.getOrNull()
+        active?.singleOrNull()?.let { return it }
+    }
+    if (Build.VERSION.SDK_INT >= 33) {
+        val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+        val route = runCatching { manager.getAudioDevicesForAttributes(attributes).firstOrNull() }
+            .getOrNull() ?: return null
+        return outputs.firstOrNull { it.type == route.type && it.address == route.address }
+    }
+    return outputs.filter { it.type in SUPPORTED_OUTPUT_TYPES }.singleOrNull()
 }

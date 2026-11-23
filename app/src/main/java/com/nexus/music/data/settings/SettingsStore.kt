@@ -13,12 +13,17 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
+import org.json.JSONArray
+import org.json.JSONObject
 
 private val Context.nexusDataStore: DataStore<Preferences> by preferencesDataStore(name = "nexus_settings")
 
 class SettingsStore(private val context: Context) {
 
     private object Keys {
+        val CATALOG_PAGES = stringPreferencesKey("catalog_pages")
+        val DISLIKED = stringSetPreferencesKey("disliked_tracks")
         val THEME = stringPreferencesKey("theme_mode")
         val SORT = stringPreferencesKey("library_sort")
         val FOLDERS = stringSetPreferencesKey("folders")
@@ -48,6 +53,14 @@ class SettingsStore(private val context: Context) {
             else -> "system"
         }
     }
+    val visualStyle = store.data.map { it[stringPreferencesKey("visual_style")] ?: "material" }
+    suspend fun setStyle(style: String) {
+        require(style in listOf("material", "hyper", "glass", "lane"))
+        store.edit { it[stringPreferencesKey("visual_style")] = style }
+    }
+    val crossfade = store.data.map { it[intPreferencesKey("crossfade_seconds")] ?: 0 }
+    suspend fun setCrossfade(value: Int) { store.edit { it[intPreferencesKey("crossfade_seconds")] = value.coerceIn(0,12) } }
+
     val sortMode: Flow<String> = store.data.map { it[Keys.SORT] ?: "added" }
     val folders: Flow<Set<String>> = store.data.map { it[Keys.FOLDERS] ?: emptySet() }
     val queueIndex: Flow<Int> = store.data.map { it[Keys.QUEUE_INDEX] ?: 0 }
@@ -68,6 +81,74 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.EQ_2400] ?: DEFAULT_EQ_GAINS[4],
             prefs[Keys.EQ_15000] ?: DEFAULT_EQ_GAINS[5]
         )
+    }
+
+    val catalogPages = store.data.map { prefs ->
+        val data = JSONObject(prefs[Keys.CATALOG_PAGES] ?: "{}")
+        data.keys().asSequence().associateWith { data.getString(it) }
+    }
+
+    suspend fun toggleCatalogPage(url: String, title: String) {
+        store.edit { prefs ->
+            val pages = JSONObject(prefs[Keys.CATALOG_PAGES] ?: "{}")
+            if (pages.has(url)) pages.remove(url) else pages.put(url, title.take(256))
+            prefs[Keys.CATALOG_PAGES] = pages.toString()
+        }
+    }
+
+    val dislikedTracks: Flow<Set<String>> = store.data.map { it[Keys.DISLIKED].orEmpty() }
+
+    suspend fun toggleDisliked(id: String) {
+        store.edit {
+            val previous = it[Keys.DISLIKED].orEmpty()
+            it[Keys.DISLIKED] = if (id in previous) previous - id else previous + id
+        }
+    }
+
+    fun lyrics(id: String): Flow<String> =
+        store.data.map { it[stringPreferencesKey("lyrics_$id")].orEmpty() }
+
+    suspend fun saveLyrics(id: String, content: String) {
+        store.edit { it[stringPreferencesKey("lyrics_$id")] = content }
+    }
+
+    suspend fun backupSettings(): JSONObject = JSONObject().apply {
+        for ((key, value) in store.data.first().asMap()) {
+            put(key.name, if (value is Set<*>) JSONArray(value) else value)
+        }
+    }
+
+    suspend fun restoreSettings(data: JSONObject, ids: Map<Long, Long>, queueSize: Int) {
+        store.edit { prefs ->
+            for (key in data.keys()) {
+                when (key) {
+                    "theme_mode", "library_sort", "user_nickname", "eq_preset", "visual_style" ->
+                        prefs[stringPreferencesKey(key)] = data.getString(key)
+                    "catalog_pages" -> prefs[Keys.CATALOG_PAGES] = JSONObject(data.getString(key)).toString()
+                    "folders", "disliked_tracks" -> {
+                        val array = data.getJSONArray(key)
+                        prefs[stringSetPreferencesKey(key)] = (0 until array.length()).mapNotNull {
+                            val value = array.getString(it)
+                            if (key == "disliked_tracks" && value.toLongOrNull() != null) ids[value.toLong()]?.toString() else value
+                        }.toSet()
+                    }
+                    "shuffle", "eq_enabled" -> prefs[booleanPreferencesKey(key)] = data.getBoolean(key)
+                    "queue_index" -> if (queueSize > 0) prefs[Keys.QUEUE_INDEX] = data.getInt(key).coerceIn(0, queueSize - 1)
+                    "queue_position" -> if (queueSize > 0) prefs[Keys.QUEUE_POSITION] = data.getLong(key).coerceAtLeast(0)
+                    "repeat_mode" -> prefs[Keys.REPEAT] = data.getInt(key).also { require(it in 0..2) }
+                    "crossfade_seconds" -> prefs[intPreferencesKey(key)] = data.getInt(key).also { require(it in 0..12) }
+                    "playback_speed", "playback_pitch" -> prefs[floatPreferencesKey(key)] =
+                        data.getDouble(key).toFloat().also { require(it in 0.5f..2f) }
+                    "eq_60","eq_150","eq_400","eq_1000","eq_2400","eq_15000" ->
+                        prefs[floatPreferencesKey(key)] = data.getDouble(key).toFloat().also { require(it in -12f..12f) }
+                    else -> if (key.startsWith("lyrics_")) {
+                        ids[key.removePrefix("lyrics_").toLongOrNull()]?.let { id ->
+                            prefs[stringPreferencesKey("lyrics_$id")] = data.getString(key)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     suspend fun setThemeMode(value: String) { store.edit { it[Keys.THEME] = value } }
@@ -93,7 +174,7 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setNickname(value: String) {
         val clean = value.trim().take(32)
-        if (clean.isNotEmpty()) store.edit { it[Keys.NICKNAME] = clean }
+        store.edit { it[Keys.NICKNAME] = clean }
     }
 
     suspend fun setEqualizerEnabled(value: Boolean) {

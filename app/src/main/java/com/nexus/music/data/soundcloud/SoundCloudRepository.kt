@@ -18,7 +18,10 @@ data class SoundCloudTrack(
     val artist: String,
     val durationMs: Long,
     val artworkUrl: String?,
-    val permalinkUrl: String
+    val permalinkUrl: String,
+    val credit: String = "",
+    val full: Boolean = true,
+    val artistId: Long? = null
 )
 
 /**
@@ -50,8 +53,36 @@ object SoundCloudRepository {
 
         val url = "$API/search/tracks?q=${encode(trimmed)}&client_id=${clientId()}&limit=$MAX_RESULTS&linked_partitioning=1"
         val root = getJson(url)
+        parseTracks(root)
+    }
+
+    data class Artist(val name: String, val avatar: String?, val description: String, val id: Long)
+    data class ArtistPage(val tracks: List<SoundCloudTrack>, val next: String?)
+
+    suspend fun artist(id: Long?, permalink: String?): Artist = withContext(Dispatchers.IO) {
+        val key = clientId()
+        val owner = id ?: run {
+            require(permalink != null && isTrustedTrackUrl(permalink))
+            getJson("$API/resolve?url=${encode(permalink)}&client_id=$key").getJSONObject("user").getLong("id")
+        }
+        val profile = getJson("$API/users/$owner?client_id=$key")
+        Artist(profile.getString("username"), profile.optString("avatar_url"),
+            profile.optString("description").takeUnless { it == "null" }.orEmpty(), owner)
+    }
+
+    suspend fun artistTracks(id: Long, next: String?): ArtistPage = withContext(Dispatchers.IO) {
+        val endpoint = next ?: "$API/users/$id/tracks?limit=50&linked_partitioning=1"
+        require(isTrustedApiUrl(endpoint) && Uri.parse(endpoint).path == "/users/$id/tracks")
+        val url = Uri.parse(endpoint)
+        val keyed = if (url.getQueryParameter("client_id") == null)
+            url.buildUpon().appendQueryParameter("client_id", clientId()).build() else url
+        val data = getJson(keyed.toString())
+        ArtistPage(parseTracks(data), data.optString("next_href").takeIf { isTrustedApiUrl(it) })
+    }
+
+    private fun parseTracks(root: JSONObject): List<SoundCloudTrack> {
         val collection = root.optJSONArray("collection") ?: JSONArray()
-        buildList {
+        return buildList {
             for (index in 0 until collection.length()) {
                 val item = collection.optJSONObject(index) ?: continue
                 val id = item.optLong("id", -1L)
@@ -73,6 +104,9 @@ object SoundCloudRepository {
                         artist = artist,
                         durationMs = item.optLong("duration", 0L).coerceAtLeast(0L),
                         artworkUrl = artwork,
+                        artistId = user?.optLong("id")?.takeIf { it > 0 },
+                        credit = item.optJSONObject("publisher_metadata")?.optString("artist").orEmpty(),
+                        full = item.optString("policy") !in setOf("SNIP", "BLOCK"),
                         permalinkUrl = permalink
                     )
                 )
@@ -92,7 +126,8 @@ object SoundCloudRepository {
         if (!isTrustedTrackUrl(permalinkUrl)) {
             throw IOException("Недопустимая ссылка SoundCloud.")
         }
-        val cached = streamCache[permalinkUrl]
+        val cacheKey = permalinkUrl
+        val cached = streamCache[cacheKey]
         if (cached != null && System.currentTimeMillis() - cached.cachedAt < CACHE_MS) {
             return cached.url
         }
@@ -100,6 +135,7 @@ object SoundCloudRepository {
         val key = clientId()
         val resolvedUrl = "$API/resolve?url=${encode(permalinkUrl)}&client_id=$key"
         val track = getJson(resolvedUrl)
+        if (track.optString("policy") in setOf("SNIP", "BLOCK")) throw IOException("Полная версия недоступна в SoundCloud.")
         val media = track.optJSONObject("media")
             ?: throw IOException("SoundCloud не предоставил поток для этого трека.")
         val transcodings = media.optJSONArray("transcodings") ?: JSONArray()
@@ -108,7 +144,8 @@ object SoundCloudRepository {
         val candidates = (0 until transcodings.length()).mapNotNull { transcodings.optJSONObject(it) }
             .filter { transcoding ->
                 val format = transcoding.optJSONObject("format")
-                format?.optString("protocol") == "hls" &&
+                !transcoding.optBoolean("snipped") &&
+                    format?.optString("protocol") == "hls" &&
                     isTrustedApiUrl(transcoding.optString("url"))
             }
             .sortedBy { transcoding ->
@@ -137,7 +174,7 @@ object SoundCloudRepository {
                 if (!isTrustedMediaUrl(streamUrl)) {
                     throw IOException("SoundCloud вернул неподдерживаемый адрес потока.")
                 }
-                streamCache[permalinkUrl] = CachedStream(streamUrl, System.currentTimeMillis())
+                streamCache[cacheKey] = CachedStream(streamUrl, System.currentTimeMillis())
                 if (streamCache.size > 100) streamCache.clear()
                 return streamUrl
             } catch (error: Exception) {

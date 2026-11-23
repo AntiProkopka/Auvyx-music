@@ -1,5 +1,6 @@
 package com.nexus.music
 
+import androidx.room.withTransaction
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
@@ -7,8 +8,6 @@ import androidx.lifecycle.viewModelScope
 import com.nexus.music.data.db.PlaylistEntity
 import com.nexus.music.data.db.PlaylistSummary
 import com.nexus.music.data.db.PlaylistTrackEntity
-import com.nexus.music.data.db.SoundCloudFavoriteEntity
-import com.nexus.music.data.db.SoundCloudHistoryEntity
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.data.settings.SettingsStore
 import com.nexus.music.data.soundcloud.SoundCloudRepository
@@ -30,6 +29,9 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.nexus.music.data.backup.LibraryExport
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -41,20 +43,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val lazily = SharingStarted.WhileSubscribed(5_000)
 
     val tracks: StateFlow<List<TrackEntity>> =
+        db.trackDao().observeLocal().stateIn(viewModelScope, lazily, emptyList())
+    val knownTracks: StateFlow<List<TrackEntity>> =
         db.trackDao().observeAll().stateIn(viewModelScope, lazily, emptyList())
     val favorites: StateFlow<List<TrackEntity>> =
         db.trackDao().observeFavorites().stateIn(viewModelScope, lazily, emptyList())
     val recent: StateFlow<List<TrackEntity>> =
         db.historyDao().observeRecent(50).stateIn(viewModelScope, lazily, emptyList())
-    val soundCloudFavorites: StateFlow<List<SoundCloudFavoriteEntity>> =
-        db.soundCloudFavoriteDao().observeAll().stateIn(viewModelScope, lazily, emptyList())
-    val soundCloudRecent: StateFlow<List<SoundCloudHistoryEntity>> =
-        db.soundCloudHistoryDao().observeRecent(50).stateIn(viewModelScope, lazily, emptyList())
     val playlists: StateFlow<List<PlaylistSummary>> =
         db.playlistDao().observePlaylists().stateIn(viewModelScope, lazily, emptyList())
 
     val themeMode: StateFlow<String> =
         settings.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, "system")
+    val visualStyle = settings.visualStyle.stateIn(viewModelScope, SharingStarted.Eagerly, "material")
+    fun setStyle(style: String) { viewModelScope.launch { settings.setStyle(style) } }
+    val crossfade = settings.crossfade.stateIn(viewModelScope, lazily, 0)
+    fun setCrossfade(value: Int) { viewModelScope.launch { settings.setCrossfade(value) } }
+
     val sortMode: StateFlow<String> =
         settings.sortMode.stateIn(viewModelScope, SharingStarted.Eagerly, "added")
     val folders: StateFlow<Set<String>> =
@@ -72,6 +77,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope, SharingStarted.Eagerly, true
     )
 
+    data class ArtistTarget(val name: String, val cloud: Boolean, val owner: Long?, val permalink: String?)
+    val artistTarget = MutableStateFlow<ArtistTarget?>(null)
+    fun openArtist(track: TrackEntity) {
+        artistTarget.value = ArtistTarget(track.artist, track.source == "soundcloud", track.artistId?.toLongOrNull(), track.sourceUrl)
+    }
+    fun openArtist(track: SoundCloudTrack) {
+        artistTarget.value = ArtistTarget(track.artist, true, track.artistId, track.permalinkUrl)
+    }
+
     val busy = MutableStateFlow(false)
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val searchQuery = MutableStateFlow("")
@@ -83,6 +97,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var equalizerSaveJob: Job? = null
 
     init {
+        // Previous builds used the provider name as a fake album. Clean it once
+        // without altering genuine local albums or the IDs of saved songs.
+        viewModelScope.launch(Dispatchers.IO) { db.trackDao().clearFakeSoundCloudAlbums() }
         viewModelScope.launch {
             settings.nickname.collect { value ->
                 _nickname.value = value
@@ -105,6 +122,49 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (q.isBlank()) flowOf(emptyList<TrackEntity>()) else db.trackDao().search(q.trim())
         }
         .stateIn(viewModelScope, lazily, emptyList())
+
+    val catalogPages = settings.catalogPages.stateIn(viewModelScope, lazily, emptyMap())
+
+    fun toggleCatalogPage(url: String, title: String) {
+        viewModelScope.launch { settings.toggleCatalogPage(url, title) }
+    }
+
+    val dislikedTracks = settings.dislikedTracks.stateIn(viewModelScope, lazily, emptySet())
+
+    fun toggleDisliked(id: String) {
+        viewModelScope.launch { settings.toggleDisliked(id) }
+    }
+
+    fun lyrics(id: String) = settings.lyrics(id)
+
+    fun saveLyrics(id: String, content: String) {
+        viewModelScope.launch { settings.saveLyrics(id, content) }
+    }
+
+    fun importLibrary(uri: Uri) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) {
+                com.nexus.music.data.backup.LibraryImport.read(nexus.contentResolver, uri, db, settings)
+            } }.onSuccess { player.loadImportedQueue(); messages.tryEmit("Медиатека восстановлена. Для недоступного трека выбери «Выбрать файл заново».") }
+                .onFailure { messages.tryEmit("Не удалось восстановить копию: ${it.localizedMessage}") }
+        }
+    }
+
+    fun exportLibrary(uri: Uri) {
+        viewModelScope.launch {
+            val success = withContext(Dispatchers.IO) {
+                try {
+                    LibraryExport.write(nexus.contentResolver, uri, db, settings)
+                    true
+                } catch (error: kotlinx.coroutines.CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            messages.tryEmit(if (success) "Резервная копия сохранена" else "Не удалось сохранить резервную копию")
+        }
+    }
 
     fun setNickname(value: String) {
         viewModelScope.launch {
@@ -150,7 +210,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // SoundCloud catalogue
     fun searchSoundCloud(query: String) {
         val trimmed = query.trim()
+        soundCloudSearchJob?.cancel()
         if (trimmed.isBlank()) {
+            soundCloudLoading.value = false
             soundCloudResults.value = emptyList()
             soundCloudError.value = null
             return
@@ -164,93 +226,160 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (soundCloudResults.value.isEmpty()) {
                     soundCloudError.value = "Ничего не найдено. Попробуй другой запрос."
                 }
+            } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel
             } catch (error: Exception) {
                 soundCloudResults.value = emptyList()
                 soundCloudError.value = error.message ?: "Не удалось выполнить поиск SoundCloud."
             } finally {
-                soundCloudLoading.value = false
+                if (kotlinx.coroutines.currentCoroutineContext()[Job]?.isActive == true) soundCloudLoading.value = false
             }
         }
     }
 
+    private suspend fun ensureCatalog(track: TrackEntity): TrackEntity {
+        val dao = db.trackDao()
+        dao.insertOrIgnore(track)
+        val saved = requireNotNull(dao.getBySourceId(track.source, requireNotNull(track.sourceId)))
+        if (saved.uri != track.uri || saved.durationMs != track.durationMs) {
+            dao.updateCatalogAudio(saved.id, track.uri, track.durationMs)
+            return saved.copy(uri = track.uri, durationMs = track.durationMs)
+        }
+        return saved
+    }
+
+    fun withCatalog(track: TrackEntity, action: (TrackEntity) -> Unit) {
+        viewModelScope.launch {
+            runCatching { action(ensureCatalog(track)) }.onFailure { messages.tryEmit("Не удалось сохранить трек") }
+        }
+    }
+
+    private var catalogQueueJob: Job? = null
+    fun playCatalog(tracks: List<TrackEntity>, index: Int) {
+        catalogQueueJob?.cancel()
+        catalogQueueJob = viewModelScope.launch {
+            runCatching { player.playTracks(tracks.map { ensureCatalog(it) }, index) }
+                .onFailure { if (it !is kotlinx.coroutines.CancellationException) messages.tryEmit("Не удалось подготовить очередь") }
+        }
+    }
+
     fun playSoundCloud(results: List<SoundCloudTrack>, index: Int) {
-        player.playSoundCloudTracks(results, index)
+        if (results.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                val unified = db.withTransaction { results.map { ensureSoundCloudTrack(it) } }
+                player.playTracks(unified, index.coerceIn(0, unified.lastIndex))
+            }.onFailure {
+                messages.tryEmit("Не удалось подготовить треки SoundCloud: ${it.message ?: "ошибка"}")
+            }
+        }
     }
 
     fun enqueueSoundCloud(track: SoundCloudTrack) {
-        player.enqueueSoundCloudTrack(track)
-        messages.tryEmit("Добавлено в очередь: ${track.title}")
+        viewModelScope.launch {
+            runCatching { player.enqueue(ensureSoundCloudTrack(track)) }
+                .onSuccess { messages.tryEmit("Добавлено в очередь: ${track.title}") }
+                .onFailure { messages.tryEmit("Не удалось добавить трек в очередь") }
+        }
     }
 
     fun playNextSoundCloud(track: SoundCloudTrack) {
-        player.playNextSoundCloudTrack(track)
-        messages.tryEmit("Следующим: ${track.title}")
+        viewModelScope.launch {
+            runCatching { player.playNext(ensureSoundCloudTrack(track)) }
+                .onSuccess { messages.tryEmit("Следующим: ${track.title}") }
+                .onFailure { messages.tryEmit("Не удалось добавить трек следующим") }
+        }
+    }
+
+    private suspend fun ensureSoundCloudTrack(track: SoundCloudTrack): TrackEntity {
+        val sourceId = track.id.toString()
+        val dao = db.trackDao()
+        val existing = dao.getBySourceId("soundcloud", sourceId)
+        if (existing != null) {
+            dao.updateSoundCloudMetadata(
+                sourceId = sourceId,
+                title = track.title,
+                artist = track.artist,
+                album = "",
+                durationMs = track.durationMs,
+                artworkUri = track.artworkUrl,
+                artistId = track.artistId?.toString(),
+                sourceUrl = track.permalinkUrl
+            )
+            return dao.getBySourceId("soundcloud", sourceId) ?: existing
+        }
+
+        dao.insertOrIgnore(
+            TrackEntity(
+                uri = "auvyx-sc://track/$sourceId",
+                title = track.title,
+                artist = track.artist,
+                album = "",
+                durationMs = track.durationMs,
+                addedAt = System.currentTimeMillis(),
+                artworkUri = track.artworkUrl,
+                source = "soundcloud",
+                sourceId = sourceId,
+                artistId = track.artistId?.toString(),
+                sourceUrl = track.permalinkUrl
+            )
+        )
+        return dao.getBySourceId("soundcloud", sourceId)
+            ?: error("SoundCloud-трек не удалось сохранить в медиатеку")
+    }
+
+    fun addSoundCloudToPlaylist(playlistId: Long, track: SoundCloudTrack) {
+        viewModelScope.launch {
+            runCatching {
+                val saved = ensureSoundCloudTrack(track)
+                addSavedTrackToPlaylist(playlistId, saved.id)
+            }.onFailure { messages.tryEmit("Не удалось добавить трек в плейлист") }
+        }
+    }
+
+    fun createPlaylistWithSoundCloudTrack(name: String, track: SoundCloudTrack) {
+        viewModelScope.launch {
+            runCatching {
+                val saved = ensureSoundCloudTrack(track)
+                createPlaylistAndLink(name, saved.id)
+                messages.tryEmit("Плейлист «$name» создан")
+            }.onFailure { messages.tryEmit("Не удалось создать плейлист с треком") }
+        }
+    }
+
+    private suspend fun addSavedTrackToPlaylist(playlistId: Long, trackId: Long) {
+        val dao = db.playlistDao()
+        db.withTransaction {
+            if (dao.contains(playlistId, trackId) > 0) {
+                messages.tryEmit("Трек уже в плейлисте")
+            } else {
+                dao.insertLink(
+                    PlaylistTrackEntity(
+                        playlistId = playlistId,
+                        trackId = trackId,
+                        position = dao.nextPosition(playlistId)
+                    )
+                )
+                messages.tryEmit("Добавлено в плейлист")
+            }
+        }
     }
 
     fun toggleSoundCloudFavorite(track: SoundCloudTrack) {
         viewModelScope.launch {
-            val dao = db.soundCloudFavoriteDao()
-            if (dao.getById(track.id) != null) {
-                dao.delete(track.id)
-                messages.tryEmit("Убрано из избранного")
-            } else {
-                dao.upsert(
-                    SoundCloudFavoriteEntity(
-                        trackId = track.id,
-                        title = track.title,
-                        artist = track.artist,
-                        durationMs = track.durationMs,
-                        artworkUrl = track.artworkUrl,
-                        permalinkUrl = track.permalinkUrl,
-                        addedAt = System.currentTimeMillis()
-                    )
-                )
-                messages.tryEmit("Добавлено в избранное")
-            }
+            runCatching {
+                val saved = ensureSoundCloudTrack(track)
+                db.trackDao().toggleFavorite(saved.id)
+                val next = db.trackDao().getByIds(listOf(saved.id)).first().isFavorite
+                messages.tryEmit(if (next) "Добавлено в избранное" else "Убрано из избранного")
+            }.onFailure { messages.tryEmit("Не удалось обновить избранное SoundCloud") }
         }
     }
 
     fun toggleCurrentFavorite() {
         val state = player.state.value
         val mediaId = state.mediaId ?: return
-        if (mediaId.startsWith("soundcloud:")) {
-            val id = mediaId.substringAfter(':').toLongOrNull() ?: return
-            val permalink = Uri.parse(state.sourceUri.orEmpty()).getQueryParameter("url") ?: return
-            toggleSoundCloudFavorite(
-                SoundCloudTrack(
-                    id = id,
-                    title = state.title,
-                    artist = state.artist,
-                    durationMs = state.durationMs,
-                    artworkUrl = state.artworkUri,
-                    permalinkUrl = permalink
-                )
-            )
-        } else {
-            val id = mediaId.toLongOrNull() ?: return
-            viewModelScope.launch {
-                val track = db.trackDao().getByIds(listOf(id)).firstOrNull() ?: return@launch
-                db.trackDao().setFavorite(track.id, !track.isFavorite)
-            }
-        }
-    }
-
-    fun playSoundCloudFavorite(item: SoundCloudFavoriteEntity) {
-        player.playSoundCloudTracks(
-            listOf(SoundCloudTrack(item.trackId, item.title, item.artist, item.durationMs, item.artworkUrl, item.permalinkUrl)),
-            0
-        )
-    }
-
-    fun enqueueSoundCloudFavorite(item: SoundCloudFavoriteEntity) {
-        enqueueSoundCloud(SoundCloudTrack(item.trackId, item.title, item.artist, item.durationMs, item.artworkUrl, item.permalinkUrl))
-    }
-
-    fun playSoundCloudHistory(item: SoundCloudHistoryEntity) {
-        player.playSoundCloudTracks(
-            listOf(SoundCloudTrack(item.trackId, item.title, item.artist, item.durationMs, item.artworkUrl, item.permalinkUrl)),
-            0
-        )
+        val id = mediaId.toLongOrNull() ?: return
+        viewModelScope.launch { db.trackDao().toggleFavorite(id) }
     }
 
     // Local library
@@ -297,12 +426,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleFavorite(t: TrackEntity) {
-        viewModelScope.launch { db.trackDao().setFavorite(t.id, !t.isFavorite) }
+        viewModelScope.launch { db.trackDao().toggleFavorite(t.id) }
+    }
+
+    val offlineTransfers = nexus.offline.progress
+    fun saveOffline(t: TrackEntity) = nexus.offline.save(t) { messages.tryEmit(it) }
+    fun cancelOffline(t: TrackEntity) = nexus.offline.cancel(t.id)
+    fun removeOffline(t: TrackEntity) {
+        viewModelScope.launch { runCatching { nexus.offline.remove(t) }.onFailure { messages.tryEmit("Не удалось удалить копию") } }
+    }
+    val relinkTarget = MutableStateFlow<TrackEntity?>(null)
+    fun relink(t: TrackEntity, uri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                require(t.source == "local" && uri.scheme == "content")
+                withContext(Dispatchers.IO) {
+                    nexus.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    nexus.contentResolver.openAssetFileDescriptor(uri, "r")!!.use { }
+                }
+                db.trackDao().relink(t.id, uri.toString())
+            }.onFailure { messages.tryEmit("Не удалось привязать файл. Проверь доступ и дубликаты.") }
+        }
     }
 
     fun deleteTrack(t: TrackEntity) {
         viewModelScope.launch {
             player.removeTracks(setOf(t.id))
+            if (t.source == "local") nexus.offline.remove(t)
             library.deleteTracks(listOf(t.id))
             messages.tryEmit("Удалено из медиатеки (файл на устройстве не тронут)")
         }
@@ -320,11 +470,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun createPlaylistWithTrack(name: String, trackId: Long) {
         viewModelScope.launch {
-            val dao = db.playlistDao()
-            val id = dao.insertPlaylist(PlaylistEntity(name = name, createdAt = System.currentTimeMillis()))
-            dao.insertLink(PlaylistTrackEntity(playlistId = id, trackId = trackId, position = 0))
+            createPlaylistAndLink(name, trackId)
             messages.tryEmit("Плейлист «$name» создан")
         }
+    }
+
+    private suspend fun createPlaylistAndLink(name: String, trackId: Long) = db.withTransaction {
+        val dao = db.playlistDao()
+        val id = dao.insertPlaylist(PlaylistEntity(name = name, createdAt = System.currentTimeMillis()))
+        dao.insertLink(PlaylistTrackEntity(playlistId = id, trackId = trackId, position = 0))
     }
 
     fun renamePlaylist(id: Long, name: String) {
@@ -336,15 +490,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addToPlaylist(playlistId: Long, trackId: Long) {
-        viewModelScope.launch {
-            val dao = db.playlistDao()
-            if (dao.contains(playlistId, trackId) > 0) {
-                messages.tryEmit("Трек уже в плейлисте")
-            } else {
-                dao.insertLink(PlaylistTrackEntity(playlistId = playlistId, trackId = trackId, position = dao.nextPosition(playlistId)))
-                messages.tryEmit("Добавлено в плейлист")
-            }
-        }
+        viewModelScope.launch { addSavedTrackToPlaylist(playlistId, trackId) }
     }
 
     fun removeFromPlaylist(playlistId: Long, trackId: Long) {
@@ -355,7 +501,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun clearHistory() {
         viewModelScope.launch {
             db.historyDao().clear()
-            db.soundCloudHistoryDao().clear()
+
             messages.tryEmit("История прослушивания очищена")
         }
     }

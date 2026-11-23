@@ -23,6 +23,7 @@ class NexusApp : Application() {
     val database: NexusDatabase by lazy { NexusDatabase.create(this) }
     val settings: SettingsStore by lazy { SettingsStore(this) }
     val library: LibraryRepository by lazy { LibraryRepository(this, database, settings) }
+    val offline by lazy { com.nexus.music.data.local.OfflineAudio(this, database.trackDao(), appScope) }
     val playerController: PlayerController by lazy {
         PlayerController(this, database, settings, appScope)
     }

@@ -1,11 +1,18 @@
 package com.nexus.music.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "tracks", indices = [Index(value = ["uri"], unique = true)])
+@Entity(
+    tableName = "tracks",
+    indices = [
+        Index(value = ["uri"], unique = true),
+        Index(value = ["source", "sourceId"], unique = true)
+    ]
+)
 data class TrackEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val uri: String,
@@ -15,7 +22,12 @@ data class TrackEntity(
     val durationMs: Long,
     val addedAt: Long,
     val isFavorite: Boolean = false,
-    val artworkUri: String? = null
+    val artworkUri: String? = null,
+    @ColumnInfo(defaultValue = "'local'") val source: String = "local",
+    val sourceId: String? = null,
+    val sourceUrl: String? = null,
+    val artistId: String? = null,
+    val downloadedPath: String? = null
 )
 
 @Entity(tableName = "playlists")
@@ -55,29 +67,6 @@ data class HistoryEntity(
 data class QueueEntity(
     @PrimaryKey val position: Int,
     val trackId: Long
-)
-
-@Entity(tableName = "soundcloud_favorites")
-data class SoundCloudFavoriteEntity(
-    @PrimaryKey val trackId: Long,
-    val title: String,
-    val artist: String,
-    val durationMs: Long,
-    val artworkUrl: String?,
-    val permalinkUrl: String,
-    val addedAt: Long
-)
-
-@Entity(tableName = "soundcloud_history", indices = [Index("trackId"), Index("playedAt")])
-data class SoundCloudHistoryEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val trackId: Long,
-    val title: String,
-    val artist: String,
-    val durationMs: Long,
-    val artworkUrl: String?,
-    val permalinkUrl: String,
-    val playedAt: Long
 )
 
 data class PlaylistSummary(

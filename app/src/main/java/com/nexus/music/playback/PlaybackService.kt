@@ -1,5 +1,6 @@
 package com.nexus.music.playback
 
+import kotlinx.coroutines.*
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -17,36 +18,20 @@ import com.nexus.music.data.soundcloud.SoundCloudRepository
 @OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
 
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var crossfade: LocalCrossfade? = null
     private var session: MediaSession? = null
     private var exoPlayer: ExoPlayer? = null
 
     override fun onCreate() {
         super.onCreate()
 
-        val httpFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
-            .setAllowCrossProtocolRedirects(true)
-        val upstreamFactory = DefaultDataSource.Factory(this, httpFactory)
-        val resolvingFactory = ResolvingDataSource.Factory(
-            upstreamFactory,
-            ResolvingDataSource.Resolver { dataSpec ->
-                val uri = dataSpec.uri
-                if (uri.scheme == "auvyx-sc") {
-                    dataSpec.buildUpon()
-                        .setUri(SoundCloudRepository.resolvePlaybackUri(uri))
-                        .build()
-                } else {
-                    dataSpec
-                }
-            }
-        )
-        val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(resolvingFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(this).setDataSourceFactory(playbackSource(this))
 
         val equalizer = (application as NexusApp).equalizer
         val player = ExoPlayer.Builder(this)
             .setRenderersFactory(AuvyxRenderersFactory(this, equalizer.audioProcessor))
-            .setMediaSourceFactory(mediaSourceFactory)
+            .setMediaSourceFactory(CatalogMediaFactory(mediaSourceFactory))
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -57,6 +42,17 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
+        crossfade = LocalCrossfade(player) {
+            ExoPlayer.Builder(this)
+                .setRenderersFactory(AuvyxRenderersFactory(this, equalizer.newProcessor()))
+                .setMediaSourceFactory(mediaSourceFactory)
+                .setAudioAttributes(player.audioAttributes, false)
+                .build().also { PlaybackAudioRouting.routeOverlay(it) }
+        }
+        val settings = (application as NexusApp).settings
+        serviceScope.launch { settings.crossfade.collect { crossfade?.seconds = it } }
+        serviceScope.launch { settings.equalizerEnabled.collect(equalizer::setEnabled) }
+        serviceScope.launch { settings.equalizerGains.collect(equalizer::setGains) }
         exoPlayer = player
         PlaybackAudioRouting.attach(player)
         session = MediaSession.Builder(this, player).build()
@@ -72,6 +68,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
+        crossfade?.release()
         exoPlayer?.let { PlaybackAudioRouting.detach(it) }
         session?.run {
             player.release()

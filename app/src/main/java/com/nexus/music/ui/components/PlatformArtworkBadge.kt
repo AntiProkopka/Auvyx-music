@@ -1,5 +1,6 @@
 package com.nexus.music.ui.components
 
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -25,7 +26,11 @@ fun PlatformArtworkBadge(platform: String) {
         context.resources.getIdentifier("platform_${platform}", "drawable", context.packageName)
     }
 
-    if (resourceId != 0) {
+    if (platform == "local") {
+        Box(Modifier.padding(3.dp).size(18.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xDD27313C)), contentAlignment = Alignment.Center) {
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.LibraryMusic, "На устройстве", Modifier.size(14.dp), tint = Color.White)
+        }
+    } else if (resourceId != 0) {
         Box(
             modifier = Modifier
                 .padding(3.dp)

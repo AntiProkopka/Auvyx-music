@@ -44,7 +44,7 @@ class LibraryRepository(
             } catch (_: Exception) {
             }
         }
-        added to removeMissing()
+        added to 0
     }
 
     suspend fun deleteTracks(ids: List<Long>) = withContext(Dispatchers.IO) {
@@ -127,6 +127,7 @@ class LibraryRepository(
             val artwork = runCatching { retriever.embeddedPicture }.getOrNull()
             TrackEntity(
                 uri = uri.toString(),
+                sourceId = uri.toString(),
                 title = title,
                 artist = artist,
                 album = album,
@@ -155,22 +156,6 @@ class LibraryRepository(
             Log.w(TAG, "Не удалось сохранить обложку", e)
             null
         }
-    }
-
-    private suspend fun removeMissing(): Int {
-        val missing = db.trackDao().getAll().filter { track ->
-            val doc = try {
-                DocumentFile.fromSingleUri(context, Uri.parse(track.uri))
-            } catch (_: Exception) {
-                null
-            }
-            doc == null || !doc.exists()
-        }
-        missing.map { it.id }.chunked(500).forEach { db.trackDao().deleteByIds(it) }
-        missing.mapNotNull { it.artworkUri?.let { value -> Uri.parse(value) } }
-            .filter { it.scheme == "file" }
-            .forEach { uri -> uri.path?.let { path -> runCatching { File(path).delete() } } }
-        return missing.size
     }
 
     private companion object {

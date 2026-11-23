@@ -12,17 +12,41 @@ interface TrackDao {
     @Query("SELECT * FROM tracks ORDER BY addedAt DESC, id DESC")
     fun observeAll(): Flow<List<TrackEntity>>
 
+    @Query("SELECT * FROM tracks WHERE source = 'local' ORDER BY addedAt DESC, id DESC")
+    fun observeLocal(): Flow<List<TrackEntity>>
+
     @Query("SELECT * FROM tracks WHERE isFavorite = 1 ORDER BY title COLLATE NOCASE")
     fun observeFavorites(): Flow<List<TrackEntity>>
 
-    @Query("SELECT * FROM tracks WHERE title LIKE '%' || :q || '%' OR artist LIKE '%' || :q || '%' OR album LIKE '%' || :q || '%' ORDER BY title COLLATE NOCASE")
+    @Query("SELECT * FROM tracks WHERE source = 'local' AND (title LIKE '%' || :q || '%' OR artist LIKE '%' || :q || '%' OR album LIKE '%' || :q || '%') ORDER BY title COLLATE NOCASE")
     fun search(q: String): Flow<List<TrackEntity>>
 
     @Query("SELECT * FROM tracks")
     suspend fun getAll(): List<TrackEntity>
 
-    @Query("SELECT uri FROM tracks")
+    @Query("SELECT uri FROM tracks WHERE source = 'local'")
     suspend fun allUris(): List<String>
+
+    @Query("SELECT * FROM tracks WHERE source = :source AND sourceId = :sourceId LIMIT 1")
+    suspend fun getBySourceId(source: String, sourceId: String): TrackEntity?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertOrIgnore(track: TrackEntity): Long
+
+    @Query("UPDATE tracks SET title = :title, artist = :artist, album = :album, artistId = COALESCE(:artistId, artistId), durationMs = :durationMs, artworkUri = :artworkUri, sourceUrl = :sourceUrl WHERE source = 'soundcloud' AND sourceId = :sourceId")
+    suspend fun updateSoundCloudMetadata(
+        sourceId: String,
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Long,
+        artworkUri: String?,
+        sourceUrl: String,
+        artistId: String?
+    )
+
+    @Query("UPDATE tracks SET album = '' WHERE source = 'soundcloud' AND album = 'SoundCloud'")
+    suspend fun clearFakeSoundCloudAlbums()
 
     @Query("SELECT * FROM tracks WHERE id IN (:ids)")
     suspend fun getByIds(ids: List<Long>): List<TrackEntity>
@@ -30,8 +54,20 @@ interface TrackDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(tracks: List<TrackEntity>): List<Long>
 
+    @Query("UPDATE tracks SET uri = :uri, durationMs = :duration WHERE id = :id")
+    suspend fun updateCatalogAudio(id: Long, uri: String, duration: Long)
+
     @Query("UPDATE tracks SET isFavorite = :fav WHERE id = :id")
     suspend fun setFavorite(id: Long, fav: Boolean)
+
+    @Query("UPDATE tracks SET isFavorite = NOT isFavorite WHERE id = :id")
+    suspend fun toggleFavorite(id: Long)
+
+    @Query("UPDATE tracks SET downloadedPath = :path WHERE id = :id")
+    suspend fun setDownloaded(id: Long, path: String?)
+
+    @Query("UPDATE tracks SET uri = :uri WHERE id = :id AND source = 'local'")
+    suspend fun relink(id: Long, uri: String)
 
     @Query("DELETE FROM tracks WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<Long>)
@@ -79,33 +115,6 @@ interface HistoryDao {
     fun observeRecent(limit: Int): Flow<List<TrackEntity>>
 
     @Query("DELETE FROM history")
-    suspend fun clear()
-}
-
-@Dao
-interface SoundCloudFavoriteDao {
-    @Query("SELECT * FROM soundcloud_favorites ORDER BY addedAt DESC")
-    fun observeAll(): Flow<List<SoundCloudFavoriteEntity>>
-
-    @Query("SELECT * FROM soundcloud_favorites WHERE trackId = :trackId LIMIT 1")
-    suspend fun getById(trackId: Long): SoundCloudFavoriteEntity?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(item: SoundCloudFavoriteEntity)
-
-    @Query("DELETE FROM soundcloud_favorites WHERE trackId = :trackId")
-    suspend fun delete(trackId: Long)
-}
-
-@Dao
-interface SoundCloudHistoryDao {
-    @Insert
-    suspend fun insert(item: SoundCloudHistoryEntity)
-
-    @Query("SELECT * FROM soundcloud_history WHERE id IN (SELECT MAX(id) FROM soundcloud_history GROUP BY trackId) ORDER BY playedAt DESC LIMIT :limit")
-    fun observeRecent(limit: Int): Flow<List<SoundCloudHistoryEntity>>
-
-    @Query("DELETE FROM soundcloud_history")
     suspend fun clear()
 }
 

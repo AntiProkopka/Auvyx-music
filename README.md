@@ -1,4 +1,8 @@
-# AUVYX · Alpha 1.6
+# AUVYX · Alpha 2.0
+
+Сборка, установка, перенос данных и результаты проверок описаны в [отчёте Alpha 2.0](ALPHA-2-TEST.md).
+
+## Архив версии 1.6
 
 AUVYX is an Android music player built with Kotlin, Jetpack Compose and Material 3. The current project includes a local music library and a first, limited SoundCloud integration.
 

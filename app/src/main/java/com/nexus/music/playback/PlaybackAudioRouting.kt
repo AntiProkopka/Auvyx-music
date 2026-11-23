@@ -10,6 +10,8 @@ object PlaybackAudioRouting {
     @Volatile private var player: ExoPlayer? = null
     @Volatile private var preferredDevice: AudioDeviceInfo? = null
 
+    val preferredDeviceId: Int? get() = preferredDevice?.id
+
     fun attach(exoPlayer: ExoPlayer) {
         player = exoPlayer
         exoPlayer.setPreferredAudioDevice(preferredDevice)
@@ -19,8 +21,17 @@ object PlaybackAudioRouting {
         if (player === exoPlayer) player = null
     }
 
+    private var overlay = java.lang.ref.WeakReference<ExoPlayer>(null)
+    fun routeOverlay(player: ExoPlayer) {
+        overlay = java.lang.ref.WeakReference(player)
+        player.setPreferredAudioDevice(preferredDevice)
+    }
+
+    fun clearOverlay() { overlay.clear() }
+
     fun select(device: AudioDeviceInfo?) {
         preferredDevice = device
         player?.setPreferredAudioDevice(device)
+        overlay.get()?.setPreferredAudioDevice(device)
     }
 }

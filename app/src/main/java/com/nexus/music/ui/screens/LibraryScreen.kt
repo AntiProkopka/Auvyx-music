@@ -52,22 +52,25 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
 import com.nexus.music.data.db.TrackEntity
-import com.nexus.music.data.soundcloud.SoundCloudTrack
 import com.nexus.music.ui.components.AddToPlaylistDialog
 import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.NameDialog
-import com.nexus.music.ui.components.SoundCloudHistoryRow
-import com.nexus.music.ui.components.SoundCloudTrackRow
 import com.nexus.music.ui.components.TrackRow
 import com.nexus.music.ui.components.trackMenu
 
 @Composable
 fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
+    val catalogPages by vm.catalogPages.collectAsStateWithLifecycle()
+    var catalogUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    catalogUrl?.let { url ->
+        CatalogPage(vm, url, catalogPages[url].orEmpty()) { catalogUrl = null }
+        return
+    }
     val tracks by vm.tracks.collectAsStateWithLifecycle()
+    val known by vm.knownTracks.collectAsStateWithLifecycle()
+    val collection = remember(known) { known.filter { it.source in setOf("local","soundcloud") } }
     val favorites by vm.favorites.collectAsStateWithLifecycle()
-    val cloudFavorites by vm.soundCloudFavorites.collectAsStateWithLifecycle()
     val recent by vm.recent.collectAsStateWithLifecycle()
-    val cloudRecent by vm.soundCloudRecent.collectAsStateWithLifecycle()
     val playlists by vm.playlists.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val sort by vm.sortMode.collectAsStateWithLifecycle()
@@ -85,11 +88,13 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
         if (uri != null) vm.addFolder(uri)
     }
 
-    val sortedTracks = remember(tracks, sort) {
+    val config = androidx.compose.ui.platform.LocalConfiguration.current
+    val compactTools = config.screenWidthDp / config.fontScale < 350f
+    val sortedTracks = remember(collection, sort) {
         when (sort) {
-            "title" -> tracks.sortedBy { it.title.lowercase() }
-            "artist" -> tracks.sortedBy { it.artist.lowercase() }
-            else -> tracks
+            "title" -> collection.sortedBy { it.title.lowercase() }
+            "artist" -> collection.sortedBy { it.artist.lowercase() }
+            else -> collection
         }
     }
     val sortLabel = when (sort) {
@@ -113,8 +118,10 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                     contentPadding = PaddingValues(horizontal = 7.dp, vertical = 10.dp),
                     onClick = { filePicker.launch(arrayOf("audio/*", "application/ogg", "application/octet-stream")) }
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
+                    if (!compactTools) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                    }
                     Text("Файлы", maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
                 }
                 FilledTonalButton(
@@ -122,8 +129,10 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                     contentPadding = PaddingValues(horizontal = 7.dp, vertical = 10.dp),
                     onClick = { folderPicker.launch(null) }
                 ) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
+                    if (!compactTools) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                    }
                     Text("Папка", maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
                 }
                 FilledTonalButton(
@@ -131,8 +140,10 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                     contentPadding = PaddingValues(horizontal = 7.dp, vertical = 10.dp),
                     onClick = { vm.refreshLibrary() }
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
+                    if (!compactTools) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                    }
                     Text("Скан", maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
                 }
             }
@@ -144,7 +155,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("Треки", "Избранное", "Плейлисты", "История").forEachIndexed { index, label ->
+            listOf("Треки", "Избранное", "Плейлисты", "История", "Каталоги", "Офлайн", "Исполнители").forEachIndexed { index, label ->
                 FilterChip(
                     selected = tab == index,
                     onClick = { tab = index },
@@ -154,15 +165,47 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
         }
 
         when (tab) {
+            6 -> LazyColumn {
+                val artists = collection.distinctBy { it.source to (it.artistId ?: it.artist.trim().lowercase()) }.sortedBy { it.artist.lowercase() }
+                items(artists) { t -> TextButton(onClick = { vm.openArtist(t) }) { Text(t.artist + if (t.source == "soundcloud") " · SoundCloud" else " · На устройстве") } }
+            }
+            5 -> {
+                val transfers by vm.offlineTransfers.collectAsStateWithLifecycle()
+                val copies = tracks.filter { it.downloadedPath != null }
+                Text(android.text.format.Formatter.formatFileSize(androidx.compose.ui.platform.LocalContext.current,
+                    copies.sumOf { java.io.File(it.downloadedPath!!).length() }), Modifier.padding(16.dp))
+                transfers.forEach { (id, transfer) ->
+                    Text("${tracks.find { it.id == id }?.title.orEmpty()} · ${transfer.bytes / 1024} КБ")
+                    if (transfer.total > 0) LinearProgressIndicator(progress = { transfer.bytes.toFloat() / transfer.total })
+                    else LinearProgressIndicator()
+                    TextButton(onClick = { tracks.find { it.id == id }?.let(vm::cancelOffline) }) { Text("Отменить") }
+                }
+                if (copies.isEmpty() && transfers.isEmpty()) EmptyHint("Выбери «Сохранить офлайн» в меню локального трека.")
+                else TrackList(vm, copies, current.mediaId) { pending = it }
+            }
+            4 -> {
+                if (catalogPages.isEmpty()) EmptyHint("Здесь появятся закладки из предыдущей версии.")
+                else LazyColumn {
+                    items(catalogPages.entries.sortedBy { it.value.lowercase() }, key = { it.key }) { entry ->
+                        Column(Modifier.fillMaxWidth().clickable {
+                            catalogUrl = entry.key
+                        }.padding(16.dp)) {
+                            Text(entry.value)
+                            Text(if (android.net.Uri.parse(entry.key).host == "open.spotify.com") "Spotify" else "YouTube Music",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
             0 -> {
-                if (tracks.isEmpty()) {
+                if (collection.isEmpty()) {
                     EmptyHint("Пока пусто. Нажмите «Файлы» или «Папка», чтобы добавить музыку с устройства.")
                 } else {
                     Box(modifier = Modifier.padding(start = 8.dp)) {
                         TextButton(onClick = { sortMenu = true }) {
                             Icon(Icons.Default.Sort, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
-                            Text("${tracks.size} · $sortLabel")
+                            Text("${collection.size} · $sortLabel")
                         }
                         DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
                             listOf("added" to "Недавно добавленные", "title" to "По названию", "artist" to "По исполнителю").forEach { (key, label) ->
@@ -177,27 +220,16 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                 }
             }
             1 -> {
-                if (favorites.isEmpty() && cloudFavorites.isEmpty()) {
+                if (favorites.isEmpty()) {
                     EmptyHint("Нажимай на сердечко у локальных треков или SoundCloud, чтобы сохранить их здесь.")
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                        items(favorites, key = { "local-${it.id}" }) { track ->
+                        items(favorites, key = { "${it.source}-${it.id}" }) { track ->
                             TrackRow(
                                 track = track,
                                 isCurrent = current.mediaId == track.id.toString(),
                                 menuItems = trackMenu(vm, track) { pending = it },
                                 onClick = { vm.player.playTracks(listOf(track), 0) }
-                            )
-                        }
-                        items(cloudFavorites, key = { "sc-${it.trackId}" }) { track ->
-                            val model = SoundCloudTrack(track.trackId, track.title, track.artist, track.durationMs, track.artworkUrl, track.permalinkUrl)
-                            SoundCloudTrackRow(
-                                track = model,
-                                isCurrent = current.mediaId == "soundcloud:${track.trackId}",
-                                isFavorite = true,
-                                onPlay = { vm.playSoundCloudFavorite(track) },
-                                onFavorite = { vm.toggleSoundCloudFavorite(model) },
-                                onEnqueue = { vm.enqueueSoundCloudFavorite(track) }
                             )
                         }
                     }
@@ -225,26 +257,19 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                 }
             }
             else -> {
-                if (recent.isEmpty() && cloudRecent.isEmpty()) {
+                if (recent.isEmpty()) {
                     EmptyHint("История пуста. Здесь появятся треки, которые ты слушал.")
                 } else {
                     TextButton(onClick = { vm.clearHistory() }, modifier = Modifier.padding(start = 8.dp)) {
                         Text("Очистить историю")
                     }
                     LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                        items(recent, key = { "local-history-${it.id}" }) { track ->
+                        items(recent, key = { "${it.source}-history-${it.id}" }) { track ->
                             TrackRow(
                                 track = track,
                                 isCurrent = current.mediaId == track.id.toString(),
                                 menuItems = trackMenu(vm, track) { pending = it },
                                 onClick = { vm.player.playTracks(listOf(track), 0) }
-                            )
-                        }
-                        items(cloudRecent, key = { "sc-history-${it.id}" }) { item ->
-                            SoundCloudHistoryRow(
-                                item = item,
-                                isCurrent = current.mediaId == "soundcloud:${item.trackId}",
-                                onClick = { vm.playSoundCloudHistory(item) }
                             )
                         }
                     }

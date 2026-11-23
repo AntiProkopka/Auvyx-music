@@ -32,25 +32,42 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
 import com.nexus.music.data.db.TrackEntity
+import com.nexus.music.data.soundcloud.SoundCloudTrack
+import com.nexus.music.ui.components.AddSoundCloudToPlaylistDialog
 import com.nexus.music.ui.components.AddToPlaylistDialog
 import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.SoundCloudTrackRow
 import com.nexus.music.ui.components.TrackRow
 import com.nexus.music.ui.components.trackMenu
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import com.nexus.music.data.catalog.CatalogKind
+import com.nexus.music.data.catalog.CatalogEntry
+import com.nexus.music.data.catalog.YouTubeMusicCatalog
+import com.nexus.music.ui.components.RemoteArtworkImage
 
 @Composable
 fun SearchScreen(vm: AppViewModel) {
     var source by rememberSaveable { mutableStateOf("all") }
     var query by rememberSaveable { mutableStateOf("") }
 
+    val showYoutube = source == "all" || source == "youtube"
+    val spotifySession = remember { SpotifySession() }
     val localResults by vm.searchResults.collectAsStateWithLifecycle()
     val cloudResults by vm.soundCloudResults.collectAsStateWithLifecycle()
     val cloudLoading by vm.soundCloudLoading.collectAsStateWithLifecycle()
     val cloudError by vm.soundCloudError.collectAsStateWithLifecycle()
-    val cloudFavorites by vm.soundCloudFavorites.collectAsStateWithLifecycle()
+    val favorites by vm.favorites.collectAsStateWithLifecycle()
+    val knownTracks by vm.knownTracks.collectAsStateWithLifecycle()
     val current by vm.player.state.collectAsStateWithLifecycle()
     var pending by remember { mutableStateOf<TrackEntity?>(null) }
+    var pendingSoundCloud by remember { mutableStateOf<SoundCloudTrack?>(null) }
 
     val showLocal = source == "all" || source == "local"
     val showSoundCloud = source == "all" || source == "soundcloud"
@@ -71,11 +88,13 @@ fun SearchScreen(vm: AppViewModel) {
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilterChip(selected = source == "all", onClick = { source = "all" }, label = { Text("Все") })
             FilterChip(selected = source == "local", onClick = { source = "local" }, label = { Text("На устройстве") })
+            FilterChip(selected = source == "spotify", onClick = { source = "spotify" }, label = { Text("Spotify") })
+            FilterChip(selected = source == "youtube", onClick = { source = "youtube" }, label = { Text("YouTube Music") })
             FilterChip(selected = source == "soundcloud", onClick = { source = "soundcloud" }, label = { Text("SoundCloud") })
         }
 
@@ -97,7 +116,15 @@ fun SearchScreen(vm: AppViewModel) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
         )
 
+        if (source == "spotify") {
+            SpotifyScreen(spotifySession, query) { source = "all" }
+            return@Column
+        }
+        val youtube = catalogResults(query, showYoutube)
         LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            if (query.isNotBlank()) {
+                if (showYoutube) catalogRows(youtube, source == "all")
+            }
             if (query.isBlank()) {
                 item { EmptyHint("Введи запрос. Поиск одновременно проверит выбранные каталоги.") }
             } else {
@@ -157,12 +184,19 @@ fun SearchScreen(vm: AppViewModel) {
                         itemsIndexed(cloudResults, key = { _, track -> "soundcloud-${track.id}" }) { index, track ->
                             SoundCloudTrackRow(
                                 track = track,
-                                isCurrent = current.mediaId == "soundcloud:${track.id}",
-                                isFavorite = cloudFavorites.any { it.trackId == track.id },
+                                isCurrent = knownTracks.any {
+                                    it.source == "soundcloud" && it.sourceId == track.id.toString() &&
+                                        current.mediaId == it.id.toString()
+                                },
+                                isFavorite = favorites.any {
+                                    it.source == "soundcloud" && it.sourceId == track.id.toString()
+                                },
                                 onPlay = { vm.playSoundCloud(cloudResults, index) },
                                 onFavorite = { vm.toggleSoundCloudFavorite(track) },
                                 onEnqueue = { vm.enqueueSoundCloud(track) },
-                                onPlayNext = { vm.playNextSoundCloud(track) }
+                                onArtist = { vm.openArtist(track) },
+                                onPlayNext = { vm.playNextSoundCloud(track) },
+                                onAddToPlaylist = { pendingSoundCloud = track }
                             )
                         }
                     }
@@ -172,4 +206,7 @@ fun SearchScreen(vm: AppViewModel) {
     }
 
     pending?.let { track -> AddToPlaylistDialog(vm, track) { pending = null } }
+    pendingSoundCloud?.let { track ->
+        AddSoundCloudToPlaylistDialog(vm, track) { pendingSoundCloud = null }
+    }
 }

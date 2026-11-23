@@ -32,7 +32,6 @@ import com.nexus.music.AppViewModel
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.ui.components.AddToPlaylistDialog
 import com.nexus.music.ui.components.SectionTitle
-import com.nexus.music.ui.components.SoundCloudHistoryRow
 import com.nexus.music.ui.components.TrackRow
 import com.nexus.music.ui.components.trackMenu
 import java.util.Calendar
@@ -41,7 +40,6 @@ import java.util.Calendar
 fun HomeScreen(vm: AppViewModel) {
     val tracks by vm.tracks.collectAsStateWithLifecycle()
     val recent by vm.recent.collectAsStateWithLifecycle()
-    val cloudRecent by vm.soundCloudRecent.collectAsStateWithLifecycle()
     val current by vm.player.state.collectAsStateWithLifecycle()
     var pending by remember { mutableStateOf<TrackEntity?>(null) }
 
@@ -92,7 +90,7 @@ fun HomeScreen(vm: AppViewModel) {
             }
         }
 
-        if (recent.isNotEmpty() || cloudRecent.isNotEmpty()) {
+        if (recent.isNotEmpty()) {
             item { SectionTitle("Недавно прослушанное") }
             itemsIndexed(recent.take(8), key = { _, track -> "local-history-${track.id}" }) { _, track ->
                 TrackRow(
@@ -101,11 +99,6 @@ fun HomeScreen(vm: AppViewModel) {
                     menuItems = trackMenu(vm, track) { pending = it },
                     onClick = { vm.player.playTracks(listOf(track), 0) }
                 )
-            }
-            items(cloudRecent.take(8), key = { "sc-history-${it.id}" }) { item ->
-                SoundCloudHistoryRow(item, current.mediaId == "soundcloud:${item.trackId}") {
-                    vm.playSoundCloudHistory(item)
-                }
             }
         }
 

@@ -104,6 +104,8 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
                         isCurrent = current.mediaId == track.id.toString(),
                         menuItems = listOf(
                             MenuAction(if (track.isFavorite) "Убрать из избранного" else "В избранное") { vm.toggleFavorite(track) },
+                            MenuAction("Играть следующим") { vm.player.playNext(track) },
+                            MenuAction("В конец очереди") { vm.player.enqueue(track) },
                             MenuAction("Убрать из плейлиста") { vm.removeFromPlaylist(playlistId, track.id) }
                         ),
                         onClick = { vm.player.playTracks(tracks, index) }

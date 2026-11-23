@@ -1,5 +1,8 @@
 package com.nexus.music.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,6 +44,12 @@ fun SettingsScreen(vm: AppViewModel) {
     val folders by vm.folders.collectAsStateWithLifecycle()
     val tracks by vm.tracks.collectAsStateWithLifecycle()
     val nickname by vm.nickname.collectAsStateWithLifecycle()
+    val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importLibrary(uri)
+    }
+    val backupPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) vm.exportLibrary(uri)
+    }
     var editingNickname by remember { mutableStateOf(false) }
 
     Column(
@@ -63,7 +72,7 @@ fun SettingsScreen(vm: AppViewModel) {
             Column {
                 ListItem(
                     headlineContent = { Text("Профиль плеера") },
-                    supportingContent = { Text("${nickname ?: "Имя не задано"} · используется в названии встроенного динамика") },
+                    supportingContent = { Text("${nickname?.ifBlank { "Имя не задано" } ?: "Имя не задано"} · используется в названии встроенного динамика") },
                     leadingContent = { Icon(Icons.Default.Storage, contentDescription = null) }
                 )
                 OutlinedButton(onClick = { editingNickname = true }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -80,9 +89,16 @@ fun SettingsScreen(vm: AppViewModel) {
             Column {
                 ListItem(
                     headlineContent = { Text("Оформление") },
-                    supportingContent = { Text("Material 3") },
+
                     leadingContent = { Icon(Icons.Default.Palette, contentDescription = null) }
                 )
+                val style by vm.visualStyle.collectAsStateWithLifecycle()
+                listOf("material" to "Material 3", "hyper" to "HyperOS", "glass" to "Liquid Glass", "lane" to "Studio · LANE").forEach { (id, name) ->
+                    Row(Modifier.fillMaxWidth().selectable(selected = style == id, onClick = { vm.setStyle(id) }).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = style == id, onClick = null)
+                        Text(name)
+                    }
+                }
                 listOf("system" to "Как в системе", "light" to "Светлая", "dark" to "Тёмная").forEach { (key, label) ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
@@ -95,6 +111,13 @@ fun SettingsScreen(vm: AppViewModel) {
             }
         }
 
+        val fade by vm.crossfade.collectAsStateWithLifecycle()
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("Кроссфейд · " + if (fade == 0) "выключен" else "$fade с")
+            androidx.compose.material3.Slider(value = fade.toFloat(), onValueChange = { vm.setCrossfade(kotlin.math.round(it).toInt()) },
+                valueRange = 0f..12f, steps = 11)
+            Text("Автоматический переход между локальными треками", style = MaterialTheme.typography.bodySmall)
+        }
         AppIconSettingsSection()
 
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
@@ -114,6 +137,12 @@ fun SettingsScreen(vm: AppViewModel) {
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Данные", style = MaterialTheme.typography.titleMedium)
+                OutlinedButton(onClick = { backupPicker.launch("auvyx-backup.json") }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Экспорт медиатеки и настроек")
+                }
+                OutlinedButton(onClick = { restorePicker.launch(arrayOf("application/json", "text/*", "application/octet-stream")) }) {
+                    Text("Объединить с резервной копией")
+                }
                 Text("История хранит локальные треки и прослушивания SoundCloud.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = { vm.clearHistory() }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.DeleteSweep, contentDescription = null)

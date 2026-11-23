@@ -70,9 +70,12 @@ fun TrackRow(
     onClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val style = com.nexus.music.ui.theme.LocalStyle.current
+    val shape = RoundedCornerShape(when (style) { "hyper" -> 20.dp; "glass" -> 28.dp; "lane" -> 4.dp; else -> 0.dp })
     ListItem(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = if (style in listOf("hyper","glass")) 10.dp else 0.dp,
+            vertical = if (style in listOf("hyper","glass")) 3.dp else 0.dp).clip(shape).clickable(onClick = onClick),
+        colors = ListItemDefaults.colors(containerColor = if (style in listOf("hyper","glass")) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface),
         leadingContent = {
             Box(
                 modifier = Modifier
@@ -81,12 +84,22 @@ fun TrackRow(
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center
             ) {
-                if (track.artworkUri != null) {
-                    ArtworkImage(
-                        artworkUri = track.artworkUri,
-                        contentDescription = "Обложка ${track.title}",
-                        modifier = Modifier.size(52.dp)
-                    )
+                if (!track.artworkUri.isNullOrBlank()) {
+                    if (track.artworkUri.startsWith("https://", ignoreCase = true) ||
+                        track.artworkUri.startsWith("http://", ignoreCase = true)
+                    ) {
+                        RemoteArtworkImage(
+                            imageUrl = track.artworkUri,
+                            contentDescription = "Обложка ${track.title}",
+                            modifier = Modifier.size(52.dp)
+                        )
+                    } else {
+                        ArtworkImage(
+                            artworkUri = track.artworkUri,
+                            contentDescription = "Обложка ${track.title}",
+                            modifier = Modifier.size(52.dp)
+                        )
+                    }
                 } else {
                     Icon(
                         imageVector = if (isCurrent) Icons.Default.GraphicEq else Icons.Default.MusicNote,
@@ -94,6 +107,7 @@ fun TrackRow(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Box(Modifier.align(Alignment.BottomEnd)) { PlatformArtworkBadge(track.source) }
             }
         },
         headlineContent = {

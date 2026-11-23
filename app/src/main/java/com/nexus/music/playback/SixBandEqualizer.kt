@@ -23,6 +23,8 @@ class SixBandEqualizer {
 
     val audioProcessor: AudioProcessor = EqualizerProcessor(this)
 
+    fun newProcessor(): AudioProcessor = EqualizerProcessor(this)
+
     fun setEnabled(value: Boolean) {
         enabled = value
     }
@@ -103,6 +105,11 @@ private class EqualizerProcessor(
         val bytesPerSample = if (encoding == C.ENCODING_PCM_FLOAT) 4 else 2
         val input = inputBuffer.order(ByteOrder.nativeOrder())
         val output = replaceOutputBuffer(input.remaining()).order(ByteOrder.nativeOrder())
+        if (!equalizer.enabled) {
+            output.put(input)
+            output.flip()
+            return
+        }
         val filters = equalizer.coefficients(sampleRate)
         var sampleIndex = 0
 

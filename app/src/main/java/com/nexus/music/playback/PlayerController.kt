@@ -16,7 +16,6 @@ import androidx.media3.session.SessionToken
 import com.nexus.music.data.db.HistoryEntity
 import com.nexus.music.data.db.NexusDatabase
 import com.nexus.music.data.db.QueueEntity
-import com.nexus.music.data.db.SoundCloudHistoryEntity
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.data.settings.SettingsStore
 import com.nexus.music.data.soundcloud.SoundCloudTrack
@@ -41,7 +40,9 @@ data class PlayerState(
     val album: String = "",
     val artworkUri: String? = null,
     val sourceUri: String? = null,
+    val audioProvider: String? = null,
     val isPlaying: Boolean = false,
+    val canSeek: Boolean = false,
     val durationMs: Long = 0L,
     val shuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
@@ -74,10 +75,15 @@ class PlayerController(
     private val pendingActions = mutableListOf<(MediaController) -> Unit>()
 
     private val listener = object : Player.Listener {
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            lastLoggedId = null
+        }
+
         override fun onEvents(player: Player, events: Player.Events) {
             if (events.contains(Player.EVENT_TIMELINE_CHANGED)) {
                 rebuildQueue()
                 persistQueue()
+                savePlaybackPosition()
             }
             refreshState()
             if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
@@ -91,7 +97,7 @@ class PlayerController(
 
         override fun onPlayerError(error: PlaybackException) {
             Log.e(TAG, "Ошибка воспроизведения", error)
-            _errors.tryEmit("Не удалось воспроизвести этот трек. Возможно, SoundCloud ограничил доступ к потоку.")
+            _errors.tryEmit("Не удалось воспроизвести трек: ${error.cause?.message ?: error.errorCodeName}")
         }
     }
 
@@ -112,13 +118,13 @@ class PlayerController(
                     .buildAsync()
                     .await()
                 controller = connected
-                connected.addListener(listener)
                 connected.shuffleModeEnabled = settings.shuffle.first()
                 connected.repeatMode = settings.repeatMode.first()
                 val speed = settings.speed.first().coerceIn(0.5f, 2f)
                 val pitch = settings.pitch.first().coerceIn(0.5f, 2f)
                 connected.setPlaybackParameters(PlaybackParameters(speed, pitch))
                 restoreQueue(connected)
+                connected.addListener(listener)
                 rebuildQueue()
                 refreshState()
                 val waiting = pendingActions.toList()
@@ -136,7 +142,7 @@ class PlayerController(
 
     private fun withController(action: (MediaController) -> Unit) {
         val current = controller
-        if (current != null) action(current) else {
+        if (current != null && !connecting) action(current) else {
             pendingActions += action
             connect()
         }
@@ -159,59 +165,6 @@ class PlayerController(
         }
     }
 
-    // SoundCloud playback
-    fun playSoundCloudTracks(tracks: List<SoundCloudTrack>, startIndex: Int) {
-        if (tracks.isEmpty()) return
-        withController { c ->
-            val index = startIndex.coerceIn(0, tracks.lastIndex)
-            lastLoggedId = null
-            c.setMediaItems(tracks.map(::toSoundCloudMediaItem), index, 0L)
-            c.prepare()
-            c.play()
-        }
-    }
-
-    fun enqueueSoundCloudTrack(track: SoundCloudTrack) = withController { c ->
-        val wasEmpty = c.mediaItemCount == 0
-        c.addMediaItem(toSoundCloudMediaItem(track))
-        if (wasEmpty) {
-            c.prepare()
-            c.play()
-        }
-    }
-
-    fun playNextSoundCloudTrack(track: SoundCloudTrack) = withController { c ->
-        val item = toSoundCloudMediaItem(track)
-        if (c.mediaItemCount == 0) {
-            c.setMediaItem(item)
-            c.prepare()
-            c.play()
-        } else {
-            val insertAt = (c.currentMediaItemIndex + 1).coerceIn(0, c.mediaItemCount)
-            c.addMediaItem(insertAt, item)
-        }
-    }
-
-    private fun toSoundCloudMediaItem(track: SoundCloudTrack): MediaItem {
-        val streamUri = Uri.Builder()
-            .scheme("auvyx-sc")
-            .authority("track")
-            .appendQueryParameter("url", track.permalinkUrl)
-            .build()
-        val metadata = MediaMetadata.Builder()
-            .setTitle(track.title)
-            .setArtist(track.artist)
-            .setAlbumTitle("SoundCloud")
-            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-        track.artworkUrl?.let { metadata.setArtworkUri(Uri.parse(it)) }
-        return MediaItem.Builder()
-            .setMediaId("soundcloud:${track.id}")
-            .setUri(streamUri)
-            .setMimeType(MimeTypes.APPLICATION_M3U8)
-            .setMediaMetadata(metadata.build())
-            .build()
-    }
-
     // Transport controls
     fun playQueueIndex(index: Int) = withController { c ->
         if (index in 0 until c.mediaItemCount) {
@@ -219,6 +172,14 @@ class PlayerController(
             c.seekToDefaultPosition(index)
             c.play()
         }
+    }
+
+    fun pause() = withController { it.pause() }
+
+    fun stop() = withController { player ->
+        savePlaybackPosition()
+        player.pause()
+        player.stop()
     }
 
     fun togglePlayPause() = withController { c ->
@@ -295,6 +256,12 @@ class PlayerController(
         }
     }
 
+    fun moveQueueItem(from: Int, to: Int) = withController { controller ->
+        if (from != to && from in 0 until controller.mediaItemCount && to in 0 until controller.mediaItemCount) {
+            controller.moveMediaItem(from, to)
+        }
+    }
+
     fun removeFromQueue(index: Int) = withController { c ->
         if (index in 0 until c.mediaItemCount) c.removeMediaItem(index)
     }
@@ -312,19 +279,44 @@ class PlayerController(
             .setTitle(track.title)
             .setArtist(track.artist)
             .setAlbumTitle(track.album)
+            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
         track.artworkUri?.let { metadata.setArtworkUri(Uri.parse(it)) }
-        return MediaItem.Builder()
+
+        val mediaUri = if (track.source in setOf("spotify", "youtube")) {
+            val scheme = if (track.source == "spotify") "auvyx-spotify" else "auvyx-yt"
+            Uri.Builder().scheme(scheme).authority("track").appendPath(track.sourceId)
+                .appendQueryParameter("duration", (if (track.source == "spotify" && track.uri.startsWith("https:")) 0L else track.durationMs).toString()).build()
+        } else if (track.source == "soundcloud") {
+            Uri.Builder()
+                .scheme("auvyx-sc")
+                .authority("track")
+                .appendQueryParameter("url", track.sourceUrl ?: track.uri)
+                .build()
+        } else {
+            Uri.parse(track.uri)
+        }
+
+        val builder = MediaItem.Builder()
             .setMediaId(track.id.toString())
-            .setUri(track.uri)
+            .setUri(mediaUri)
             .setMediaMetadata(metadata.build())
-            .build()
+        if (track.source == "soundcloud") {
+            builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+        }
+        return builder.build()
+    }
+
+    fun loadImportedQueue() = withController { c ->
+        scope.launch {
+            if (c.mediaItemCount == 0) restoreQueue(c)
+        }
     }
 
     private suspend fun restoreQueue(c: MediaController) {
         if (c.mediaItemCount > 0) return
         val saved = db.queueDao().getAll()
         if (saved.isEmpty()) return
-        val byId = db.trackDao().getByIds(saved.map { it.trackId }).associateBy { it.id }
+        val byId = saved.map { it.trackId }.distinct().chunked(500).flatMap { db.trackDao().getByIds(it) }.associateBy { it.id }
         val ordered = saved.mapNotNull { byId[it.trackId] }
         if (ordered.isEmpty()) {
             db.queueDao().clear()
@@ -334,6 +326,7 @@ class PlayerController(
         val position = settings.queuePosition.first().coerceAtLeast(0L)
         c.shuffleModeEnabled = settings.shuffle.first()
         c.repeatMode = settings.repeatMode.first()
+        if (c.mediaItemCount != 0) return
         c.setMediaItems(ordered.map(::toMediaItem), index, position)
         c.prepare()
         if (ordered.size != saved.size) {
@@ -375,8 +368,10 @@ class PlayerController(
             artist = item?.mediaMetadata?.artist?.toString() ?: "",
             album = item?.mediaMetadata?.albumTitle?.toString() ?: "",
             artworkUri = item?.mediaMetadata?.artworkUri?.toString(),
+            audioProvider = item?.mediaMetadata?.subtitle?.toString(),
             sourceUri = item?.localConfiguration?.uri?.toString(),
             isPlaying = c.isPlaying,
+            canSeek = c.playbackState == Player.STATE_READY && c.isCurrentMediaItemSeekable && c.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM),
             durationMs = if (duration == C.TIME_UNSET) 0L else duration.coerceAtLeast(0L),
             shuffle = c.shuffleModeEnabled,
             repeatMode = c.repeatMode,
@@ -394,28 +389,6 @@ class PlayerController(
         val id = item.mediaId
         if (id == lastLoggedId) return
         lastLoggedId = id
-        val metadata = item.mediaMetadata
-        val duration = c.duration.takeIf { it != C.TIME_UNSET }?.coerceAtLeast(0L) ?: 0L
-        if (id.startsWith("soundcloud:")) {
-            val trackId = id.substringAfter(':').toLongOrNull() ?: return
-            val permalink = item.localConfiguration?.uri?.getQueryParameter("url") ?: return
-            scope.launch {
-                runCatching {
-                    db.soundCloudHistoryDao().insert(
-                        SoundCloudHistoryEntity(
-                            trackId = trackId,
-                            title = metadata.title?.toString().orEmpty().ifBlank { "Без названия" },
-                            artist = metadata.artist?.toString().orEmpty().ifBlank { "SoundCloud" },
-                            durationMs = duration,
-                            artworkUrl = metadata.artworkUri?.toString(),
-                            permalinkUrl = permalink,
-                            playedAt = System.currentTimeMillis()
-                        )
-                    )
-                }.onFailure { Log.w(TAG, "Не удалось записать историю SoundCloud", it) }
-            }
-            return
-        }
         val trackId = id.toLongOrNull() ?: return
         scope.launch {
             runCatching {
@@ -441,8 +414,8 @@ class PlayerController(
             while (isActive) {
                 delay(500)
                 val c = controller
+                if (c != null) _position.value = c.currentPosition.coerceAtLeast(0L)
                 if (c != null && c.isPlaying) {
-                    _position.value = c.currentPosition.coerceAtLeast(0L)
                     tick++
                     // A fallback guard for OEM/player event ordering: write the current
                     // track once after playback really starts, even if an event was missed.

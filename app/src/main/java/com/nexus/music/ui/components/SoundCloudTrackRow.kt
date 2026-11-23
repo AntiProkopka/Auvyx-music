@@ -39,21 +39,31 @@ fun SoundCloudTrackRow(
     onPlay: () -> Unit,
     onFavorite: () -> Unit,
     onEnqueue: () -> Unit,
-    onPlayNext: (() -> Unit)? = null
+    onPlayNext: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,
+    onArtist: (() -> Unit)? = null
 ) {
-    var menuExpanded by remember(track.id) { mutableStateOf(false) }
+    CatalogResultRow(track.title, if (track.full) track.artist else "Полная версия недоступна · ${track.artist}", track.durationMs, track.artworkUrl, "soundcloud",
+        isCurrent, isFavorite, onPlay, onFavorite, onEnqueue, onPlayNext, onAddToPlaylist, onArtist = onArtist)
+}
+
+@Composable
+fun CatalogResultRow(title: String, artist: String, durationMs: Long, artwork: String?, platform: String,
+    isCurrent: Boolean, isFavorite: Boolean, onPlay: () -> Unit, onFavorite: () -> Unit, onEnqueue: () -> Unit,
+    onPlayNext: (() -> Unit)?, onAddToPlaylist: (() -> Unit)?, onOpenSpotify: (() -> Unit)? = null, onArtist: (() -> Unit)? = null) {
+    var menuExpanded by remember(title, artist) { mutableStateOf(false) }
     ListItem(
         modifier = Modifier.clickable(onClick = onPlay),
         leadingContent = {
-            if (!track.artworkUrl.isNullOrBlank()) {
+            if (!artwork.isNullOrBlank()) {
                 Box(modifier = Modifier.size(56.dp)) {
                     RemoteArtworkImage(
-                        imageUrl = track.artworkUrl,
-                        contentDescription = "Обложка ${track.title}",
+                        imageUrl = artwork,
+                        contentDescription = "Обложка $title",
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
                     )
                     Box(modifier = Modifier.align(Alignment.BottomEnd)) {
-                        PlatformArtworkBadge(platform = "soundcloud")
+                        PlatformArtworkBadge(platform = platform)
                     }
                 }
             } else {
@@ -62,7 +72,7 @@ fun SoundCloudTrackRow(
         },
         headlineContent = {
             Text(
-                track.title,
+                title,
                 maxLines = 1,
                 style = MaterialTheme.typography.titleSmall,
                 color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -70,7 +80,7 @@ fun SoundCloudTrackRow(
         },
         supportingContent = {
             Text(
-                "${track.artist} · ${formatTime(track.durationMs)}",
+                "$artist · ${formatTime(durationMs)}",
                 maxLines = 1,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -93,6 +103,16 @@ fun SoundCloudTrackRow(
                         Icon(Icons.Default.MoreVert, contentDescription = "Меню трека")
                     }
                     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                        onArtist?.let { DropdownMenuItem(text = { Text("Исполнитель") }, onClick = { menuExpanded = false; it() }) }
+                        onOpenSpotify?.let { action ->
+                            DropdownMenuItem(
+                                text = { Text("Открыть в Spotify") },
+                                onClick = {
+                                    menuExpanded = false
+                                    action()
+                                }
+                            )
+                        }
                         onPlayNext?.let { action ->
                             DropdownMenuItem(
                                 text = { Text("Играть следующим") },
@@ -103,6 +123,12 @@ fun SoundCloudTrackRow(
                             text = { Text("В конец очереди") },
                             onClick = { menuExpanded = false; onEnqueue() }
                         )
+                        onAddToPlaylist?.let { action ->
+                            DropdownMenuItem(
+                                text = { Text("В плейлист…") },
+                                onClick = { menuExpanded = false; action() }
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text(if (isFavorite) "Убрать из избранного" else "В избранное") },
                             onClick = { menuExpanded = false; onFavorite() }
