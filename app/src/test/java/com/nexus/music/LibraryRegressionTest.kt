@@ -203,11 +203,11 @@ class LibraryRegressionTest {
 
     @Test fun discoveredLyricsDoNotReplaceAnImport() = runBlocking {
         val settings = SettingsStore(context)
-        settings.saveLyrics("1", "Imported lyrics")
-        settings.saveLyricsIfMissing("1", "Discovered lyrics")
-        settings.saveLyricsIfMissing("2", "[00:01.20]Discovered lyrics")
-        assertEquals("Imported lyrics", settings.lyrics("1").first())
-        assertEquals("[00:01.20]Discovered lyrics", settings.lyrics("2").first())
+        settings.saveLyrics("2000000001", "Imported lyrics")
+        settings.saveLyricsIfMissing("2000000001", "Discovered lyrics")
+        settings.saveLyricsIfMissing("2000000002", "[00:01.20]Discovered lyrics")
+        assertEquals("Imported lyrics", settings.lyrics("2000000001").first())
+        assertEquals("[00:01.20]Discovered lyrics", settings.lyrics("2000000002").first())
     }
 
     @Test fun albumMembershipUsesOnlyRealLocalMetadata() {

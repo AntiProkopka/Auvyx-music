@@ -34,8 +34,8 @@ fun AlbumScreen(vm: AppViewModel, album: AppViewModel.AlbumTarget) {
                 runCatching {
                     MediaMetadataRetriever().use { retriever ->
                         val original = Uri.parse(track.uri)
-                        val copy = OfflineAudio.file(context, track.uri)
-                        if (copy.isFile) retriever.setDataSource(copy.absolutePath)
+                        val copy = OfflineAudio.existingFile(context, track.uri)
+                        if (copy != null) retriever.setDataSource(copy.absolutePath)
                         else retriever.setDataSource(context, original)
                         val year = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
                         val date = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)

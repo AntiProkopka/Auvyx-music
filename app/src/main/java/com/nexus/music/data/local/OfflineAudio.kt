@@ -22,11 +22,9 @@ class OfflineAudio(private val context: Context, private val dao: TrackDao, priv
     private val recovery = scope.async(Dispatchers.IO) {
         val directory = File(context.filesDir, "offline")
         directory.listFiles { f -> f.name.endsWith(".part") }?.forEach { it.delete() }
-        if (directory.exists()) {
-            dao.getAll().filter { it.source == "local" }.forEach { track ->
-                val actual = file(context, track.uri).takeIf { it.isFile && it.length() > 0 }?.absolutePath
-                if (actual != track.downloadedPath) dao.setDownloaded(track.id, actual)
-            }
+        dao.getAll().filter { it.source == "local" }.forEach { track ->
+            val actual = existingFile(context, track.uri)?.absolutePath
+            if (actual != track.downloadedPath) dao.setDownloadedForUri(track.id, track.uri, actual)
         }
     }
 
@@ -117,6 +115,8 @@ class OfflineAudio(private val context: Context, private val dao: TrackDao, priv
 
     companion object {
         fun canSave(track: TrackEntity) = track.source == "local" && Uri.parse(track.uri).scheme == "content"
+
+        fun existingFile(context: Context, uri: String) = file(context, uri).takeIf { it.isFile && it.length() > 0 }
 
         fun file(context: Context, uri: String) =
             File(context.filesDir, "offline/" + UUID.nameUUIDFromBytes(uri.toByteArray(Charsets.UTF_8)))

@@ -1,6 +1,7 @@
 package com.nexus.music.playback
 
 import android.net.Uri
+import com.nexus.music.data.soundcloud.SoundCloudRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -11,6 +12,13 @@ import kotlin.math.abs
 
 /** Public catalogue lookup. No audio URLs or service access tokens are involved. */
 object LyricsRepository {
+    suspend fun findForTrack(title: String, artist: String, durationMs: Long, soundCloudPermalink: String?): String? {
+        val lyrics = find(title, artist, durationMs)
+        if (lyrics != null || soundCloudPermalink == null) return lyrics
+        val credited = SoundCloudRepository.creditedArtist(soundCloudPermalink)
+        return if (credited == null || credited.equals(artist, ignoreCase = true)) null else find(title, credited, durationMs)
+    }
+
     suspend fun find(title: String, artist: String, durationMs: Long): String? = withContext(Dispatchers.IO) {
         if (title.isBlank() || artist.isBlank()) return@withContext null
         val address = Uri.Builder()

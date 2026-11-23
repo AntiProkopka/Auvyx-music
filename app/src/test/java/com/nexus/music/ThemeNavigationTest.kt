@@ -32,8 +32,7 @@ class ThemeNavigationTest {
     }
     @get:Rule val rules: org.junit.rules.TestRule = org.junit.rules.RuleChain.outerRule(service).around(compose)
 
-    @Test fun stylesKeepLibraryReachable() {
-        val settings = (compose.activity.application as NexusApp).settings
+    private fun dismissNicknamePrompt(settings: com.nexus.music.data.settings.SettingsStore) {
         if (kotlinx.coroutines.runBlocking { settings.nickname.first() } == null) {
             compose.waitUntil(5000) {
                 org.robolectric.shadows.ShadowLooper.idleMainLooper()
@@ -41,6 +40,11 @@ class ThemeNavigationTest {
             }
             compose.onNodeWithText("Пропустить").performClick()
         }
+    }
+
+    @Test fun stylesKeepLibraryReachable() {
+        val settings = (compose.activity.application as NexusApp).settings
+        dismissNicknamePrompt(settings)
         compose.onNodeWithTag("nav-settings").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         compose.onNodeWithContentDescription("По умолчанию").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Неон").performScrollTo().assertIsDisplayed()
@@ -62,6 +66,7 @@ class ThemeNavigationTest {
 
     @Test fun sessionLoadsLocalAudioAndProcessesQueueCommands() {
         val app = compose.activity.application as NexusApp
+        dismissNicknamePrompt(app.settings)
         val tracks = kotlinx.coroutines.runBlocking {
             (1..2).map { n ->
                 val uri = "content://audio-test/$n.wav"
@@ -98,5 +103,19 @@ class ThemeNavigationTest {
         awaitState { controller.state.value.pitch == 1.25f && controller.position.value == 2000L }
         compose.runOnUiThread { controller.moveQueueItem(1,0); controller.toggleShuffle(); controller.cycleRepeat() }
         awaitState { controller.state.value.queue.firstOrNull()?.title == "Audio 2" && controller.state.value.shuffle }
+
+        kotlinx.coroutines.runBlocking {
+            app.settings.saveLyrics(tracks[1].id.toString(), "[00:01.00]First verse\n[00:04.00]Second verse")
+        }
+        compose.onNodeWithTag("mini-player").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        compose.onNodeWithContentDescription("Текст песни").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        awaitState { compose.onAllNodesWithText("First verse").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("First verse").assertIsSelected()
+        compose.runOnUiThread { controller.seekTo(4500L) }
+        awaitState { controller.position.value == 4500L }
+        compose.onNodeWithText("Second verse").assertIsSelected()
+        compose.runOnUiThread { controller.seekTo(2000L) }
+        awaitState { controller.position.value == 2000L }
+        compose.onNodeWithText("First verse").assertIsSelected()
     }
 }

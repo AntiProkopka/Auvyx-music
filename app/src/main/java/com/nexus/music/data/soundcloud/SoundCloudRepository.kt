@@ -56,6 +56,14 @@ object SoundCloudRepository {
         parseTracks(root)
     }
 
+    suspend fun creditedArtist(permalink: String): String? = withContext(Dispatchers.IO) {
+        if (!isTrustedTrackUrl(permalink)) return@withContext null
+        val track = getJson("$API/resolve?url=${encode(permalink)}&client_id=${clientId()}")
+        val publisher = track.optJSONObject("publisher_metadata") ?: return@withContext null
+        if (publisher.isNull("artist")) return@withContext null
+        publisher.optString("artist").trim().takeIf { it.isNotEmpty() }
+    }
+
     data class Artist(val name: String, val avatar: String?, val description: String, val id: Long)
     data class ArtistPage(val tracks: List<SoundCloudTrack>, val next: String?)
 

@@ -99,6 +99,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -507,7 +509,8 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     }
     if (showLyrics && s.mediaId != null) {
         key(s.mediaId) {
-            TrackLyricsSheet(vm, s.mediaId.orEmpty(), s.title, s.artist, s.durationMs, pos) { showLyrics = false }
+            TrackLyricsSheet(vm, s.mediaId.orEmpty(), s.title, s.artist, s.durationMs, pos,
+                track?.takeIf { it.source == "soundcloud" }?.sourceUrl) { showLyrics = false }
         }
     }
     if (showEqualizer) {
@@ -583,7 +586,7 @@ private fun SoundToolsSheet(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, artist: String,
-                             durationMs: Long, position: Long, onDismiss: () -> Unit) {
+                             durationMs: Long, position: Long, soundCloudPermalink: String?, onDismiss: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     // Null means DataStore has not produced its first value yet: never overwrite a saved LRC.
@@ -592,11 +595,11 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
     var lookupState by remember(mediaId) { mutableStateOf("idle") }
     var lookupAttempt by remember(mediaId) { mutableIntStateOf(0) }
     val hasReadSavedLyrics = content != null
-    LaunchedEffect(mediaId, hasReadSavedLyrics, lookupAttempt) {
+    LaunchedEffect(mediaId, hasReadSavedLyrics, lookupAttempt, soundCloudPermalink) {
         if (hasReadSavedLyrics && content.isNullOrEmpty()) {
             lookupState = "loading"
             try {
-                val result = LyricsRepository.find(title, artist, durationMs)
+                val result = LyricsRepository.findForTrack(title, artist, durationMs, soundCloudPermalink)
                 if (result != null) {
                     vm.saveDiscoveredLyrics(mediaId, result)
                     lookupState = "found"
@@ -655,8 +658,12 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
                 LaunchedEffect(active) { listState.scrollToItem(active.coerceAtLeast(0)) }
                 LazyColumn(state = listState, modifier = Modifier.heightIn(max = 430.dp)) {
                     itemsIndexed(lines) { index, line ->
-                        Text(line.second, modifier = Modifier.padding(vertical = 7.dp),
-                            color = if (index == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        val highlighted = index == active
+                        Text(
+                            line.second,
+                            modifier = Modifier.padding(vertical = 7.dp).semantics { selected = highlighted },
+                            color = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
