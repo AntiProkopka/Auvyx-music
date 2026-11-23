@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
@@ -21,7 +20,7 @@ require(spotifyClientId.isEmpty() || spotifyClientId.matches(Regex("[a-fA-F0-9]{
 
 android {
     namespace = "com.nexus.music"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.nexus.music"
@@ -67,7 +66,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     testOptions.unitTests.all {
         it.jvmArgs("--add-opens=java.base/java.io=ALL-UNNAMED")
         it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
@@ -83,15 +81,21 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("org.robolectric:robolectric:4.14.1")
-    implementation(platform("androidx.compose:compose-bom:2025.09.01"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3:1.4.0")
+    implementation("androidx.compose.material3:material3:1.5.0")
     implementation("androidx.compose.material:material-icons-extended")
 
     implementation("androidx.core:core-ktx:1.13.1")

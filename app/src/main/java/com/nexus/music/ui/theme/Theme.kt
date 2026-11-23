@@ -3,8 +3,8 @@ package com.nexus.music.ui.theme
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import android.os.Build
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -98,7 +98,6 @@ private val expressiveTypography = Typography().run {
     )
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun NexusTheme(themeMode: String, style: String, content: @Composable () -> Unit) {
     val dark = when (themeMode) {
@@ -137,6 +136,7 @@ fun NexusTheme(themeMode: String, style: String, content: @Composable () -> Unit
         MaterialExpressiveTheme(
             colorScheme = colors,
             typography = expressiveTypography,
+            motionScheme = MotionScheme.expressive(),
             shapes = when (style) {
                 "lane" -> Shapes(small = RoundedCornerShape(3.dp), medium = RoundedCornerShape(4.dp), large = RoundedCornerShape(6.dp))
                 "glass" -> Shapes(medium = RoundedCornerShape(30.dp), large = RoundedCornerShape(40.dp))
