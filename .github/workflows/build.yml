@@ -39,12 +39,23 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Restore stable signing key (optional but recommended)
+      - name: Restore stable signing key
+        id: signing
         env:
           AUVYX_SIGNING_KEYSTORE_BASE64: ${{ secrets.AUVYX_SIGNING_KEYSTORE_BASE64 }}
+          AUVYX_SIGNING_STORE_PASSWORD: ${{ secrets.AUVYX_SIGNING_STORE_PASSWORD }}
+          AUVYX_SIGNING_KEY_ALIAS: ${{ secrets.AUVYX_SIGNING_KEY_ALIAS }}
+          AUVYX_SIGNING_KEY_PASSWORD: ${{ secrets.AUVYX_SIGNING_KEY_PASSWORD }}
         run: |
-          if [ -n "$AUVYX_SIGNING_KEYSTORE_BASE64" ]; then
+          if [ -n "$AUVYX_SIGNING_KEYSTORE_BASE64$AUVYX_SIGNING_STORE_PASSWORD$AUVYX_SIGNING_KEY_ALIAS$AUVYX_SIGNING_KEY_PASSWORD" ]; then
+            if [ -z "$AUVYX_SIGNING_KEYSTORE_BASE64" ] || [ -z "$AUVYX_SIGNING_STORE_PASSWORD" ] ||
+               [ -z "$AUVYX_SIGNING_KEY_ALIAS" ] || [ -z "$AUVYX_SIGNING_KEY_PASSWORD" ]; then
+              echo "::error::Configure all four AUVYX signing secrets together."
+              exit 1
+            fi
+            umask 077
             printf '%s' "$AUVYX_SIGNING_KEYSTORE_BASE64" | base64 --decode > app/auvyx-signing.jks
+            echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "No stable signing keystore supplied; using the runner debug key."
           fi
@@ -74,6 +85,34 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Build APK with permanent release key
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          AUVYX_SIGNING_STORE_PASSWORD: ${{ secrets.AUVYX_SIGNING_STORE_PASSWORD }}
+          AUVYX_SIGNING_KEY_ALIAS: ${{ secrets.AUVYX_SIGNING_KEY_ALIAS }}
+          AUVYX_SIGNING_KEY_PASSWORD: ${{ secrets.AUVYX_SIGNING_KEY_PASSWORD }}
+        run: |
+          gradle --no-daemon assembleRelease
+          apk=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/34.0.0/aapt2" dump badging "$apk" | grep -E "^package: name='com\.nexus\.music' versionCode='[0-9]+' versionName='Alpha 2\.0'"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs "$apk"
+
+      - name: Upload signed release APK
+        if: steps.signing.outputs.ready == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: auvyx-Alpha-2.0-release
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Check live SoundCloud and LRCLIB endpoints
+        continue-on-error: true
+        env:
+          AUVYX_LIVE_SC: '1'
+          AUVYX_LIVE_LYRICS: '1'
+        run: gradle --no-daemon testDebugUnitTest --tests '*.SoundCloudLiveTest' --tests '*.LyricsLiveTest' --rerun
 
       - name: Report signing mode
         if: always()

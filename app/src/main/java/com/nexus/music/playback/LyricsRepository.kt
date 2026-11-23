@@ -44,11 +44,12 @@ object LyricsRepository {
                         (seconds <= 0 || abs(item.optLong("duration") - seconds) <= 6)
                 }
             }
-            matches.firstNotNullOfOrNull { item ->
-                if (item.optBoolean("instrumental")) return@firstNotNullOfOrNull null
-                item.optString("syncedLyrics").takeUnless { it.isBlank() || it == "null" }
-                    ?: item.optString("plainLyrics").takeUnless { it.isBlank() || it == "null" }
-            }?.trim()?.takeIf { it.length in 1..65_536 }
+            val ordered = matches.filterNot { it.optBoolean("instrumental") }
+                .sortedBy { if (seconds > 0) abs(it.optLong("duration") - seconds) else 0L }
+            fun text(field: String) = ordered.firstNotNullOfOrNull { item ->
+                item.optString(field).trim().takeIf { it.length in 1..65_536 && it != "null" }
+            }
+            text("syncedLyrics") ?: text("plainLyrics")
         } finally {
             connection.disconnect()
         }

@@ -165,9 +165,13 @@ fun NexusRoot(vm: AppViewModel) {
                                     modifier = Modifier.testTag("nav-${item.route}"),
                                     alwaysShowLabel = style != "glass",
                                     selected = selected,
+                                    colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    ),
                                     onClick = { vm.albumTarget.value = null; vm.artistTarget.value = null; navigateTo(nav, item.route) },
                                     icon = { Icon(item.icon, contentDescription = item.label) },
-                                    label = { Text(item.label, maxLines = 1) }
+                                    label = { Text(item.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                                 )
                             }
                         }
