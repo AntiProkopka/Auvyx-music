@@ -167,6 +167,7 @@ fun NexusRoot(vm: AppViewModel) {
                         if (player.mediaId != null) MiniPlayer(vm, onOpen = openPlayer)
                         if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
                             modifier = Modifier.clip(MaterialTheme.shapes.extraLarge)
+                                .background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 1f))
                                 .testTag("bottom-dock"),
                             windowInsets = WindowInsets(0, 0, 0, 0),
                             containerColor = Color.Transparent,
@@ -283,6 +284,7 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
     Column(
         Modifier.fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 1f))
             .clickable(interactionSource = null, indication = ripple(), onClick = onOpen)
     ) {
         Row(

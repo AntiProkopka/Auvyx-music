@@ -85,7 +85,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: auvyx-Alpha-2.0-debug
+          name: ${{ steps.signing.outputs.ready == 'true' && 'auvyx-Alpha-2.0-debug' || 'auvyx-Alpha-2.0-debug-fresh-install-only' }}
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
@@ -134,5 +134,6 @@ jobs:
           if [ -f app/auvyx-signing.jks ]; then
             echo "Stable signing keystore was supplied to this build."
           else
-            echo "WARNING: stable signing keystore is missing; this APK uses the runner's debug key."
+            echo "::warning::This APK uses this runner's temporary debug key and is for fresh installs only."
+            echo "The debug APK is for fresh installs only. To produce an update, supply the keystore used by the installed APK through the AUVYX signing secrets." >> "$GITHUB_STEP_SUMMARY"
           fi
