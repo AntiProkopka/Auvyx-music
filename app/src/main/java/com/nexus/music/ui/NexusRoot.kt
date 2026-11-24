@@ -3,11 +3,14 @@ package com.nexus.music.ui
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.lerp
 import com.nexus.music.ui.theme.LocalStyle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,6 +42,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -159,9 +163,11 @@ fun NexusRoot(vm: AppViewModel) {
                     ) {
                         if (player.mediaId != null) MiniPlayer(vm, onOpen = openPlayer)
                         if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
-                            modifier = Modifier.clip(MaterialTheme.shapes.extraLarge).testTag("bottom-dock"),
+                            modifier = Modifier.floatingPanel(MaterialTheme.shapes.extraLarge, MaterialTheme.colorScheme.surfaceContainer)
+                                .testTag("bottom-dock"),
                             windowInsets = WindowInsets(0, 0, 0, 0),
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            containerColor = Color.Transparent,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
                             tonalElevation = 0.dp
                         ) {
                             navItems.forEach { item ->
@@ -261,33 +267,38 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
     val pos by vm.player.position.collectAsStateWithLifecycle()
     val duration = s.durationMs.coerceAtLeast(1L)
 
-    Surface(
-        onClick = onOpen,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.large,
-        modifier = Modifier.fillMaxWidth()
+    Column(
+        Modifier.fillMaxWidth()
+            .floatingPanel(MaterialTheme.shapes.large, MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(interactionSource = null, indication = ripple(), onClick = onOpen)
     ) {
-        Column {
-            Row(
-                modifier = Modifier.padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(s.title.ifBlank { "Ничего не играет" }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
-                    Text(s.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                IconButton(onClick = { vm.player.togglePlayPause() }) {
-                    Icon(if (s.showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.showPause) "Пауза" else "Играть")
-                }
-                IconButton(onClick = { vm.player.next() }) { Icon(Icons.Default.SkipNext, contentDescription = "Следующий") }
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(s.title.ifBlank { "Ничего не играет" }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
+                Text(s.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            LinearProgressIndicator(
-                progress = { (pos.toFloat() / duration.toFloat()).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp).height(2.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = Color.Transparent,
-                drawStopIndicator = {}
-            )
+            IconButton(onClick = { vm.player.togglePlayPause() }) {
+                Icon(if (s.showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.showPause) "Пауза" else "Играть")
+            }
+            IconButton(onClick = { vm.player.next() }) { Icon(Icons.Default.SkipNext, contentDescription = "Следующий") }
         }
+        LinearProgressIndicator(
+            progress = { (pos.toFloat() / duration.toFloat()).coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp).height(2.dp),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = Color.Transparent,
+            drawStopIndicator = {}
+        )
     }
+}
+
+@Composable
+private fun Modifier.floatingPanel(shape: Shape, tint: Color): Modifier {
+    val fill = lerp(MaterialTheme.colorScheme.background, tint, 0.30f)
+    val shadow = Color.Black.copy(alpha = 0.40f)
+    return shadow(2.dp, shape, clip = true, ambientColor = shadow, spotColor = shadow)
+        .background(fill)
 }
