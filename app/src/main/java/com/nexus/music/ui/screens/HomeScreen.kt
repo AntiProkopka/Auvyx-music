@@ -1,5 +1,6 @@
 package com.nexus.music.ui.screens
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.ui.components.AddToPlaylistDialog
 import com.nexus.music.ui.components.SectionTitle
@@ -52,7 +54,11 @@ fun HomeScreen(vm: AppViewModel) {
         else -> "Доброй ночи"
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         item {
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),

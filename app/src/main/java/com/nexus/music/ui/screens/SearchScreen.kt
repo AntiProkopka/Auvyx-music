@@ -1,5 +1,6 @@
 package com.nexus.music.ui.screens
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,9 +29,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.data.soundcloud.SoundCloudTrack
 import com.nexus.music.ui.components.AddSoundCloudToPlaylistDialog
@@ -109,7 +112,10 @@ fun SearchScreen(vm: AppViewModel) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
         )
 
-        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f).testTag("search-results"),
+            contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current)
+        ) {
             if (query.isBlank()) {
                 item { EmptyHint("Введи запрос. Поиск одновременно проверит выбранные каталоги.") }
             } else {

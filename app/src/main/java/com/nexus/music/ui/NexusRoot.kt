@@ -6,11 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.lerp
 import com.nexus.music.ui.theme.LocalStyle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,12 +42,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -72,6 +73,8 @@ import com.nexus.music.ui.screens.PlayerScreen
 import com.nexus.music.ui.screens.PlaylistScreen
 import com.nexus.music.ui.screens.SearchScreen
 import com.nexus.music.ui.screens.SettingsScreen
+
+internal val LocalBottomBarPadding = staticCompositionLocalOf { 0.dp }
 
 private data class NavItem(val route: String, val label: String, val icon: ImageVector)
 
@@ -163,7 +166,7 @@ fun NexusRoot(vm: AppViewModel) {
                     ) {
                         if (player.mediaId != null) MiniPlayer(vm, onOpen = openPlayer)
                         if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
-                            modifier = Modifier.floatingPanel(MaterialTheme.shapes.extraLarge, MaterialTheme.colorScheme.surfaceContainer)
+                            modifier = Modifier.clip(MaterialTheme.shapes.extraLarge)
                                 .testTag("bottom-dock"),
                             windowInsets = WindowInsets(0, 0, 0, 0),
                             containerColor = Color.Transparent,
@@ -190,33 +193,43 @@ fun NexusRoot(vm: AppViewModel) {
         ) { padding ->
             val artist by vm.artistTarget.collectAsStateWithLifecycle()
             val album by vm.albumTarget.collectAsStateWithLifecycle()
-            Box(Modifier.padding(padding).fillMaxSize()) {
-                val motion = MaterialTheme.motionScheme
-                NavHost(
-                    navController = nav,
-                    startDestination = "home",
-                    enterTransition = { fadeIn(motion.defaultEffectsSpec()) },
-                    exitTransition = { fadeOut(motion.fastEffectsSpec()) }
-                ) {
-                    composable("home") { HomeScreen(vm) }
-                    composable("search") { SearchScreen(vm) }
-                    composable("library") { LibraryScreen(vm, onOpenPlaylist = { id -> nav.navigate("playlist/$id") }) }
-                    composable("settings") { SettingsScreen(vm) }
-                    composable(route = "playlist/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
-                        PlaylistScreen(vm, entry.arguments?.getLong("id") ?: 0L, onBack = { nav.popBackStack() })
+            val direction = LocalLayoutDirection.current
+            val bottomPadding = padding.calculateBottomPadding()
+            // Keep the viewport behind the transparent controls and reserve room at the end of scrolling.
+            CompositionLocalProvider(LocalBottomBarPadding provides if (route == "player") 0.dp else bottomPadding) {
+                Box(Modifier.padding(
+                    start = padding.calculateStartPadding(direction),
+                    top = padding.calculateTopPadding(),
+                    end = padding.calculateEndPadding(direction),
+                    bottom = if (route == "player") bottomPadding else 0.dp
+                ).fillMaxSize()) {
+                    val motion = MaterialTheme.motionScheme
+                    NavHost(
+                        navController = nav,
+                        startDestination = "home",
+                        enterTransition = { fadeIn(motion.defaultEffectsSpec()) },
+                        exitTransition = { fadeOut(motion.fastEffectsSpec()) }
+                    ) {
+                        composable("home") { HomeScreen(vm) }
+                        composable("search") { SearchScreen(vm) }
+                        composable("library") { LibraryScreen(vm, onOpenPlaylist = { id -> nav.navigate("playlist/$id") }) }
+                        composable("settings") { SettingsScreen(vm) }
+                        composable(route = "playlist/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
+                            PlaylistScreen(vm, entry.arguments?.getLong("id") ?: 0L, onBack = { nav.popBackStack() })
+                        }
+                        composable("player") { PlayerScreen(vm, onClose = { nav.popBackStack() }) }
                     }
-                    composable("player") { PlayerScreen(vm, onClose = { nav.popBackStack() }) }
-                }
-                album?.let { target ->
-                    androidx.activity.compose.BackHandler(enabled = artist == null) { vm.albumTarget.value = null }
-                    Surface(Modifier.fillMaxSize()) {
-                        androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.AlbumScreen(vm, target) }
+                    album?.let { target ->
+                        androidx.activity.compose.BackHandler(enabled = artist == null) { vm.albumTarget.value = null }
+                        Surface(Modifier.fillMaxSize()) {
+                            androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.AlbumScreen(vm, target) }
+                        }
                     }
-                }
-                artist?.let { target ->
-                    androidx.activity.compose.BackHandler { vm.artistTarget.value = null }
-                    Surface(Modifier.fillMaxSize()) {
-                        androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.ArtistScreen(vm, target, onOpenPlayer = openPlayer) }
+                    artist?.let { target ->
+                        androidx.activity.compose.BackHandler { vm.artistTarget.value = null }
+                        Surface(Modifier.fillMaxSize()) {
+                            androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.ArtistScreen(vm, target, onOpenPlayer = openPlayer) }
+                        }
                     }
                 }
             }
@@ -269,7 +282,7 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
 
     Column(
         Modifier.fillMaxWidth()
-            .floatingPanel(MaterialTheme.shapes.large, MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clip(MaterialTheme.shapes.large)
             .clickable(interactionSource = null, indication = ripple(), onClick = onOpen)
     ) {
         Row(
@@ -293,12 +306,4 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
             drawStopIndicator = {}
         )
     }
-}
-
-@Composable
-private fun Modifier.floatingPanel(shape: Shape, tint: Color): Modifier {
-    val fill = lerp(MaterialTheme.colorScheme.background, tint, 0.30f)
-    val shadow = Color.Black.copy(alpha = 0.40f)
-    return shadow(2.dp, shape, clip = true, ambientColor = shadow, spotColor = shadow)
-        .background(fill)
 }

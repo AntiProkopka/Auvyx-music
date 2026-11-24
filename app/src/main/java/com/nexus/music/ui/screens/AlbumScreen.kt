@@ -16,6 +16,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.data.local.OfflineAudio
 import com.nexus.music.data.soundcloud.SoundCloudRepository
@@ -72,7 +73,7 @@ fun AlbumScreen(vm: AppViewModel, album: AppViewModel.AlbumTarget) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + LocalBottomBarPadding.current),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item { TextButton(onClick = { vm.albumTarget.value = null }) { Text("← Назад") } }
@@ -124,7 +125,7 @@ private fun SoundCloudAlbumScreen(vm: AppViewModel, target: AppViewModel.AlbumTa
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + LocalBottomBarPadding.current),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item { TextButton(onClick = { vm.albumTarget.value = null }) { Text("← Назад") } }

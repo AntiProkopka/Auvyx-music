@@ -1,5 +1,6 @@
 package com.nexus.music.ui.screens
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.MenuAction
 import com.nexus.music.ui.components.NameDialog
@@ -98,7 +100,10 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
         if (tracks.isEmpty()) {
             EmptyHint("В плейлисте пока нет треков. Добавьте их через меню «⋮» у трека в медиатеке.")
         } else {
-            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current)
+            ) {
                 itemsIndexed(tracks, key = { _, track -> track.id }) { index, track ->
                     TrackRow(
                         track = track,

@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.ui.components.AddToPlaylistDialog
 import com.nexus.music.ui.components.EmptyHint
@@ -163,7 +164,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
         }
 
         when (tab) {
-            6 -> LazyColumn {
+            6 -> LazyColumn(contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current)) {
                 val artists = collection.distinctBy { it.source to (it.artistId ?: it.artist.trim().lowercase()) }.sortedBy { it.artist.lowercase() }
                 items(artists) { t -> TextButton(onClick = { vm.openArtist(t) }) { Text(t.artist + if (t.source == "soundcloud") " · SoundCloud" else " · На устройстве") } }
             }
@@ -208,7 +209,10 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                 if (favorites.isEmpty()) {
                     EmptyHint("Нажимай на сердечко у локальных треков или SoundCloud, чтобы сохранить их здесь.")
                 } else {
-                    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current)
+                    ) {
                         items(favorites, key = { "${it.source}-${it.id}" }) { track ->
                             TrackRow(
                                 track = track,
@@ -229,7 +233,10 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                 if (playlists.isEmpty()) {
                     EmptyHint("Плейлистов пока нет.")
                 } else {
-                    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current)
+                    ) {
                         items(playlists, key = { it.id }) { playlist ->
                             ListItem(
                                 modifier = Modifier.fillMaxWidth().clickable { onOpenPlaylist(playlist.id) },
@@ -248,7 +255,10 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                     TextButton(onClick = { vm.clearHistory() }, modifier = Modifier.padding(start = 8.dp)) {
                         Text("Очистить историю")
                     }
-                    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current)
+                    ) {
                         items(recent, key = { "${it.source}-history-${it.id}" }) { track ->
                             TrackRow(
                                 track = track,
@@ -282,7 +292,10 @@ private fun ColumnScope.TrackList(
     currentId: String?,
     onAddToPlaylist: (TrackEntity) -> Unit
 ) {
-    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxWidth().weight(1f),
+        contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current)
+    ) {
         itemsIndexed(list, key = { _, track -> track.id }) { index, track ->
             TrackRow(
                 track = track,

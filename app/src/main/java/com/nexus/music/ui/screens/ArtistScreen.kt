@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.data.db.availableAlbumTitle
 import com.nexus.music.data.soundcloud.SoundCloudRepository
 import com.nexus.music.data.soundcloud.SoundCloudTrack
@@ -67,7 +68,7 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget, onOpenPlay
     val shape = MaterialTheme.shapes.medium
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 36.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 36.dp + LocalBottomBarPadding.current),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {

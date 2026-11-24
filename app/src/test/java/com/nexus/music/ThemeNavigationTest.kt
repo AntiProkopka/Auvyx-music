@@ -58,6 +58,9 @@ class ThemeNavigationTest {
         compose.onNodeWithTag("nav-settings").assertIsSelected()
         compose.onNodeWithTag("nav-search").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         compose.onNodeWithText("SoundCloud").assertExists()
+        val results = compose.onNodeWithTag("search-results").fetchSemanticsNode().boundsInRoot
+        val dock = compose.onNodeWithTag("bottom-dock").fetchSemanticsNode().boundsInRoot
+        org.junit.Assert.assertTrue("Search must draw behind the dock", results.bottom >= dock.bottom && results.top < dock.top)
         compose.onNodeWithText("Spotify").assertDoesNotExist()
         compose.onNodeWithText("YouTube Music").assertDoesNotExist()
         compose.onNodeWithTag("nav-library").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)

@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.ui.components.ExpressiveSlider
 import com.nexus.music.ui.components.NameDialog
 
@@ -52,7 +53,8 @@ fun SettingsScreen(vm: AppViewModel) {
     var editingNickname by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp).padding(bottom = LocalBottomBarPadding.current),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Card(
