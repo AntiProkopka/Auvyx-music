@@ -16,6 +16,7 @@ import androidx.media3.session.SessionToken
 import com.nexus.music.data.db.HistoryEntity
 import com.nexus.music.data.db.NexusDatabase
 import com.nexus.music.data.db.QueueEntity
+import com.nexus.music.data.db.hasEnabledSource
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.data.settings.SettingsStore
 import com.nexus.music.data.soundcloud.SoundCloudTrack
@@ -42,6 +43,7 @@ data class PlayerState(
     val sourceUri: String? = null,
     val audioProvider: String? = null,
     val isPlaying: Boolean = false,
+    val showPause: Boolean = false,
     val canSeek: Boolean = false,
     val durationMs: Long = 0L,
     val shuffle: Boolean = false,
@@ -81,8 +83,9 @@ class PlayerController(
 
         override fun onEvents(player: Player, events: Player.Events) {
             if (events.contains(Player.EVENT_TIMELINE_CHANGED)) {
+                val previousQueue = queue
                 rebuildQueue()
-                persistQueue()
+                if (queue != previousQueue) persistQueue()
                 savePlaybackPosition()
             }
             refreshState()
@@ -150,18 +153,39 @@ class PlayerController(
 
     // Local playback
     fun playTracks(tracks: List<TrackEntity>, startIndex: Int, shuffle: Boolean = false) {
-        if (tracks.isEmpty()) return
+        val selected = tracks.getOrNull(startIndex.coerceIn(0, tracks.lastIndex.coerceAtLeast(0))) ?: return
+        val available = tracks.filter { it.hasEnabledSource }
+        if (available.isEmpty()) return
         withController { c ->
-            val index = if (shuffle) tracks.indices.random() else startIndex.coerceIn(0, tracks.lastIndex)
+            val index = if (shuffle) available.indices.random() else available.indexOf(selected).coerceAtLeast(0)
             lastLoggedId = null
             c.shuffleModeEnabled = shuffle
-            c.setMediaItems(tracks.map(::toMediaItem), index, 0L)
+            c.setMediaItems(available.map(::toMediaItem), index, 0L)
             c.prepare()
             c.play()
             scope.launch {
                 settings.setShuffle(shuffle)
                 settings.setPlayback(index, 0L)
             }
+        }
+    }
+
+    fun playTrack(track: TrackEntity) {
+        if (!track.hasEnabledSource) return
+        withController { controller ->
+            val id = track.id.toString()
+            val current = controller.currentMediaItemIndex
+            if (controller.currentMediaItem?.mediaId != id) {
+                val existing = (0 until controller.mediaItemCount).firstOrNull { controller.getMediaItemAt(it).mediaId == id }
+                val index = existing ?: (current + 1).coerceIn(0, controller.mediaItemCount).also {
+                    controller.addMediaItem(it, toMediaItem(track))
+                }
+                controller.seekToDefaultPosition(index)
+            } else if (controller.playbackState == Player.STATE_ENDED) {
+                controller.seekToDefaultPosition()
+            }
+            if (controller.playbackState == Player.STATE_IDLE) controller.prepare()
+            controller.play()
         }
     }
 
@@ -183,7 +207,8 @@ class PlayerController(
     }
 
     fun togglePlayPause() = withController { c ->
-        if (c.isPlaying) c.pause() else {
+        if (c.playWhenReady && c.playbackState != Player.STATE_IDLE && c.playbackState != Player.STATE_ENDED) c.pause() else {
+            if (c.playbackState == Player.STATE_ENDED) c.seekToDefaultPosition()
             if (c.playbackState == Player.STATE_IDLE) c.prepare()
             c.play()
         }
@@ -237,6 +262,7 @@ class PlayerController(
     }
 
     fun enqueue(track: TrackEntity) = withController { c ->
+        if (!track.hasEnabledSource) return@withController
         val wasEmpty = c.mediaItemCount == 0
         c.addMediaItem(toMediaItem(track))
         if (wasEmpty) {
@@ -246,6 +272,7 @@ class PlayerController(
     }
 
     fun playNext(track: TrackEntity) = withController { c ->
+        if (!track.hasEnabledSource) return@withController
         if (c.mediaItemCount == 0) {
             c.setMediaItem(toMediaItem(track))
             c.prepare()
@@ -317,22 +344,19 @@ class PlayerController(
         val saved = db.queueDao().getAll()
         if (saved.isEmpty()) return
         val byId = saved.map { it.trackId }.distinct().chunked(500).flatMap { db.trackDao().getByIds(it) }.associateBy { it.id }
-        val ordered = saved.mapNotNull { byId[it.trackId] }
-        if (ordered.isEmpty()) {
-            db.queueDao().clear()
-            return
+        val available = saved.mapIndexedNotNull { index, entry ->
+            byId[entry.trackId]?.takeIf { it.hasEnabledSource }?.let { index to it }
         }
-        val index = settings.queueIndex.first().coerceIn(0, ordered.lastIndex)
-        val position = settings.queuePosition.first().coerceAtLeast(0L)
+        if (available.isEmpty()) return
+        val savedIndex = settings.queueIndex.first().coerceIn(0, saved.lastIndex)
+        val index = available.indexOfFirst { it.first >= savedIndex }.takeIf { it >= 0 } ?: available.lastIndex
+        val position = if (available[index].first == savedIndex) settings.queuePosition.first().coerceAtLeast(0L) else 0L
+        val ordered = available.map { it.second }
         c.shuffleModeEnabled = settings.shuffle.first()
         c.repeatMode = settings.repeatMode.first()
         if (c.mediaItemCount != 0) return
         c.setMediaItems(ordered.map(::toMediaItem), index, position)
         c.prepare()
-        if (ordered.size != saved.size) {
-            val rows = ordered.mapIndexed { i, track -> QueueEntity(position = i, trackId = track.id) }
-            db.queueDao().replace(rows)
-        }
     }
 
     private fun rebuildQueue() {
@@ -371,6 +395,7 @@ class PlayerController(
             audioProvider = item?.mediaMetadata?.subtitle?.toString(),
             sourceUri = item?.localConfiguration?.uri?.toString(),
             isPlaying = c.isPlaying,
+            showPause = c.playWhenReady && c.playbackState != Player.STATE_IDLE && c.playbackState != Player.STATE_ENDED,
             canSeek = c.playbackState == Player.STATE_READY && c.isCurrentMediaItemSeekable && c.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM),
             durationMs = if (duration == C.TIME_UNSET) 0L else duration.coerceAtLeast(0L),
             shuffle = c.shuffleModeEnabled,

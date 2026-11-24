@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.nexus.music.data.db.PlaylistEntity
 import com.nexus.music.data.db.PlaylistSummary
 import com.nexus.music.data.db.PlaylistTrackEntity
+import com.nexus.music.data.db.hasEnabledSource
+import kotlinx.coroutines.flow.map
 import com.nexus.music.data.db.TrackEntity
 import com.nexus.music.data.settings.SettingsStore
 import com.nexus.music.data.soundcloud.SoundCloudRepository
@@ -45,11 +47,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val tracks: StateFlow<List<TrackEntity>> =
         db.trackDao().observeLocal().stateIn(viewModelScope, lazily, emptyList())
     val knownTracks: StateFlow<List<TrackEntity>> =
-        db.trackDao().observeAll().stateIn(viewModelScope, lazily, emptyList())
+        db.trackDao().observeAll().map { tracks -> tracks.filter { it.hasEnabledSource } }.stateIn(viewModelScope, lazily, emptyList())
     val favorites: StateFlow<List<TrackEntity>> =
-        db.trackDao().observeFavorites().stateIn(viewModelScope, lazily, emptyList())
+        db.trackDao().observeFavorites().map { tracks -> tracks.filter { it.hasEnabledSource } }.stateIn(viewModelScope, lazily, emptyList())
     val recent: StateFlow<List<TrackEntity>> =
-        db.historyDao().observeRecent(50).stateIn(viewModelScope, lazily, emptyList())
+        db.historyDao().observeRecent(50).map { tracks -> tracks.filter { it.hasEnabledSource } }.stateIn(viewModelScope, lazily, emptyList())
     val playlists: StateFlow<List<PlaylistSummary>> =
         db.playlistDao().observePlaylists().stateIn(viewModelScope, lazily, emptyList())
 
@@ -300,6 +302,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var requestedTrack: Job? = null
+
+    fun playTrack(track: TrackEntity) {
+        requestedTrack?.cancel()
+        player.playTrack(track)
+    }
+
+    fun playTrack(track: SoundCloudTrack) {
+        if (!track.full) return
+        requestedTrack?.cancel()
+        requestedTrack = viewModelScope.launch {
+            try {
+                player.playTrack(ensureSoundCloudTrack(track))
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                messages.tryEmit("Не удалось подготовить трек SoundCloud")
+            }
+        }
+    }
+
     fun playSoundCloud(results: List<SoundCloudTrack>, index: Int) {
         if (results.isEmpty()) return
         viewModelScope.launch {
@@ -520,7 +543,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // Playlists
     fun playlist(id: Long): Flow<PlaylistEntity?> = db.playlistDao().observePlaylist(id)
-    fun playlistTracks(id: Long): Flow<List<TrackEntity>> = db.playlistDao().observeTracks(id)
+    fun playlistTracks(id: Long): Flow<List<TrackEntity>> = db.playlistDao().observeTracks(id).map { tracks -> tracks.filter { it.hasEnabledSource } }
 
     fun createPlaylist(name: String) {
         viewModelScope.launch {

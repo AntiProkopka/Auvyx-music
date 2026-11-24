@@ -61,15 +61,8 @@ import com.nexus.music.ui.components.trackMenu
 
 @Composable
 fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
-    val catalogPages by vm.catalogPages.collectAsStateWithLifecycle()
-    var catalogUrl by rememberSaveable { mutableStateOf<String?>(null) }
-    catalogUrl?.let { url ->
-        CatalogPage(vm, url, catalogPages[url].orEmpty()) { catalogUrl = null }
-        return
-    }
     val tracks by vm.tracks.collectAsStateWithLifecycle()
-    val known by vm.knownTracks.collectAsStateWithLifecycle()
-    val collection = remember(known) { known.filter { it.source in setOf("local","soundcloud") } }
+    val collection by vm.knownTracks.collectAsStateWithLifecycle()
     val favorites by vm.favorites.collectAsStateWithLifecycle()
     val recent by vm.recent.collectAsStateWithLifecycle()
     val playlists by vm.playlists.collectAsStateWithLifecycle()
@@ -77,7 +70,8 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
     val sort by vm.sortMode.collectAsStateWithLifecycle()
     val current by vm.player.state.collectAsStateWithLifecycle()
 
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var savedTab by rememberSaveable { mutableIntStateOf(0) }
+    val tab = if (savedTab == 4) 0 else savedTab
     var pending by remember { mutableStateOf<TrackEntity?>(null) }
     var creatingPlaylist by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
@@ -159,10 +153,10 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("Треки", "Избранное", "Плейлисты", "История", "Каталоги", "Офлайн", "Исполнители").forEachIndexed { index, label ->
+            listOf(0 to "Треки", 1 to "Избранное", 2 to "Плейлисты", 3 to "История", 5 to "Офлайн", 6 to "Исполнители").forEach { (index, label) ->
                 ExpressiveFilterChip(
                     selected = tab == index,
-                    onClick = { tab = index },
+                    onClick = { savedTab = index },
                     label = { Text(label, maxLines = 1) }
                 )
             }
@@ -186,20 +180,6 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                 }
                 if (copies.isEmpty() && transfers.isEmpty()) EmptyHint("Выбери «Сохранить офлайн» в меню локального трека.")
                 else TrackList(vm, copies, current.mediaId) { pending = it }
-            }
-            4 -> {
-                if (catalogPages.isEmpty()) EmptyHint("Здесь появятся закладки из предыдущей версии.")
-                else LazyColumn {
-                    items(catalogPages.entries.sortedBy { it.value.lowercase() }, key = { it.key }) { entry ->
-                        Column(Modifier.fillMaxWidth().clickable {
-                            catalogUrl = entry.key
-                        }.padding(16.dp)) {
-                            Text(entry.value)
-                            Text(if (android.net.Uri.parse(entry.key).host == "open.spotify.com") "Spotify" else "YouTube Music",
-                                style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
             }
             0 -> {
                 if (collection.isEmpty()) {

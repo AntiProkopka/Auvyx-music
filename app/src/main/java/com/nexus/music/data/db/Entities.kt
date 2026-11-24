@@ -74,3 +74,11 @@ data class PlaylistSummary(
     val name: String,
     val trackCount: Int
 )
+
+internal val TrackEntity.hasEnabledSource: Boolean
+    get() = source == "local" || source == "soundcloud"
+
+internal fun availableAlbumTitle(title: String, source: String?): String? = title.trim().takeIf {
+    it.isNotEmpty() && !it.equals("Неизвестный альбом", ignoreCase = true) &&
+        !(source == "soundcloud" && it.equals("SoundCloud", ignoreCase = true))
+}

@@ -36,11 +36,11 @@ class ThemeNavigationTest {
     }
     @get:Rule val rules: org.junit.rules.TestRule = org.junit.rules.RuleChain.outerRule(service).around(compose)
 
-    @Test fun stylesKeepLibraryReachable() {
+    @Test fun expressiveDockKeepsLibraryAndColorModesReachable() {
         val settings = (compose.activity.application as NexusApp).settings
         if (kotlinx.coroutines.runBlocking { settings.nickname.first() } == null) {
             compose.waitUntil(5000) {
-                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                org.robolectric.shadows.ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS)
                 compose.onAllNodesWithText("Пропустить").fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNodeWithText("Пропустить").performClick()
@@ -49,40 +49,30 @@ class ThemeNavigationTest {
         compose.onNodeWithContentDescription("По умолчанию").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Неон").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Стекло").performScrollTo().assertIsDisplayed()
-        for ((style,key) in listOf("HyperOS" to "hyper", "Liquid Glass" to "glass", "Studio · LANE" to "lane", "Material 3" to "material")) {
-            compose.onNode(hasText(style) and hasClickAction()).performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
-            compose.waitUntil(5000) {
-                org.robolectric.shadows.ShadowLooper.idleMainLooper()
-                kotlinx.coroutines.runBlocking { settings.visualStyle.first() } == key
-            }
-            compose.onNodeWithTag("nav-library").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
-            compose.waitUntil(5000) {
-                org.robolectric.shadows.ShadowLooper.idleMainLooper()
-                compose.onAllNodesWithText("Офлайн").fetchSemanticsNodes().isNotEmpty()
-            }
-            compose.onNodeWithTag("nav-settings").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
-        }
+        listOf("HyperOS", "Liquid Glass", "Studio · LANE").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+        compose.onNodeWithText("Цветовой режим").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Как в системе").assertExists()
+        compose.onNodeWithText("Светлая").assertExists()
+        compose.onNodeWithText("Тёмная").assertExists()
+        compose.onNodeWithTag("bottom-dock").assertIsDisplayed()
+        compose.onNodeWithTag("nav-settings").assertIsSelected()
+        compose.onNodeWithTag("nav-search").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        compose.onNodeWithText("SoundCloud").assertExists()
+        compose.onNodeWithText("Spotify").assertDoesNotExist()
+        compose.onNodeWithText("YouTube Music").assertDoesNotExist()
+        compose.onNodeWithTag("nav-library").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        compose.onNodeWithText("Офлайн").assertExists()
+        compose.onNodeWithText("Каталоги").assertDoesNotExist()
+        compose.onNodeWithTag("nav-library").assertIsSelected()
+        compose.onNodeWithTag("nav-home").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        compose.onNodeWithTag("nav-home").assertIsSelected()
     }
 
     @Test fun sessionLoadsLocalAudioAndProcessesQueueCommands() {
         val app = compose.activity.application as NexusApp
-        val tracks = kotlinx.coroutines.runBlocking {
-            (1..2).map { n ->
-                val uri = "content://audio-test/$n.wav"
-                val copy = com.nexus.music.data.local.OfflineAudio.file(app,uri)
-                copy.parentFile!!.mkdirs()
-                val dataSize = 48000 * 2 * 12
-                val wav = java.nio.ByteBuffer.allocate(44 + dataSize).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-                wav.put("RIFF".toByteArray()).putInt(dataSize + 36).put("WAVEfmt ".toByteArray())
-                    .putInt(16).putShort(1).putShort(1).putInt(48000).putInt(96000)
-                    .putShort(2).putShort(16).put("data".toByteArray()).putInt(dataSize)
-                copy.writeBytes(wav.array())
-                val t = com.nexus.music.data.db.TrackEntity(uri=uri,title="Audio $n",artist="Test",album="",durationMs=12000L,addedAt=n.toLong())
-                t.copy(id=app.database.trackDao().insertOrIgnore(t))
-            }
-        }
+        val tracks = seedTracks(app)
         val controller = app.playerController
-        compose.runOnUiThread { controller.playTracks(tracks,0) }
+        compose.runOnUiThread { controller.playTracks(tracks.take(2),0) }
         fun awaitState(check: () -> Boolean) {
             try {
                 compose.waitUntil(15000) {
@@ -102,6 +92,40 @@ class ThemeNavigationTest {
         awaitState { controller.state.value.pitch == 1.25f && controller.position.value == 2000L }
         compose.runOnUiThread { controller.moveQueueItem(1,0); controller.toggleShuffle(); controller.cycleRepeat() }
         awaitState { controller.state.value.queue.firstOrNull()?.title == "Audio 2" && controller.state.value.shuffle }
+
+        compose.runOnUiThread { controller.playTrack(tracks[0]) }
+        awaitState { controller.state.value.mediaId == tracks[0].id.toString() && controller.state.value.showPause }
+        val queued = controller.state.value.queue
+        org.junit.Assert.assertEquals(listOf("Audio 2", "Audio 1"), queued.map { it.title })
+        compose.runOnUiThread { controller.togglePlayPause() }
+        awaitState { !controller.state.value.showPause }
+        compose.runOnUiThread { controller.playTrack(tracks[0]) }
+        awaitState { controller.state.value.showPause }
+        org.junit.Assert.assertEquals(queued, controller.state.value.queue)
+        compose.runOnUiThread { controller.playTrack(tracks[2]) }
+        awaitState {
+            controller.state.value.mediaId == tracks[2].id.toString() && controller.state.value.queue.size == 3
+        }
+        org.junit.Assert.assertEquals(listOf("Audio 2", "Audio 1", "Audio 3"), controller.state.value.queue.map { it.title })
+        compose.runOnUiThread { controller.playNext(tracks[1]); controller.enqueue(tracks[0]) }
+        awaitState { controller.state.value.queue.size == 5 }
+        org.junit.Assert.assertEquals(listOf("Audio 2", "Audio 1"), controller.state.value.queue.takeLast(2).map { it.title })
+    }
+
+    private fun seedTracks(app: NexusApp) = kotlinx.coroutines.runBlocking {
+        (1..3).map { n ->
+            val uri = "content://audio-test/$n.wav"
+            val copy = com.nexus.music.data.local.OfflineAudio.file(app,uri)
+            copy.parentFile!!.mkdirs()
+            val dataSize = 48000 * 2 * 12
+            val wav = java.nio.ByteBuffer.allocate(44 + dataSize).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            wav.put("RIFF".toByteArray()).putInt(dataSize + 36).put("WAVEfmt ".toByteArray())
+                .putInt(16).putShort(1).putShort(1).putInt(48000).putInt(96000)
+                .putShort(2).putShort(16).put("data".toByteArray()).putInt(dataSize)
+            copy.writeBytes(wav.array())
+            val t = com.nexus.music.data.db.TrackEntity(uri=uri,title="Audio $n",artist="Test",album="",durationMs=12000L,addedAt=n.toLong())
+            t.copy(id=app.database.trackDao().insertOrIgnore(t))
+        }
     }
 
     @Test fun timedLyricHighlightFollowsPositionInBothDirections() {

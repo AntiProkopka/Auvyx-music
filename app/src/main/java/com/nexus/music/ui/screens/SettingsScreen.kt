@@ -2,7 +2,6 @@ package com.nexus.music.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -88,17 +87,10 @@ fun SettingsScreen(vm: AppViewModel) {
         ) {
             Column {
                 ListItem(
-                    headlineContent = { Text("Оформление") },
+                    headlineContent = { Text("Цветовой режим") },
 
                     leadingContent = { Icon(Icons.Default.Palette, contentDescription = null) }
                 )
-                val style by vm.visualStyle.collectAsStateWithLifecycle()
-                listOf("material" to "Material 3", "hyper" to "HyperOS", "glass" to "Liquid Glass", "lane" to "Studio · LANE").forEach { (id, name) ->
-                    Row(Modifier.fillMaxWidth().selectable(selected = style == id, onClick = { vm.setStyle(id) }).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = style == id, onClick = null)
-                        Text(name)
-                    }
-                }
                 listOf("system" to "Как в системе", "light" to "Светлая", "dark" to "Тёмная").forEach { (key, label) ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),

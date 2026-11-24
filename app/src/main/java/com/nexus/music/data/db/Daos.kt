@@ -75,7 +75,7 @@ interface TrackDao {
 
 @Dao
 interface PlaylistDao {
-    @Query("SELECT p.id AS id, p.name AS name, (SELECT COUNT(*) FROM playlist_tracks WHERE playlistId = p.id) AS trackCount FROM playlists p ORDER BY p.createdAt DESC")
+    @Query("SELECT p.id AS id, p.name AS name, (SELECT COUNT(*) FROM playlist_tracks pt JOIN tracks t ON t.id = pt.trackId WHERE pt.playlistId = p.id AND t.source IN ('local', 'soundcloud')) AS trackCount FROM playlists p ORDER BY p.createdAt DESC")
     fun observePlaylists(): Flow<List<PlaylistSummary>>
 
     @Query("SELECT * FROM playlists WHERE id = :id")

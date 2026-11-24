@@ -109,6 +109,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.Player
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.data.db.availableAlbumTitle
 import com.nexus.music.data.local.OfflineAudio
 import com.nexus.music.playback.PlaybackAudioRouting
 import com.nexus.music.ui.components.EmptyHint
@@ -301,23 +302,11 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
 
         Spacer(Modifier.height(8.dp))
         Text(s.title.ifBlank { "Ничего не играет" }, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        // The provider label is not an album. Older builds stored "SoundCloud" as a fake album.
-        val sourceLabel = s.audioProvider?.takeIf { it.isNotBlank() } ?: when (track?.source) {
-            "soundcloud" -> "SoundCloud"
-            "youtube" -> "YouTube Music"
-            "spotify" -> "Каталог Spotify"
-            "local" -> "На устройстве"
-            else -> ""
-        }
-        val albumLabel = s.album.takeIf {
-            it.isNotBlank() && !(track?.source == "soundcloud" && it.equals("SoundCloud", true)) &&
-                !it.equals(sourceLabel, true)
-        }
-        val albumInfo = albumLabel ?: "Альбом не указан".takeIf { track?.source in setOf("local", "soundcloud") }
-        val secondaryMetadata = listOfNotNull(albumInfo, sourceLabel.takeIf { it.isNotBlank() })
-            .distinctBy { it.lowercase() }.joinToString(" · ")
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
+        val albumLabel = availableAlbumTitle(s.album, track?.source)
+        if (s.artist.isNotBlank() || albumLabel != null) Row(
+            modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (s.artist.isNotBlank()) Text(
                 text = s.artist,
                 modifier = Modifier.weight(1f, fill = false).then(
                     if (track != null && s.artist.isNotBlank()) Modifier.clickable { vm.openArtist(track) }
@@ -328,8 +317,8 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            if (secondaryMetadata.isNotBlank()) {
-                Text(" · $secondaryMetadata", modifier = Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium,
+            if (albumLabel != null) {
+                Text(if (s.artist.isBlank()) albumLabel else " · $albumLabel", modifier = Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
             }
@@ -439,7 +428,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             }
             IconButton(onClick = { vm.player.previous() }) { Icon(Icons.Default.SkipPrevious, contentDescription = "Предыдущий", modifier = Modifier.size(36.dp)) }
             val playCorner by androidx.compose.animation.core.animateDpAsState(
-                targetValue = if (s.isPlaying) 20.dp else 32.dp,
+                targetValue = if (s.showPause) 20.dp else 32.dp,
                 animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
                 label = "Play button shape"
             )
@@ -451,7 +440,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                     pressedShape = MaterialTheme.shapes.large
                 )
             ) {
-                Icon(if (s.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.isPlaying) "Пауза" else "Играть", modifier = Modifier.size(36.dp))
+                Icon(if (s.showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.showPause) "Пауза" else "Играть", modifier = Modifier.size(36.dp))
             }
             IconButton(onClick = { vm.player.next() }) { Icon(Icons.Default.SkipNext, contentDescription = "Следующий", modifier = Modifier.size(36.dp)) }
             IconButton(onClick = { vm.player.cycleRepeat() }) {

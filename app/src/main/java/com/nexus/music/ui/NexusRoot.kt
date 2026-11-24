@@ -3,20 +3,16 @@ package com.nexus.music.ui
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import com.nexus.music.ui.theme.LocalStyle
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -97,6 +93,12 @@ fun NexusRoot(vm: AppViewModel) {
     val snackbar = remember { SnackbarHostState() }
     val player by vm.player.state.collectAsStateWithLifecycle()
 
+    val openPlayer: () -> Unit = {
+        vm.albumTarget.value = null
+        vm.artistTarget.value = null
+        nav.navigate("player") { launchSingleTop = true }
+    }
+
     val title = when {
         route == "home" -> "auvyx"
         route == "search" -> "Поиск"
@@ -149,15 +151,16 @@ fun NexusRoot(vm: AppViewModel) {
             },
             bottomBar = {
                 if (route != "player") {
-                    Column {
-                        if (player.mediaId != null) MiniPlayer(vm = vm, onOpen = { vm.albumTarget.value = null; vm.artistTarget.value = null; nav.navigate("player") })
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                            .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (player.mediaId != null) MiniPlayer(vm, onOpen = openPlayer)
                         if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
-                            modifier = when (style) {
-                                "glass" -> Modifier.padding(horizontal = 14.dp, vertical = 6.dp).shadow(8.dp, RoundedCornerShape(36.dp))
-                                    .border(1.dp, Color.White.copy(alpha = .55f), RoundedCornerShape(36.dp)).clip(RoundedCornerShape(36.dp))
-                                "hyper" -> Modifier.padding(horizontal = 8.dp).clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                                else -> Modifier
-                            },
+                            modifier = Modifier.clip(MaterialTheme.shapes.extraLarge).testTag("bottom-dock"),
+                            windowInsets = WindowInsets(0, 0, 0, 0),
                             containerColor = MaterialTheme.colorScheme.surfaceContainer,
                             tonalElevation = 0.dp
                         ) {
@@ -165,15 +168,13 @@ fun NexusRoot(vm: AppViewModel) {
                                 val selected = route == item.route || (item.route == "library" && route?.startsWith("playlist") == true)
                                 NavigationBarItem(
                                     modifier = Modifier.testTag("nav-${item.route}"),
-                                    alwaysShowLabel = style != "glass",
                                     selected = selected,
                                     colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
-                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer
                                     ),
                                     onClick = { vm.albumTarget.value = null; vm.artistTarget.value = null; navigateTo(nav, item.route) },
-                                    icon = { Icon(item.icon, contentDescription = item.label) },
-                                    label = { Text(item.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                    icon = { Icon(item.icon, contentDescription = item.label) }
                                 )
                             }
                         }
@@ -209,7 +210,7 @@ fun NexusRoot(vm: AppViewModel) {
                 artist?.let { target ->
                     androidx.activity.compose.BackHandler { vm.artistTarget.value = null }
                     Surface(Modifier.fillMaxSize()) {
-                        androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.ArtistScreen(vm, target) }
+                        androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.ArtistScreen(vm, target, onOpenPlayer = openPlayer) }
                     }
                 }
             }
@@ -261,9 +262,10 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
     val duration = s.durationMs.coerceAtLeast(1L)
 
     Surface(
+        onClick = onOpen,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = MaterialTheme.shapes.large,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clickable(onClick = onOpen)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column {
             Row(
@@ -275,15 +277,16 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
                     Text(s.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = { vm.player.togglePlayPause() }) {
-                    Icon(if (s.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.isPlaying) "Пауза" else "Играть")
+                    Icon(if (s.showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.showPause) "Пауза" else "Играть")
                 }
                 IconButton(onClick = { vm.player.next() }) { Icon(Icons.Default.SkipNext, contentDescription = "Следующий") }
             }
             LinearProgressIndicator(
                 progress = { (pos.toFloat() / duration.toFloat()).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp).height(2.dp),
                 color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                trackColor = Color.Transparent,
+                drawStopIndicator = {}
             )
         }
     }

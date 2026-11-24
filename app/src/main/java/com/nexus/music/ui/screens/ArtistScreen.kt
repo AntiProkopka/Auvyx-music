@@ -4,11 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
+import com.nexus.music.data.db.availableAlbumTitle
 import com.nexus.music.data.soundcloud.SoundCloudRepository
 import com.nexus.music.data.soundcloud.SoundCloudTrack
 import com.nexus.music.ui.components.ArtworkImage
@@ -27,7 +29,11 @@ import com.nexus.music.ui.components.formatTime
 
 /** Artist page always uses a stable provider profile ID when SoundCloud is involved. */
 @Composable
-fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget) {
+fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget, onOpenPlayer: () -> Unit) {
+    val playback by vm.player.state.collectAsStateWithLifecycle()
+    val known by vm.knownTracks.collectAsStateWithLifecycle()
+    val current = known.firstOrNull { it.id.toString() == playback.mediaId }
+    val currentCloudId = current?.takeIf { it.source == "soundcloud" }?.sourceId
     val local by vm.tracks.collectAsStateWithLifecycle()
     val songs = remember(local, target) {
         local.filter { it.artist.trim().equals(target.name.trim(), ignoreCase = true) }
@@ -97,18 +103,29 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget) {
                     Text(description, style = MaterialTheme.typography.bodyMedium,
                         color = colors.onSurface, maxLines = 6, overflow = TextOverflow.Ellipsis)
                 }
-                val canPlay = if (target.cloud) rows.isNotEmpty() else songs.isNotEmpty()
+                val owner = profile?.id ?: target.owner
+                val activeArtist = if (target.cloud) {
+                    currentCloudId != null && (rows.any { it.id.toString() == currentCloudId } ||
+                        (owner != null && owner.toString() == current?.artistId))
+                } else {
+                    songs.any { it.id.toString() == playback.mediaId }
+                }
+                val firstCloud = rows.firstOrNull { it.full }
+                val showPause = activeArtist && playback.showPause
                 Button(
                     shapes = ButtonDefaults.shapes(),
-                    enabled = canPlay,
+                    enabled = activeArtist || if (target.cloud) firstCloud != null else songs.isNotEmpty(),
                     onClick = {
-                        if (target.cloud && rows.isNotEmpty()) vm.playSoundCloud(rows, 0)
-                        else if (!target.cloud && songs.isNotEmpty()) vm.player.playTracks(songs, 0)
+                        when {
+                            activeArtist -> vm.player.togglePlayPause()
+                            target.cloud -> firstCloud?.let(vm::playTrack)
+                            else -> songs.firstOrNull()?.let(vm::playTrack)
+                        }
                     }
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Icon(if (showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Слушать")
+                    Text(if (showPause) "Пауза" else "Слушать")
                 }
             }
         }
@@ -117,10 +134,11 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget) {
                 modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
         }
         if (target.cloud) {
-            itemsIndexed(rows, key = { _, song -> "sc-${song.id}" }) { index, song ->
+            items(rows, key = { song -> "sc-${song.id}" }) { song ->
+                val showPause = playback.showPause && currentCloudId == song.id.toString()
                 ListItem(
                     modifier = Modifier.fillMaxWidth().clip(shape)
-                        .clickable { vm.playSoundCloud(rows, index) },
+                        .clickable(enabled = song.full) { vm.playTrack(song); onOpenPlayer() },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                     leadingContent = {
                         Box(Modifier.size(60.dp).clip(RoundedCornerShape(12.dp))) {
@@ -132,7 +150,7 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget) {
                         Text(if (song.full) formatTime(song.durationMs) else "Недоступна полная версия",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     },
-                    trailingContent = { Icon(Icons.Default.PlayArrow, contentDescription = "Воспроизвести") }
+                    trailingContent = { Icon(if (showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null) }
                 )
             }
             item {
@@ -147,10 +165,11 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget) {
                 }
             }
         } else {
-            itemsIndexed(songs, key = { _, song -> "local-${song.id}" }) { index, song ->
+            items(songs, key = { song -> "local-${song.id}" }) { song ->
+                val showPause = playback.showPause && playback.mediaId == song.id.toString()
                 ListItem(
                     modifier = Modifier.fillMaxWidth().clip(shape)
-                        .clickable { vm.player.playTracks(songs, index) },
+                        .clickable { vm.playTrack(song); onOpenPlayer() },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                     leadingContent = {
                         Box(Modifier.size(60.dp).clip(RoundedCornerShape(12.dp))) {
@@ -159,11 +178,11 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget) {
                     },
                     headlineContent = { Text(song.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     supportingContent = {
-                        Text(listOf(song.album.takeIf { it.isNotBlank() }, formatTime(song.durationMs))
+                        Text(listOf(availableAlbumTitle(song.album, song.source), formatTime(song.durationMs))
                             .filterNotNull().joinToString(" · "),
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     },
-                    trailingContent = { Icon(Icons.Default.PlayArrow, contentDescription = "Воспроизвести") }
+                    trailingContent = { Icon(if (showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null) }
                 )
             }
             if (songs.isEmpty()) item { Text("У исполнителя пока нет треков в медиатеке") }
