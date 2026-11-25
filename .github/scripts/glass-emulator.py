@@ -1,12 +1,8 @@
 """Exercise the installed APK on the disposable CI emulator and capture its screen."""
-import math
-import os
 from pathlib import Path
 import re
-import struct
 import subprocess
 import time
-import wave
 import xml.etree.ElementTree as ET
 
 PACKAGE = "com.nexus.music"
@@ -27,8 +23,15 @@ def find(label, timeout=30):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         try:
-            for node in tree().iter("node"):
-                if label in (node.get("text"), node.get("content-desc")):
+            nodes = list(tree().iter("node"))
+            # Some freshly booted Pixel images show a launcher ANR over our activity.
+            # Only dismiss a dialog naming the launcher. AUVYX errors must fail the test.
+            if any("Pixel Launcher isn't responding" in (n.get("text") or "") for n in nodes):
+                close = next(n for n in nodes if n.get("text") == "Close app")
+                touch_node(close)
+                continue
+            for node in nodes:
+                if label.strip() in ((node.get("text") or "").strip(), (node.get("content-desc") or "").strip()):
                     return node
         except (subprocess.CalledProcessError, ET.ParseError):
             pass
@@ -36,10 +39,14 @@ def find(label, timeout=30):
     raise RuntimeError(f"Could not find {label!r} on screen")
 
 
-def tap(label):
-    node = find(label)
+def touch_node(node):
     x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
     adb("shell", "input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2))
+
+
+def tap(label):
+    print("Tap", label, flush=True)
+    touch_node(find(label))
 
 
 def screenshot(name):
@@ -52,14 +59,9 @@ def screenshot(name):
 def main():
     # The fixture is imported with Android's document picker, exercising the same
     # permissions and Media3 path as a user picking a local song.
-    with wave.open("/tmp/Glass-audio.wav", "wb") as sample:
-        sample.setparams((1, 2, 16000, 0, "NONE", "NONE"))
-        second = b"".join(struct.pack("<h", int(420 * math.sin(i * 2 * math.pi * 220 / 16000))) for i in range(16000))
-        for _ in range(180):
-            sample.writeframes(second)
-    adb("push", "/tmp/Glass-audio.wav", "/sdcard/Download/Glass-audio.wav")
+    adb("push", ".github/fixtures/Glass-audio.mp3", "/sdcard/Download/Glass-audio.mp3")
     adb("shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-        "-d", "file:///sdcard/Download/Glass-audio.wav")
+        "-d", "file:///sdcard/Download/Glass-audio.mp3")
     adb("shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS")
     adb("shell", "am", "start", "-W", "-n", f"{PACKAGE}/.MainActivity")
     tap("Пропустить")
@@ -82,11 +84,11 @@ def main():
     screenshot("05-library")
     tap("Файлы")
     try:
-        tap("Glass-audio.wav")
+        tap("Glass-audio.mp3")
     except RuntimeError:
         tap("Show roots")
         tap("Downloads")
-        tap("Glass-audio.wav")
+        tap("Glass-audio.mp3")
     tap("Треки")
     tap("Glass-audio")
     tap("Пауза")
@@ -97,9 +99,19 @@ def main():
     find("Убрать из очереди")
     screenshot("07-queue")
     tap("Закрыть очередь")
+    tap("Studio Test")
+    find("Подписаться")
+    tap("Подписаться")
+    find("Отписаться")
+    screenshot("08-artist")
+    adb("shell", "input", "keyevent", "4")
+    tap(" · Glass Sessions")
+    find("Воспроизвести альбом")
+    screenshot("09-album")
+    adb("shell", "input", "keyevent", "4")
     tap("Эквалайзер и Speed Lab")
     find("Эквалайзер")
-    screenshot("08-equalizer")
+    screenshot("10-equalizer")
     (OUT / "gfxinfo.txt").write_text(adb("shell", "dumpsys", "gfxinfo", PACKAGE))
     (OUT / "meminfo.txt").write_text(adb("shell", "dumpsys", "meminfo", PACKAGE))
 
@@ -109,5 +121,6 @@ if __name__ == "__main__":
         main()
     except Exception:
         screenshot("error")
+        (OUT / "error-ui.xml").write_bytes(ET.tostring(tree(), encoding="utf-8"))
         (OUT / "logcat.txt").write_text(adb("logcat", "-d", "-t", "800"))
         raise

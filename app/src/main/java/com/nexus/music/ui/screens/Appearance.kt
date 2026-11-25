@@ -48,7 +48,7 @@ internal fun Appearance(vm: AppViewModel) {
                 }
             }
         }
-        val photos = photoCatalog().flatMap { (group, paths) -> paths.map { group to it } }
+        val photos = LocalPhotos.current.flatMap { (group, paths) -> paths.map { group to it } }
         if (photos.isNotEmpty()) {
             val selected = groupPhoto(vm)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

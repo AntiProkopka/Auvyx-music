@@ -55,7 +55,7 @@ internal fun GlassHome(vm: AppViewModel) {
         item { CoverCarousel("Recently Played", history.distinctBy { it.id }.map {
             CoverItem(it.id.toString(), it.title, it.artist, it.artworkUri) { vm.playTrack(it) }
         }, labels, "Здесь появятся прослушанные песни") }
-        item { HomeBanner("here’s music for you now", groupPhoto(vm, alternate = true), true) }
+        item { HomeBanner("here's music for you now", groupPhoto(vm, alternate = true), true) }
         item { CoverCarousel("Followed Artists", followed.map {
             CoverItem(it.key, it.name, null, it.avatar) { vm.artistTarget.value = AppViewModel.ArtistTarget(it.name, it.cloud, it.owner, it.permalink) }
         }, empty = "Здесь появятся исполнители, на которых ты подпишешься") }

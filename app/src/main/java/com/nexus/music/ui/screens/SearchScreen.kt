@@ -80,6 +80,10 @@ fun SearchScreen(vm: AppViewModel) {
     var pending by remember { mutableStateOf<TrackEntity?>(null) }
     var pendingSoundCloud by remember { mutableStateOf<SoundCloudTrack?>(null) }
 
+    val latestQuery by androidx.compose.runtime.rememberUpdatedState(query)
+    androidx.compose.runtime.DisposableEffect(vm) {
+        onDispose { if (latestQuery.isNotBlank()) vm.rememberSearch(latestQuery) }
+    }
     val glass = isGlass
     var localEnabled by rememberSaveable { mutableStateOf(true) }
     var cloudEnabled by rememberSaveable { mutableStateOf(true) }

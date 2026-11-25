@@ -101,13 +101,13 @@ internal fun Modifier.sharedCover(): Modifier {
 
 internal val LocalBottomBarPadding = staticCompositionLocalOf { 0.dp }
 
-private data class NavItem(val route: String, val label: String, val icon: ImageVector)
+private data class NavItem(val route: String, val label: String, val icon: ImageVector, val glassIcon: Int)
 
 private val navItems = listOf(
-    NavItem("home", "Главная", Icons.Default.Home),
-    NavItem("search", "Поиск", Icons.Default.Search),
-    NavItem("library", "Медиатека", Icons.Default.LibraryMusic),
-    NavItem("settings", "Настройки", Icons.Default.Settings)
+    NavItem("home", "Главная", Icons.Default.Home, R.drawable.glass_home),
+    NavItem("search", "Поиск", Icons.Default.Search, R.drawable.glass_search),
+    NavItem("library", "Медиатека", Icons.Default.LibraryMusic, R.drawable.glass_library),
+    NavItem("settings", "Настройки", Icons.Default.Settings, R.drawable.glass_settings)
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -133,7 +133,7 @@ fun NexusRoot(vm: AppViewModel) {
 
     val title = when {
         route == "home" -> "auvyx"
-        route == "search" -> "Поиск"
+        route == "search" -> if (isGlass) "search" else "Поиск"
         route == "library" -> "Медиатека"
         route == "settings" -> "Настройки"
         route?.startsWith("playlist") == true -> "Плейлист"
@@ -154,144 +154,151 @@ fun NexusRoot(vm: AppViewModel) {
     val primary = MaterialTheme.colorScheme.primary
     val artLight by animateColorAsState(if (glass) rememberArtworkAccent(playingArt, primary) ?: Color.Transparent else Color.Transparent, tween(580))
     SharedTransitionLayout {
-    CompositionLocalProvider(LocalWallpaper provides wallpaper, LocalPage provides page, LocalLamp provides lamp,
-        LocalArtLight provides artLight, LocalTransition provides if (glass) this else null) {
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (glass) Box(Modifier.fillMaxSize().hazeSource(page, zIndex = 0f).hazeSource(wallpaper).background(MaterialTheme.colorScheme.background)) {
-            GlassWallpaper(vm)
-            AtmosphericLight(route == "player")
-        }
-        Scaffold(
-            containerColor = Color.Transparent,
-            snackbarHost = { SnackbarHost(snackbar) },
-            topBar = {
-                if (route != "player" && route?.startsWith("playlist") != true) {
-                    if (style == "lane") {
-                        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            navItems.forEach { item -> IconButton(modifier = Modifier.testTag("nav-${item.route}"), onClick = { vm.albumTarget.value = null; vm.artistTarget.value = null; navigateTo(nav, item.route) }) {
-                                Icon(item.icon, item.label, tint = if (route == item.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                            } }
-                        }
-                    } else if (style == "hyper") {
-                        Text(title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.statusBarsPadding().padding(horizontal = 22.dp, vertical = 10.dp))
-                    } else CenterAlignedTopAppBar(
-                        title = {
-                            Text(
-                                title,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        },
-                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                            containerColor = if (glass) Color.Transparent else MaterialTheme.colorScheme.background,
-                            titleContentColor = MaterialTheme.colorScheme.onBackground
-                        )
-                    )
+        CompositionLocalProvider(LocalPhotos provides if (glass) loadPhotoCatalog() else emptyMap(), LocalWallpaper provides wallpaper, LocalPage provides page, LocalLamp provides lamp,
+            LocalArtLight provides artLight, LocalTransition provides if (glass) this else null) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                if (glass) Box(Modifier.fillMaxSize().hazeSource(page, zIndex = 0f).hazeSource(wallpaper).background(MaterialTheme.colorScheme.background)) {
+                    GlassWallpaper(vm)
+                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .38f)))
+                    AtmosphericLight(route == "player")
                 }
-            },
-            bottomBar = {
-                AnimatedVisibility(visible = route != "player", exit = fadeOut(tween(210)), enter = fadeIn(tween(240))) {
-                    val miniVisibility = this
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
-                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                            .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (player.mediaId != null) CompositionLocalProvider(LocalVisibility provides miniVisibility) { MiniPlayer(vm, onOpen = openPlayer) }
-                        if (glass) {
-                            Row(Modifier.fillMaxWidth().height(64.dp).frosted(CircleShape, overPage = true).testTag("bottom-dock"),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                navItems.forEachIndexed { index, item ->
-                                    val active = route == item.route || (item.route == "library" && route?.startsWith("playlist") == true)
-                                    val color by animateColorAsState(if (active) primary else MaterialTheme.colorScheme.onSurfaceVariant, tween(180))
-                                    Box(Modifier.weight(1f).fillMaxHeight().testTag("nav-${item.route}")
-                                        .selectable(active, role = androidx.compose.ui.semantics.Role.Tab) {
-                                            vm.albumTarget.value = null
-                                            vm.artistTarget.value = null
-                                            navigateTo(nav, item.route)
-                                        }, contentAlignment = Alignment.Center) {
-                                        Icon(painterResource(listOf(R.drawable.glass_home, R.drawable.glass_search,
-                                            R.drawable.glass_library, R.drawable.glass_settings)[index]), item.label, tint = color)
-                                        if (active) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)
-                                            .size(20.dp, 3.dp).clip(CircleShape).background(Brush.horizontalGradient(
-                                                listOf(color.copy(alpha=.18f), color, color.copy(alpha=.18f)))))
+                Scaffold(
+                    containerColor = Color.Transparent,
+                    snackbarHost = { SnackbarHost(snackbar) },
+                    topBar = {
+                        if (route != "player" && route?.startsWith("playlist") != true) {
+                            if (glass) {
+                                Text(title, style = if (route == "home") MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineMedium,
+                                    modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 19.dp, vertical = 8.dp))
+                            } else if (style == "lane") {
+                                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                    navItems.forEach { item -> IconButton(modifier = Modifier.testTag("nav-${item.route}"), onClick = { vm.albumTarget.value = null; vm.artistTarget.value = null; navigateTo(nav, item.route) }) {
+                                        Icon(item.icon, item.label, tint = if (route == item.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    } }
+                                }
+                            } else if (style == "hyper") {
+                                Text(title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.statusBarsPadding().padding(horizontal = 22.dp, vertical = 10.dp))
+                            } else CenterAlignedTopAppBar(
+                                title = {
+                                    Text(
+                                        title,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                },
+                                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                                    containerColor = if (glass) Color.Transparent else MaterialTheme.colorScheme.background,
+                                    titleContentColor = MaterialTheme.colorScheme.onBackground
+                                )
+                            )
+                        }
+                    },
+                    bottomBar = {
+                        AnimatedVisibility(visible = route != "player", exit = fadeOut(tween(210)), enter = fadeIn(tween(240))) {
+                            val miniVisibility = this
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (player.mediaId != null) CompositionLocalProvider(LocalVisibility provides miniVisibility) { MiniPlayer(vm, onOpen = openPlayer) }
+                                if (glass) {
+                                    Row(Modifier.fillMaxWidth().height(64.dp).frosted(CircleShape, overPage = true).testTag("bottom-dock"),
+                                        verticalAlignment = Alignment.CenterVertically) {
+                                        navItems.forEach { item ->
+                                            val active = route == item.route || (item.route == "library" && route?.startsWith("playlist") == true)
+                                            val color by animateColorAsState(if (active) primary else MaterialTheme.colorScheme.onSurfaceVariant, tween(180))
+                                            Box(Modifier.weight(1f).fillMaxHeight().testTag("nav-${item.route}")
+                                                .selectable(active, role = androidx.compose.ui.semantics.Role.Tab) {
+                                                    vm.albumTarget.value = null
+                                                    vm.artistTarget.value = null
+                                                    navigateTo(nav, item.route)
+                                                }, contentAlignment = Alignment.Center) {
+                                                Icon(painterResource(item.glassIcon), item.label, tint = color)
+                                                if (active) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)
+                                                    .size(20.dp, 3.dp).clip(CircleShape).background(Brush.horizontalGradient(
+                                                        listOf(color.copy(alpha=.18f), color, color.copy(alpha=.18f)))))
+                                            }
+                                        }
+                                    }
+                                } else if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
+                                    modifier = Modifier.clip(MaterialTheme.shapes.extraLarge)
+                                        .background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 1f))
+                                        .testTag("bottom-dock"),
+                                    windowInsets = WindowInsets(0, 0, 0, 0),
+                                    containerColor = Color.Transparent,
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                    tonalElevation = 0.dp
+                                ) {
+                                    navItems.forEach { item ->
+                                        val selected = route == item.route || (item.route == "library" && route?.startsWith("playlist") == true)
+                                        NavigationBarItem(
+                                            modifier = Modifier.testTag("nav-${item.route}"),
+                                            selected = selected,
+                                            colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                                                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                            ),
+                                            onClick = { vm.albumTarget.value = null; vm.artistTarget.value = null; navigateTo(nav, item.route) },
+                                            icon = { Icon(item.icon, contentDescription = item.label) }
+                                        )
                                     }
                                 }
                             }
-                        } else if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
-                            modifier = Modifier.clip(MaterialTheme.shapes.extraLarge)
-                                .background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 1f))
-                                .testTag("bottom-dock"),
-                            windowInsets = WindowInsets(0, 0, 0, 0),
-                            containerColor = Color.Transparent,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            tonalElevation = 0.dp
-                        ) {
-                            navItems.forEach { item ->
-                                val selected = route == item.route || (item.route == "library" && route?.startsWith("playlist") == true)
-                                NavigationBarItem(
-                                    modifier = Modifier.testTag("nav-${item.route}"),
-                                    selected = selected,
-                                    colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
-                                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                                        selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                    ),
-                                    onClick = { vm.albumTarget.value = null; vm.artistTarget.value = null; navigateTo(nav, item.route) },
-                                    icon = { Icon(item.icon, contentDescription = item.label) }
-                                )
+                        }
+                    }
+                ) { padding ->
+                    val artist by vm.artistTarget.collectAsStateWithLifecycle()
+                    val album by vm.albumTarget.collectAsStateWithLifecycle()
+                    val direction = LocalLayoutDirection.current
+                    val bottomPadding = padding.calculateBottomPadding()
+                    // Keep the viewport behind the transparent controls and reserve room at the end of scrolling.
+                    CompositionLocalProvider(LocalBottomBarPadding provides if (route == "player") 0.dp else bottomPadding) {
+                        Box(Modifier.padding(
+                            start = padding.calculateStartPadding(direction),
+                            top = padding.calculateTopPadding(),
+                            end = padding.calculateEndPadding(direction),
+                            bottom = if (route == "player") bottomPadding else 0.dp
+                        ).fillMaxSize().then(if (glass) Modifier.hazeSource(page, zIndex = 1f) else Modifier)) {
+                            val motion = MaterialTheme.motionScheme
+                            NavHost(
+                                navController = nav,
+                                startDestination = "home",
+                                enterTransition = { fadeIn(motion.defaultEffectsSpec()) },
+                                exitTransition = { fadeOut(motion.fastEffectsSpec()) }
+                            ) {
+                                composable("home") { HomeScreen(vm) }
+                                composable("search") { SearchScreen(vm) }
+                                composable("library") { LibraryScreen(vm, onOpenPlaylist = { id -> nav.navigate("playlist/$id") }) }
+                                composable("settings") { SettingsScreen(vm) }
+                                composable(route = "playlist/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
+                                    PlaylistScreen(vm, entry.arguments?.getLong("id") ?: 0L, onBack = { nav.popBackStack() })
+                                }
+                                composable("player") { CompositionLocalProvider(LocalVisibility provides this) { PlayerScreen(vm, onClose = { nav.popBackStack() }) } }
+                            }
+                            AnimatedContent(album, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(150)) },
+                                label = "Album page") { target -> if (target != null) {
+                                androidx.activity.compose.BackHandler(enabled = artist == null && album == target) { vm.albumTarget.value = null }
+                                Surface(Modifier.fillMaxSize()) {
+                                    androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.AlbumScreen(vm, target) }
+                                }
+                            }
+                            }
+                            AnimatedContent(artist, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(150)) },
+                                label = "Artist page") { target -> if (target != null) {
+                                androidx.activity.compose.BackHandler(enabled = artist == target) { vm.artistTarget.value = null }
+                                Surface(Modifier.fillMaxSize()) {
+                                    androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.ArtistScreen(vm, target, onOpenPlayer = openPlayer) }
+                                }
+                            }
                             }
                         }
                     }
                 }
             }
-        ) { padding ->
-            val artist by vm.artistTarget.collectAsStateWithLifecycle()
-            val album by vm.albumTarget.collectAsStateWithLifecycle()
-            val direction = LocalLayoutDirection.current
-            val bottomPadding = padding.calculateBottomPadding()
-            // Keep the viewport behind the transparent controls and reserve room at the end of scrolling.
-            CompositionLocalProvider(LocalBottomBarPadding provides if (route == "player") 0.dp else bottomPadding) {
-                Box(Modifier.padding(
-                    start = padding.calculateStartPadding(direction),
-                    top = padding.calculateTopPadding(),
-                    end = padding.calculateEndPadding(direction),
-                    bottom = if (route == "player") bottomPadding else 0.dp
-                ).fillMaxSize().then(if (glass) Modifier.hazeSource(page, zIndex = 1f) else Modifier)) {
-                    val motion = MaterialTheme.motionScheme
-                    NavHost(
-                        navController = nav,
-                        startDestination = "home",
-                        enterTransition = { fadeIn(motion.defaultEffectsSpec()) },
-                        exitTransition = { fadeOut(motion.fastEffectsSpec()) }
-                    ) {
-                        composable("home") { HomeScreen(vm) }
-                        composable("search") { SearchScreen(vm) }
-                        composable("library") { LibraryScreen(vm, onOpenPlaylist = { id -> nav.navigate("playlist/$id") }) }
-                        composable("settings") { SettingsScreen(vm) }
-                        composable(route = "playlist/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
-                            PlaylistScreen(vm, entry.arguments?.getLong("id") ?: 0L, onBack = { nav.popBackStack() })
-                        }
-                        composable("player") { CompositionLocalProvider(LocalVisibility provides this) { PlayerScreen(vm, onClose = { nav.popBackStack() }) } }
-                    }
-                    album?.let { target ->
-                        androidx.activity.compose.BackHandler(enabled = artist == null) { vm.albumTarget.value = null }
-                        Surface(Modifier.fillMaxSize()) {
-                            androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.AlbumScreen(vm, target) }
-                        }
-                    }
-                    artist?.let { target ->
-                        androidx.activity.compose.BackHandler { vm.artistTarget.value = null }
-                        Surface(Modifier.fillMaxSize()) {
-                            androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.ArtistScreen(vm, target, onOpenPlayer = openPlayer) }
-                        }
-                    }
-                }
-            }
         }
-    }
-    }
     }
     FirstRunNicknameDialog(vm)
 }

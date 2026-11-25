@@ -259,7 +259,14 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                         contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current)
                     ) {
                         items(playlists, key = { it.id }) { playlist ->
-                            ListItem(
+                            if (glass) {
+                                val members by remember(playlist.id) { vm.playlistTracks(playlist.id) }.collectAsStateWithLifecycle(initialValue = emptyList())
+                                Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                                    CollectionPanel(playlist.name, playlist.trackCount, members.firstNotNullOfOrNull { it.artworkUri }, false) {
+                                        onOpenPlaylist(playlist.id)
+                                    }
+                                }
+                            } else ListItem(
                                 modifier = Modifier.fillMaxWidth().clickable { onOpenPlaylist(playlist.id) },
                                 leadingContent = { Icon(Icons.Default.QueueMusic, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                                 headlineContent = { Text(playlist.name, style = MaterialTheme.typography.titleSmall) },

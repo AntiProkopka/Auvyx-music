@@ -34,6 +34,7 @@ internal fun GlassArtist(vm: AppViewModel, target: AppViewModel.ArtistTarget, on
     LaunchedEffect(target, retry) {
         if (!target.cloud) return@LaunchedEffect
         error = null
+        complete = false
         try {
             val artist = profile ?: SoundCloudRepository.artist(target.owner, target.permalink)
             profile = artist

@@ -1,5 +1,7 @@
 package com.nexus.music.ui.components
 
+import com.nexus.music.R
+import com.nexus.music.ui.theme.isGlass
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -28,7 +30,7 @@ fun PlatformArtworkBadge(platform: String) {
 
     if (platform == "local") {
         Box(Modifier.padding(3.dp).size(18.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xDD27313C)), contentAlignment = Alignment.Center) {
-            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.LibraryMusic, "На устройстве", Modifier.size(14.dp), tint = Color.White)
+            BrandIcon(R.drawable.glass_phone, androidx.compose.material.icons.Icons.Default.LibraryMusic, "На устройстве", Modifier.size(14.dp), tint = Color.White)
         }
     } else if (resourceId != 0) {
         Box(
@@ -43,6 +45,7 @@ fun PlatformArtworkBadge(platform: String) {
                 painter = painterResource(resourceId),
                 contentDescription = "Платформа ${platform}",
                 modifier = Modifier.size(width = 21.dp, height = 11.dp),
+                colorFilter = if (isGlass && platform == "soundcloud") androidx.compose.ui.graphics.ColorFilter.tint(Color(0xffff5600)) else null,
                 contentScale = ContentScale.Fit
             )
         }

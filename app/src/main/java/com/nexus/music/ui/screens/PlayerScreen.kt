@@ -448,6 +448,10 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             FilledIconButton(
                 onClick = { vm.player.togglePlayPause() },
                 modifier = Modifier.size(64.dp),
+                colors = if (isGlass) androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+                    containerColor = androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.primary, LocalArtLight.current.copy(alpha = 1f),
+                        LocalArtLight.current.alpha * .38f), contentColor = Color(0xff101015)
+                ) else androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(),
                 shapes = androidx.compose.material3.IconButtonDefaults.shapes(
                     shape = RoundedCornerShape(playCorner),
                     pressedShape = MaterialTheme.shapes.large

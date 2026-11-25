@@ -45,7 +45,6 @@ internal fun Modifier.frosted(shape: Shape, overPage: Boolean = false): Modifier
         noiseFactor = .025f, blurRadius = if (overPage) 22.dp else 14.dp,
         fallbackTint = HazeTint(smoked.copy(alpha = .94f))
     )).drawWithContent {
-        drawContent()
         if (highlight.alpha > 0 && origin.value != Offset.Unspecified && lamp.value != Offset.Unspecified) {
             val center = lamp.value - origin.value
             val radius = 244.dp.toPx()
@@ -54,6 +53,7 @@ internal fun Modifier.frosted(shape: Shape, overPage: Boolean = false): Modifier
                     highlight.copy(alpha=0f)), center, radius))
             }
         }
+        drawContent()
     }
 }
 

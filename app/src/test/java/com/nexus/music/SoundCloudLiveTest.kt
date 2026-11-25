@@ -30,6 +30,19 @@ class SoundCloudLiveTest {
         assertTrue(album.durationMs > 0)
     }
 
+    @Test fun artistAndReleaseSearchOpenRealCatalogs() = runBlocking {
+        assumeTrue(System.getenv("AUVYX_LIVE_SC") == "1")
+        val artist = SoundCloudRepository.searchArtists("ODESZA").first { it.name.equals("ODESZA", true) }
+        val catalog = SoundCloudRepository.artistReleases(artist.id)
+        assertTrue(catalog.isNotEmpty())
+        assertTrue(catalog.all { it.owner == artist.id })
+        assertEquals(catalog.size, catalog.distinctBy { it.id }.size)
+        val release = SoundCloudRepository.searchReleases("Coldplay Parachutes").first { it.title.equals("Parachutes", true) }
+        val album = requireNotNull(SoundCloudRepository.releaseAlbum(release.id))
+        assertEquals(release.title, album.title)
+        assertTrue(album.tracks.any { it.title.equals("Yellow", true) })
+    }
+
     @Test fun publicCatalogProfileAndStream() = runBlocking {
         assumeTrue(System.getenv("AUVYX_LIVE_SC") == "1")
         for (query in listOf("Монеточка", "ODESZA")) {

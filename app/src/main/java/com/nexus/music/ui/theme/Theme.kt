@@ -5,6 +5,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.lerp
 import com.nexus.music.data.settings.GlassAccent
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
+import com.nexus.music.R
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import android.os.Build
@@ -103,6 +107,30 @@ private val expressiveTypography = Typography().run {
     )
 }
 
+private val glassFamily = FontFamily(listOf(FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold).map {
+    Font(R.font.nunito, weight = it, variationSettings = FontVariation.Settings(FontVariation.weight(it.weight)))
+})
+
+private val glassTypography = expressiveTypography.run {
+    copy(
+        headlineLarge = headlineLarge.copy(fontFamily = glassFamily, fontWeight = FontWeight.Bold),
+        headlineMedium = headlineMedium.copy(fontFamily = glassFamily, fontWeight = FontWeight.Bold),
+        headlineSmall = headlineSmall.copy(fontFamily = glassFamily, fontWeight = FontWeight.Bold),
+        titleLarge = titleLarge.copy(fontFamily = glassFamily),
+        titleMedium = titleMedium.copy(fontFamily = glassFamily),
+        titleSmall = titleSmall.copy(fontFamily = glassFamily),
+        bodyLarge = bodyLarge.copy(fontFamily = glassFamily),
+        bodyMedium = bodyMedium.copy(fontFamily = glassFamily),
+        bodySmall = bodySmall.copy(fontFamily = glassFamily),
+        labelLarge = labelLarge.copy(fontFamily = glassFamily),
+        labelMedium = labelMedium.copy(fontFamily = glassFamily),
+        labelSmall = labelSmall.copy(fontFamily = glassFamily),
+        displayLarge = displayLarge.copy(fontFamily = glassFamily, fontWeight = FontWeight.Bold),
+        displayMedium = displayMedium.copy(fontFamily = glassFamily, fontWeight = FontWeight.Bold),
+        displaySmall = displaySmall.copy(fontFamily = glassFamily, fontWeight = FontWeight.Bold)
+    )
+}
+
 @Composable
 fun NexusTheme(themeMode: String, style: String, accent: GlassAccent = GlassAccent.Sunset, content: @Composable () -> Unit) {
     val dark = style == "glass" || when (themeMode) {
@@ -151,7 +179,7 @@ fun NexusTheme(themeMode: String, style: String, accent: GlassAccent = GlassAcce
     androidx.compose.runtime.CompositionLocalProvider(LocalStyle provides style) {
         MaterialExpressiveTheme(
             colorScheme = colors,
-            typography = expressiveTypography,
+            typography = if (style == "glass") glassTypography else expressiveTypography,
             motionScheme = MotionScheme.expressive(),
             shapes = when (style) {
                 "lane" -> Shapes(small = RoundedCornerShape(3.dp), medium = RoundedCornerShape(4.dp), large = RoundedCornerShape(6.dp))

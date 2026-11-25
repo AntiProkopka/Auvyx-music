@@ -25,8 +25,10 @@ private val photoCache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
     override fun sizeOf(key: String, value: Bitmap) = value.byteCount
 }
 
+internal val LocalPhotos = staticCompositionLocalOf<Map<GlassAccent, List<String>>> { emptyMap() }
+
 @Composable
-internal fun photoCatalog(): Map<GlassAccent, List<String>> {
+internal fun loadPhotoCatalog(): Map<GlassAccent, List<String>> {
     val assets = LocalContext.current.assets
     return produceState(emptyMap<GlassAccent, List<String>>(), assets) {
         value = withContext(Dispatchers.IO) {
@@ -42,7 +44,7 @@ internal fun photoCatalog(): Map<GlassAccent, List<String>> {
 internal fun groupPhoto(vm: AppViewModel, alternate: Boolean = false): String? {
     val accent by vm.accent.collectAsStateWithLifecycle()
     val selected by vm.photo.collectAsStateWithLifecycle()
-    val photos = photoCatalog()[accent].orEmpty()
+    val photos = LocalPhotos.current[accent].orEmpty()
     val index = photos.indexOf(selected).coerceAtLeast(0)
     return if (alternate && photos.size > 1) photos[(index + 1) % photos.size] else photos.getOrNull(index)
 }
