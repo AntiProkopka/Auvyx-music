@@ -1,5 +1,10 @@
 package com.nexus.music.ui.components
 
+import com.nexus.music.R
+import com.nexus.music.ui.theme.*
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -58,7 +63,8 @@ fun CatalogResultRow(title: String, artist: String, durationMs: Long, artwork: S
     onAlbum: (() -> Unit)? = null, onAddToLibrary: (() -> Unit)? = null, playEnabled: Boolean = true) {
     var menuExpanded by remember(title, artist) { mutableStateOf(false) }
     ListItem(
-        modifier = Modifier.clickable(enabled = playEnabled, onClick = onPlay),
+        colors = ListItemDefaults.colors(containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surface),
+        modifier = Modifier.then(if (isGlass) Modifier.padding(horizontal = 10.dp, vertical = 3.dp) else Modifier).frosted(MaterialTheme.shapes.medium).clickable(enabled = playEnabled, onClick = onPlay),
         leadingContent = {
             if (!artwork.isNullOrBlank()) {
                 Box(modifier = Modifier.size(56.dp)) {
@@ -94,18 +100,18 @@ fun CatalogResultRow(title: String, artist: String, durationMs: Long, artwork: S
         trailingContent = {
             Row {
                 IconButton(onClick = onFavorite) {
-                    Icon(
+                    BrandIcon(if (isFavorite) R.drawable.glass_heartfill else R.drawable.glass_favorite,
                         if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = if (isFavorite) "Убрать из избранного" else "В избранное",
                         tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 IconButton(onClick = onEnqueue, enabled = playEnabled) {
-                    Icon(Icons.Default.Add, contentDescription = "Добавить в очередь")
+                    BrandIcon(R.drawable.glass_queue_add, Icons.Default.Add, contentDescription = "Добавить в очередь")
                 }
                 Box {
                     IconButton(onClick = { menuExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Меню трека")
+                        BrandIcon(R.drawable.glass_more, Icons.Default.MoreVert, contentDescription = "Меню трека")
                     }
                     DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false },
                             shape = MaterialTheme.shapes.large, containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {

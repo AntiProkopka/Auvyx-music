@@ -106,8 +106,13 @@ interface PlaylistDao {
     suspend fun removeTrack(playlistId: Long, trackId: Long)
 }
 
+data class TrackListens(val trackId: Long, val listens: Long)
+
 @Dao
 interface HistoryDao {
+    @Query("SELECT trackId, COUNT(*) AS listens FROM history GROUP BY trackId")
+    fun observeCounts(): Flow<List<TrackListens>>
+
     @Insert
     suspend fun insert(item: HistoryEntity)
 

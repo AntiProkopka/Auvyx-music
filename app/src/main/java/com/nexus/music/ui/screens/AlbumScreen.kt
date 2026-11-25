@@ -1,6 +1,7 @@
 package com.nexus.music.ui.screens
 
 import android.media.MediaMetadataRetriever
+import com.nexus.music.ui.theme.*
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -84,6 +85,7 @@ fun AlbumScreen(vm: AppViewModel, album: AppViewModel.AlbumTarget) {
                 Button(shapes = ButtonDefaults.shapes(), enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks, 0) }) {
                     Text("Воспроизвести альбом")
                 }
+                if (isGlass) TextButton(enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks.shuffled(), 0) }) { Text("Перемешать") }
                 OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { filePicker.launch(arrayOf("audio/*", "application/ogg")) }) {
                     Text("Добавить треки в медиатеку")
                 }
@@ -107,7 +109,7 @@ private fun SoundCloudAlbumScreen(vm: AppViewModel, target: AppViewModel.AlbumTa
     val response by produceState<Result<SoundCloudRepository.Album?>?>(null, target, attempt) {
         value = null
         value = try {
-            Result.success(SoundCloudRepository.album(target.id, target.permalink))
+            Result.success(if (target.releaseId != null) SoundCloudRepository.releaseAlbum(target.releaseId) else SoundCloudRepository.album(target.id, target.permalink))
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
@@ -145,6 +147,7 @@ private fun SoundCloudAlbumScreen(vm: AppViewModel, target: AppViewModel.AlbumTa
                         Button(shapes = ButtonDefaults.shapes(), enabled = playable.isNotEmpty(), onClick = { vm.playSoundCloud(playable, 0) }) {
                             Text("Воспроизвести альбом")
                         }
+                if (isGlass) TextButton(enabled = playable.isNotEmpty(), onClick = { vm.playSoundCloud(playable.shuffled(), 0) }) { Text("Перемешать") }
                         OutlinedButton(shapes = ButtonDefaults.shapes(), enabled = unsaved.isNotEmpty(), onClick = { vm.addSoundCloudToLibrary(unsaved) }) {
                             Text("Добавить треки в медиатеку")
                         }
@@ -185,7 +188,8 @@ private fun AlbumHeader(
     Card(shape = MaterialTheme.shapes.extraLarge) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val cover = Modifier.size(144.dp).clip(MaterialTheme.shapes.large)
-            if (artwork?.startsWith("https://") == true) RemoteArtworkImage(artwork, "Обложка $title", cover)
+            if (isGlass) HaloArtwork(artwork, "Обложка $title", Modifier.size(206.dp))
+            else if (artwork?.startsWith("https://") == true) RemoteArtworkImage(artwork, "Обложка $title", cover)
             else ArtworkImage(artwork, "Обложка $title", cover)
             Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
             if (artist.isNotBlank()) {

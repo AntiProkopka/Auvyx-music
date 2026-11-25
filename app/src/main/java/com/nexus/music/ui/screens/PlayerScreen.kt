@@ -29,6 +29,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
+import com.nexus.music.ui.theme.*
+import com.nexus.music.ui.sharedCover
+import com.nexus.music.R
+import com.nexus.music.ui.components.BrandIcon
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -187,7 +195,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         .padding(horizontal = 20.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { if (showQueue) showQueue = false else onClose() }) {
-                Icon(if (showQueue) Icons.Default.Close else Icons.Default.KeyboardArrowDown,
+                BrandIcon(if (showQueue) R.drawable.glass_close else R.drawable.glass_chevrondown, if (showQueue) Icons.Default.Close else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (showQueue) "Закрыть очередь" else "Свернуть")
             }
             Text(
@@ -197,7 +205,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                 modifier = Modifier.weight(1f)
             )
             IconButton(onClick = { showQueue = !showQueue }) {
-                Icon(Icons.Default.LibraryMusic, contentDescription = "Очередь", tint = if (showQueue) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                BrandIcon(R.drawable.glass_queue, Icons.Default.LibraryMusic, contentDescription = "Очередь", tint = if (showQueue) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
             }
         }
 
@@ -243,7 +251,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                                 }
                             }.padding(10.dp)
                         )
-                        IconButton(onClick = { vm.player.removeFromQueue(index) }) { Icon(Icons.Default.Close, contentDescription = "Убрать из очереди") }
+                        IconButton(onClick = { vm.player.removeFromQueue(index) }) { BrandIcon(R.drawable.glass_close, Icons.Default.Close, contentDescription = "Убрать из очереди") }
                     }
                 }
             }
@@ -283,15 +291,21 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         ) {
                 val artworkSize = minOf(maxWidth * artworkWidthFraction, maxHeight)
                 Box(
-                    modifier = Modifier.size(artworkSize).aspectRatio(1f).clip(RoundedCornerShape(when (style) { "glass" -> 52.dp; "hyper" -> 40.dp; "lane" -> 4.dp; else -> 30.dp }))
+                    modifier = Modifier.size(artworkSize).aspectRatio(1f).sharedCover().clip(RoundedCornerShape(when (style) { "glass" -> 52.dp; "hyper" -> 40.dp; "lane" -> 4.dp; else -> 30.dp }))
                         .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer))),
                     contentAlignment = Alignment.Center
                 ) {
+                    val artModifier = if (isGlass) Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithContent {
+                            drawContent()
+                            drawRect(Brush.radialGradient(0f to Color.White, .76f to Color.White, 1f to Color.White.copy(alpha=.28f),
+                                radius = size.minDimension * .71f), blendMode = BlendMode.DstIn)
+                        } else Modifier.fillMaxSize()
                     if (!artworkUri.isNullOrBlank()) {
                         if (remoteArtwork) {
-                            RemoteArtworkBitmap(artwork, "Обложка ${s.title}", Modifier.fillMaxSize())
+                            RemoteArtworkBitmap(artwork, "Обложка ${s.title}", artModifier)
                         } else {
-                            LocalArtworkImage(artwork, "Обложка ${s.title}", Modifier.fillMaxSize())
+                            LocalArtworkImage(artwork, "Обложка ${s.title}", artModifier)
                         }
                     } else {
                         Icon(Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(96.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -318,7 +332,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                 overflow = TextOverflow.Ellipsis
             )
             if (albumLabel != null) {
-                Text(if (s.artist.isBlank()) albumLabel else " · $albumLabel", modifier = Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium,
+                Text(if (s.artist.isBlank()) albumLabel else " · $albumLabel", modifier = Modifier.weight(1f, fill = false).then(if (track != null) Modifier.clickable { vm.openAlbum(track) } else Modifier), style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
             }
@@ -326,8 +340,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             IconButton(enabled = s.mediaId != null, onClick = { vm.toggleCurrentFavorite() }) {
-                Icon(
-                    if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                BrandIcon(if (isFavorite) R.drawable.glass_heartfill else R.drawable.glass_favorite, if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = if (isFavorite) "Убрать из избранного" else "В избранное",
                     tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -335,12 +348,12 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             IconButton(enabled = s.mediaId != null, onClick = {
                 s.mediaId?.let(vm::toggleDisliked)
             }) {
-                Icon(Icons.Default.HeartBroken, "Не нравится",
+                BrandIcon(R.drawable.glass_brokenheart, Icons.Default.HeartBroken, "Не нравится",
                     tint = if (s.mediaId in disliked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Box {
                 IconButton(enabled = track != null, onClick = { showTrackMenu = true }) {
-                    Icon(Icons.Default.MoreVert, "Действия с треком")
+                    BrandIcon(R.drawable.glass_more, Icons.Default.MoreVert, "Действия с треком")
                 }
                 DropdownMenu(
                     expanded = showTrackMenu,
@@ -419,14 +432,14 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).frosted(MaterialTheme.shapes.extraLarge),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { vm.player.toggleShuffle() }) {
-                Icon(Icons.Default.Shuffle, contentDescription = "Перемешать", tint = if (s.shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                BrandIcon(R.drawable.glass_shuffle, Icons.Default.Shuffle, contentDescription = "Перемешать", tint = if (s.shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = { vm.player.previous() }) { Icon(Icons.Default.SkipPrevious, contentDescription = "Предыдущий", modifier = Modifier.size(36.dp)) }
+            IconButton(onClick = { vm.player.previous() }) { BrandIcon(R.drawable.glass_previous, Icons.Default.SkipPrevious, contentDescription = "Предыдущий", modifier = Modifier.size(36.dp)) }
             val playCorner by androidx.compose.animation.core.animateDpAsState(
                 targetValue = if (s.showPause) 20.dp else 32.dp,
                 animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
@@ -440,12 +453,11 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                     pressedShape = MaterialTheme.shapes.large
                 )
             ) {
-                Icon(if (s.showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.showPause) "Пауза" else "Играть", modifier = Modifier.size(36.dp))
+                BrandIcon(if (s.showPause) R.drawable.glass_pause else R.drawable.glass_play, if (s.showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.showPause) "Пауза" else "Играть", modifier = Modifier.size(36.dp))
             }
-            IconButton(onClick = { vm.player.next() }) { Icon(Icons.Default.SkipNext, contentDescription = "Следующий", modifier = Modifier.size(36.dp)) }
+            IconButton(onClick = { vm.player.next() }) { BrandIcon(R.drawable.glass_next, Icons.Default.SkipNext, contentDescription = "Следующий", modifier = Modifier.size(36.dp)) }
             IconButton(onClick = { vm.player.cycleRepeat() }) {
-                Icon(
-                    if (s.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                BrandIcon(if (s.repeatMode == Player.REPEAT_MODE_ONE) R.drawable.glass_repeatone else R.drawable.glass_repeat, if (s.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
                     contentDescription = "Повтор",
                     tint = if (s.repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -454,17 +466,17 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
 
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { setVolume(volume - 1) }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.VolumeDown, "Тише")
+                BrandIcon(R.drawable.glass_volumelow, Icons.Default.VolumeDown, "Тише")
             }
             ExpressiveSlider(value = volume, onValueChange = ::setVolume, valueRange = 0f..maxVolume.toFloat(),
                 modifier = Modifier.weight(1f))
             IconButton(onClick = { setVolume(volume + 1) }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.VolumeUp, "Громче")
+                BrandIcon(R.drawable.glass_volume, Icons.Default.VolumeUp, "Громче")
             }
         }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(enabled = s.mediaId != null, onClick = { showLyrics = true }) {
-                Icon(Icons.Default.Lyrics, "Текст песни")
+                BrandIcon(R.drawable.glass_lyrics, Icons.Default.Lyrics, "Текст песни")
             }
             val outputLabel = currentOutput?.let { audioDeviceLabel(it, nickname) } ?: "Системный вывод"
             TextButton(modifier = Modifier.weight(1f), onClick = {
@@ -472,11 +484,22 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                     bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
                 } else showOutput = true
             }) {
+                if (isGlass) Icon(painterResource(outputIcon(currentOutput)), null, Modifier.size(20.dp))
                 Text(outputLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Icon(Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(16.dp))
+                BrandIcon(R.drawable.glass_chevrondown, Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(16.dp))
             }
             IconButton(onClick = { showEqualizer = true }) {
-                Icon(Icons.Default.Tune, "Эквалайзер и Speed Lab")
+                BrandIcon(R.drawable.glass_equalizer, Icons.Default.Tune, "Эквалайзер и Speed Lab")
+            }
+        }
+        if (isGlass && s.mediaId != null) {
+            val id = s.mediaId.orEmpty()
+            val text by remember(id) { vm.lyrics(id) }.collectAsStateWithLifecycle(initialValue = "")
+            val lines = remember(text) { com.nexus.music.playback.timedLyrics(text) }
+            val preview = lines.getOrNull(com.nexus.music.playback.activeLyricIndex(lines, pos))?.second
+                ?: lines.firstOrNull()?.second ?: text.lineSequence().firstOrNull()
+            if (!preview.isNullOrBlank()) TextButton(onClick = { showLyrics = true }) {
+                Text(preview, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -525,8 +548,8 @@ private fun SoundToolsSheet(
     pitch: Float,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, shape = MaterialTheme.shapes.extraLarge,
-        containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge, overPage = true), shape = MaterialTheme.shapes.extraLarge,
+        containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Эквалайзер", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
@@ -625,8 +648,8 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
         }
     }
     val lyrics = content.orEmpty()
-    ModalBottomSheet(onDismissRequest = onDismiss, shape = MaterialTheme.shapes.extraLarge,
-        containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge, overPage = true), shape = MaterialTheme.shapes.extraLarge,
+        containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
             Text(title, style = MaterialTheme.typography.headlineSmall)
             if (error) Text("Не удалось прочитать файл текста.")
@@ -691,6 +714,8 @@ private fun AudioOutputDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge, overPage = true),
+        containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("Устройство вывода") },
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
@@ -699,6 +724,7 @@ private fun AudioOutputDialog(
                 }
                 outputs.forEach { device ->
                     TextButton(onClick = { onSelect(device) }, modifier = Modifier.fillMaxWidth()) {
+                        if (isGlass) Icon(painterResource(outputIcon(device)), null, Modifier.size(22.dp))
                         Text(audioDeviceLabel(device, nickname), modifier = Modifier.fillMaxWidth())
                     }
                 }
@@ -725,6 +751,14 @@ private val SUPPORTED_OUTPUT_TYPES = setOf(
     AudioDeviceInfo.TYPE_BLE_HEADSET,
     AudioDeviceInfo.TYPE_BLE_SPEAKER
 )
+
+private fun outputIcon(device: AudioDeviceInfo?): Int = when (device?.type) {
+    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> R.drawable.glass_phone
+    AudioDeviceInfo.TYPE_BLE_HEADSET -> R.drawable.glass_earbuds
+    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLE_SPEAKER -> R.drawable.glass_bluetooth
+    AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_USB_HEADSET -> R.drawable.glass_headphones
+    else -> R.drawable.glass_audio_output
+}
 
 private fun audioDeviceLabel(device: AudioDeviceInfo, nickname: String?): String {
     if (device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {

@@ -1,5 +1,6 @@
 package com.nexus.music.ui.screens
 
+import com.nexus.music.ui.theme.*
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -57,7 +58,8 @@ fun SettingsScreen(vm: AppViewModel) {
             .padding(horizontal = 16.dp, vertical = 8.dp).padding(bottom = LocalBottomBarPadding.current),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Card(
+        Appearance(vm)
+        if (!isGlass) Card(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -69,7 +71,7 @@ fun SettingsScreen(vm: AppViewModel) {
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Card(modifier = Modifier.fillMaxWidth().frosted(MaterialTheme.shapes.large), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = if (isGlass) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column {
                 ListItem(
                     headlineContent = { Text("Профиль плеера") },
@@ -82,10 +84,10 @@ fun SettingsScreen(vm: AppViewModel) {
             }
         }
 
-        Card(
+        if (!isGlass) Card(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            colors = CardDefaults.cardColors(containerColor = if (isGlass) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow)
         ) {
             Column {
                 ListItem(
@@ -114,7 +116,7 @@ fun SettingsScreen(vm: AppViewModel) {
         }
         AppIconSettingsSection()
 
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Card(modifier = Modifier.fillMaxWidth().frosted(MaterialTheme.shapes.large), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = if (isGlass) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column {
                 ListItem(
                     headlineContent = { Text("Медиатека") },
@@ -128,7 +130,7 @@ fun SettingsScreen(vm: AppViewModel) {
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Card(modifier = Modifier.fillMaxWidth().frosted(MaterialTheme.shapes.large), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = if (isGlass) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Данные", style = MaterialTheme.typography.titleMedium)
                 OutlinedButton(shapes = androidx.compose.material3.ButtonDefaults.shapes(), onClick = { backupPicker.launch("auvyx-backup.json") }, modifier = Modifier.fillMaxWidth()) {
@@ -146,10 +148,10 @@ fun SettingsScreen(vm: AppViewModel) {
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Card(modifier = Modifier.fillMaxWidth().frosted(MaterialTheme.shapes.large), shape = MaterialTheme.shapes.large, colors = CardDefaults.cardColors(containerColor = if (isGlass) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("О приложении", style = MaterialTheme.typography.titleMedium)
-                Text("auvyx · Alpha 2.0", style = MaterialTheme.typography.headlineSmall)
+                Text("auvyx · Alpha 2.1", style = MaterialTheme.typography.headlineSmall)
                 Text(
                     "Локальная медиатека, SoundCloud и единый движок воспроизведения на Media3. В Alpha 2.0 добавлены собственный 6-полосный эквалайзер и выбор аудиовыхода.",
                     style = MaterialTheme.typography.bodyMedium,

@@ -1,5 +1,12 @@
 package com.nexus.music.ui.screens
 
+import com.nexus.music.ui.theme.*
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -71,7 +78,8 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
     val sort by vm.sortMode.collectAsStateWithLifecycle()
     val current by vm.player.state.collectAsStateWithLifecycle()
 
-    var savedTab by rememberSaveable { mutableIntStateOf(0) }
+    val glass = isGlass
+    var savedTab by rememberSaveable(glass) { mutableIntStateOf(if (glass) 7 else 0) }
     val tab = if (savedTab == 4) 0 else savedTab
     var pending by remember { mutableStateOf<TrackEntity?>(null) }
     var creatingPlaylist by remember { mutableStateOf(false) }
@@ -154,7 +162,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf(0 to "Треки", 1 to "Избранное", 2 to "Плейлисты", 3 to "История", 5 to "Офлайн", 6 to "Исполнители").forEach { (index, label) ->
+            ((if (glass) listOf(7 to "Коллекции") else emptyList()) + listOf(0 to "Треки", 1 to "Избранное", 2 to "Плейлисты", 3 to "История", 5 to "Офлайн", 6 to "Исполнители")).forEach { (index, label) ->
                 ExpressiveFilterChip(
                     selected = tab == index,
                     onClick = { savedTab = index },
@@ -164,6 +172,19 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
         }
 
         when (tab) {
+            7 -> LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = LocalBottomBarPadding.current),
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    CollectionPanel("Понравившиеся песни", favorites.size, null, true) { savedTab = 1 }
+                }
+                items(playlists, key = { it.id }) { playlist ->
+                    val members by remember(playlist.id) { vm.playlistTracks(playlist.id) }.collectAsStateWithLifecycle(initialValue = emptyList())
+                    CollectionPanel(playlist.name, playlist.trackCount, members.firstNotNullOfOrNull { it.artworkUri }, false) {
+                        onOpenPlaylist(playlist.id)
+                    }
+                }
+                item { TextButton(onClick = { creatingPlaylist = true }) { Text("Новый плейлист") } }
+            }
             6 -> LazyColumn(contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current)) {
                 val artists = collection.distinctBy { it.source to (it.artistId ?: it.artist.trim().lowercase()) }.sortedBy { it.artist.lowercase() }
                 items(artists) { t -> TextButton(onClick = { vm.openArtist(t) }) { Text(t.artist + if (t.source == "soundcloud") " · SoundCloud" else " · На устройстве") } }
@@ -304,5 +325,18 @@ private fun ColumnScope.TrackList(
                 onClick = { vm.player.playTracks(list, index) }
             )
         }
+    }
+}
+
+@Composable
+private fun CollectionPanel(title: String, count: Int, cover: String?, favorites: Boolean, open: () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 102.dp).frosted(MaterialTheme.shapes.large).clickable(onClick = open)
+        .padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (favorites) {
+            val context = LocalContext.current
+            val res = remember { context.resources.getIdentifier("glass_liked_songs", "drawable", context.packageName) }
+            if (res != 0) Image(painterResource(res), null, Modifier.size(76.dp), contentScale = ContentScale.Fit)
+        } else ArtTile(cover, null, Modifier.size(76.dp))
+        Column { Text(title, style = MaterialTheme.typography.titleMedium); Text("Треков · $count", style = MaterialTheme.typography.bodySmall) }
     }
 }

@@ -120,7 +120,7 @@ class LibraryRegressionTest {
 
     @Test fun allSavedStylesAndPlaybackSettingsSurviveNewReader() = runBlocking {
         val store = SettingsStore(context)
-        for (style in listOf("material", "hyper", "glass", "lane")) {
+        for (style in listOf("material", "glass")) {
             store.setStyle(style)
             assertEquals(style, SettingsStore(context).visualStyle.first())
         }
@@ -133,6 +133,36 @@ class LibraryRegressionTest {
         assertEquals(1.25f,saved.pitch.first())
         assertEquals(1.25f,saved.speed.first())
         assertEquals(7,saved.crossfade.first())
+    }
+
+    @Test fun appearanceAndSearchSurviveReopenAndBackup() = runBlocking {
+        val store = SettingsStore(context)
+        val artist = com.nexus.music.data.settings.FollowedArtist("One", 9, true, null, null)
+        store.toggleFollow(artist)
+        for (accent in com.nexus.music.data.settings.GlassAccent.entries) {
+            store.selectAppearance(accent, "photo")
+            assertEquals(accent, SettingsStore(context).accent.first())
+        }
+        store.setBlur(45)
+        store.setLabels(false)
+        repeat(23) { store.rememberSearch("term $it", "uri/$it") }
+        store.rememberSearch("TERM 7", "uri/7")
+        val backup = store.backupSettings()
+        store.resetUiSettings()
+        store.toggleFollow(artist)
+        store.clearSearch()
+        store.restoreSettings(backup, emptyMap(), 0)
+        val saved = SettingsStore(context)
+        assertEquals(artist, saved.followed.first().single())
+        assertEquals(10, saved.queries.first().size)
+        assertEquals("TERM 7", saved.queries.first().first())
+        assertEquals(20, saved.openedTracks.first().size)
+        assertEquals("uri/7", saved.openedTracks.first().first())
+        assertEquals("photo", saved.photo.first())
+        assertEquals(45, saved.blur.first())
+        assertFalse(saved.recentLabels.first())
+        saved.toggleFollow(artist)
+        assertTrue(saved.followed.first().isEmpty())
     }
 
     @Test fun localCopyIsPlayableAsBytesAfterReopenWithoutDocumentProvider() = runBlocking {

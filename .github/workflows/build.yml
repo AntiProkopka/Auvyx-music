@@ -1,9 +1,9 @@
 name: Build auvyx APK
-run-name: auvyx Alpha 2.0 APK · ${{ github.event_name }}
+run-name: auvyx Alpha 2.1 APK · ${{ github.event_name }}
 
 on:
   push:
-    branches: [ main, master, alpha-2.0-bugfix-cloud ]
+    branches: [ main, master, alpha-2.0-bugfix-cloud, alpha-2.1-glass-ui ]
   pull_request:
   workflow_dispatch:
 
@@ -75,7 +75,7 @@ jobs:
         run: |
           apk=app/build/outputs/apk/debug/app-debug.apk
           aapt2="$ANDROID_HOME/build-tools/36.0.0/aapt2"
-          "$aapt2" dump badging "$apk" | grep -E "^package: name='com\.nexus\.music' versionCode='[0-9]+' versionName='Alpha 2\.0'"
+          "$aapt2" dump badging "$apk" | grep -E "^package: name='com\.nexus\.music' versionCode='[0-9]+' versionName='Alpha 2\.1'"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk"
           "$aapt2" dump resources "$apk" > "$RUNNER_TEMP/auvyx-resources.txt"
           for resource in drawable/auvyx_default_icon drawable/auvyx_neon_icon drawable/auvyx_glass_icon mipmap/ic_launcher mipmap/ic_launcher_round mipmap/auvyx_icon_1 mipmap/auvyx_icon_2 mipmap/auvyx_icon_3; do
@@ -85,7 +85,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.signing.outputs.ready == 'true' && 'auvyx-Alpha-2.0-debug' || 'auvyx-Alpha-2.0-debug-fresh-install-only' }}
+          name: ${{ steps.signing.outputs.ready == 'true' && 'auvyx-Alpha-2.1-debug' || 'auvyx-Alpha-2.1-debug-fresh-install-only' }}
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
@@ -99,14 +99,14 @@ jobs:
         run: |
           gradle --no-daemon assembleRelease
           apk=app/build/outputs/apk/release/app-release.apk
-          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$apk" | grep -E "^package: name='com\.nexus\.music' versionCode='[0-9]+' versionName='Alpha 2\.0'"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$apk" | grep -E "^package: name='com\.nexus\.music' versionCode='[0-9]+' versionName='Alpha 2\.1'"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk"
 
       - name: Upload signed release APK
         if: steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: auvyx-Alpha-2.0-release
+          name: auvyx-Alpha-2.1-release
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
@@ -115,7 +115,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: auvyx-Alpha-2.0-unit-tests
+          name: auvyx-Alpha-2.1-unit-tests
           path: |
             app/build/reports/tests/testDebugUnitTest/
             app/build/test-results/testDebugUnitTest/
@@ -137,3 +137,33 @@ jobs:
             echo "::warning::This APK uses this runner's temporary debug key and is for fresh installs only."
             echo "The debug APK is for fresh installs only. To produce an update, supply the keystore used by the installed APK through the AUVYX signing secrets." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  glass-emulator:
+    if: github.ref == 'refs/heads/alpha-2.1-glass-ui'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: auvyx-Alpha-2.1-debug*
+          merge-multiple: true
+          path: apk
+      - uses: android-actions/setup-android@v4
+      - name: Boot an accelerated Android 15 emulator
+        run: |
+          sudo chmod a+rw /dev/kvm
+          sdkmanager "emulator" "system-images;android-35;google_apis;x86_64"
+          echo no | avdmanager create avd -n glass -k "system-images;android-35;google_apis;x86_64" --device pixel_6
+          nohup "$ANDROID_HOME/emulator/emulator" -avd glass -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect > "$RUNNER_TEMP/emu.log" 2>&1 &
+          timeout 300 bash -c 'until adb shell getprop sys.boot_completed 2>/dev/null | grep -q 1; do sleep 2; done'
+          adb shell input keyevent 82
+          adb install apk/app-debug.apk
+      - name: Verify Glass UI and capture device screenshots
+        run: python3 .github/scripts/glass-emulator.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: auvyx-glass-emulator
+          path: glass-screens/

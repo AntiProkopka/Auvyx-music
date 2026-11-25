@@ -41,6 +41,7 @@ import java.util.Calendar
 
 @Composable
 fun HomeScreen(vm: AppViewModel) {
+    if (com.nexus.music.ui.theme.isGlass) { GlassHome(vm); return }
     val tracks by vm.tracks.collectAsStateWithLifecycle()
     val recent by vm.recent.collectAsStateWithLifecycle()
     val current by vm.player.state.collectAsStateWithLifecycle()

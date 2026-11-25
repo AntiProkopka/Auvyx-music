@@ -46,6 +46,9 @@ class ThemeNavigationTest {
             compose.onNodeWithText("Пропустить").performClick()
         }
         compose.onNodeWithTag("nav-settings").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        compose.onNodeWithText("AUVYX Glass UI").performScrollTo().performClick()
+        compose.onNodeWithText("Графика · Ultra").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Material 3 Expressive").performScrollTo().performClick()
         compose.onNodeWithContentDescription("По умолчанию").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Неон").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Стекло").performScrollTo().assertIsDisplayed()

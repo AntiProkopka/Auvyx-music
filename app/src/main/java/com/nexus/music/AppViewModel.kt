@@ -1,6 +1,9 @@
 package com.nexus.music
 
 import androidx.room.withTransaction
+import com.nexus.music.data.settings.GlassAccent
+import com.nexus.music.data.settings.FollowedArtist
+import kotlinx.coroutines.flow.combine
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
@@ -52,13 +55,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         db.trackDao().observeFavorites().map { tracks -> tracks.filter { it.hasEnabledSource } }.stateIn(viewModelScope, lazily, emptyList())
     val recent: StateFlow<List<TrackEntity>> =
         db.historyDao().observeRecent(50).map { tracks -> tracks.filter { it.hasEnabledSource } }.stateIn(viewModelScope, lazily, emptyList())
+    val listenCounts = db.historyDao().observeCounts().map { rows -> rows.associate { it.trackId to it.listens } }.stateIn(viewModelScope, lazily, emptyMap())
     val playlists: StateFlow<List<PlaylistSummary>> =
         db.playlistDao().observePlaylists().stateIn(viewModelScope, lazily, emptyList())
 
     val themeMode: StateFlow<String> =
         settings.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, "system")
-    val visualStyle = settings.visualStyle.stateIn(viewModelScope, SharingStarted.Eagerly, "material")
+    val visualStyle = settings.visualStyle.stateIn(viewModelScope, SharingStarted.Eagerly, "glass")
     fun setStyle(style: String) { viewModelScope.launch { settings.setStyle(style) } }
+    val accent = settings.accent.stateIn(viewModelScope, lazily, GlassAccent.Sunset)
+    val photo = settings.photo.stateIn(viewModelScope, lazily, "")
+    val blur = settings.blur.stateIn(viewModelScope, lazily, 32)
+    val recentLabels = settings.recentLabels.stateIn(viewModelScope, lazily, true)
+    val followed = settings.followed.stateIn(viewModelScope, lazily, emptyList())
+    val queries = settings.queries.stateIn(viewModelScope, lazily, emptyList())
+    val searchTracks = combine(settings.openedTracks, knownTracks) { uris, tracks ->
+        val byUri = tracks.associateBy { it.uri }
+        uris.mapNotNull(byUri::get)
+    }.stateIn(viewModelScope, lazily, emptyList())
+
+    fun selectAppearance(accent: GlassAccent, photo: String = "") { viewModelScope.launch { settings.selectAppearance(accent, photo) } }
+    fun setBlur(value: Int) { viewModelScope.launch { settings.setBlur(value) } }
+    fun setRecentLabels(value: Boolean) { viewModelScope.launch { settings.setLabels(value) } }
+    fun toggleFollow(artist: FollowedArtist) { viewModelScope.launch { settings.toggleFollow(artist) } }
+    fun rememberSearch(query: String, uri: String? = null) { viewModelScope.launch { settings.rememberSearch(query, uri) } }
+    fun clearSearch() { viewModelScope.launch { settings.clearSearch() } }
     val crossfade = settings.crossfade.stateIn(viewModelScope, lazily, 0)
     fun setCrossfade(value: Int) { viewModelScope.launch { settings.setCrossfade(value) } }
 
@@ -80,7 +101,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     data class AlbumTarget(val title: String, val artist: String, val soundCloud: SoundCloudAlbumTrack? = null) {
-        data class SoundCloudAlbumTrack(val id: Long, val permalink: String)
+        data class SoundCloudAlbumTrack(val id: Long, val permalink: String, val releaseId: Long? = null)
 
         companion object {
             fun from(track: TrackEntity): AlbumTarget? {
@@ -109,6 +130,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         artistTarget.value = null
     }
 
+    fun openRelease(release: SoundCloudRepository.Release) {
+        albumTarget.value = AlbumTarget(release.title, release.artist, AlbumTarget.SoundCloudAlbumTrack(0, "", release.id))
+        artistTarget.value = null
+    }
     fun openAlbum(track: SoundCloudTrack) {
         val target = AlbumTarget.SoundCloudAlbumTrack(track.id, track.permalinkUrl)
         albumTarget.value = AlbumTarget(track.albumTitle.orEmpty(), track.artist, target)
@@ -309,12 +334,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         player.playTrack(track)
     }
 
-    fun playTrack(track: SoundCloudTrack) {
+    fun playTrack(track: SoundCloudTrack, search: String? = null) {
         if (!track.full) return
         requestedTrack?.cancel()
         requestedTrack = viewModelScope.launch {
             try {
-                player.playTrack(ensureSoundCloudTrack(track))
+                val saved = ensureSoundCloudTrack(track)
+                player.playTrack(saved)
+                if (search != null) settings.rememberSearch(search, saved.uri)
             } catch (cancel: kotlinx.coroutines.CancellationException) {
                 throw cancel
             } catch (_: Exception) {

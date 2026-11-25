@@ -1,5 +1,7 @@
 package com.nexus.music.ui.components
 
+import com.nexus.music.R
+import com.nexus.music.ui.theme.*
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -75,8 +77,8 @@ fun TrackRow(
     val shape = MaterialTheme.shapes.medium
     ListItem(
         modifier = Modifier.fillMaxWidth().padding(horizontal = if (style in listOf("hyper","glass")) 10.dp else 0.dp,
-            vertical = if (style in listOf("hyper","glass")) 3.dp else 0.dp).clip(shape).clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = if (isCurrent) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow),
+            vertical = if (style in listOf("hyper","glass")) 3.dp else 0.dp).clip(shape).frosted(shape).clickable(onClick = onClick),
+        colors = ListItemDefaults.colors(containerColor = if (isCurrent) MaterialTheme.colorScheme.secondaryContainer else if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow),
         leadingContent = {
             Box(
                 modifier = Modifier
@@ -142,7 +144,7 @@ fun TrackRow(
                 if (menuItems.isNotEmpty()) {
                     Box {
                         IconButton(onClick = { expanded = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Меню")
+                            BrandIcon(R.drawable.glass_more, Icons.Default.MoreVert, contentDescription = "Меню")
                         }
                         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
                             shape = MaterialTheme.shapes.large, containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
@@ -172,12 +174,16 @@ fun ArtworkImage(
     LocalArtworkImage(rememberLocalArtwork(artworkUri), contentDescription, modifier)
 }
 
+private val localArtCache = object : android.util.LruCache<String, Bitmap>(16 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+}
+
 @Composable
 internal fun rememberLocalArtwork(artworkUri: String?): Bitmap? = key(artworkUri) {
     val context = LocalContext.current
     produceState<Bitmap?>(null) {
         value = withContext(Dispatchers.IO) {
-            if (artworkUri.isNullOrBlank()) null else runCatching {
+            if (artworkUri.isNullOrBlank()) null else localArtCache.get(artworkUri) ?: runCatching {
                 val uri = Uri.parse(artworkUri)
                 if (uri.scheme == "file") {
                     decodeSampledBitmap(uri.path) { BitmapFactory.decodeFile(uri.path, it) }
@@ -195,7 +201,7 @@ internal fun rememberLocalArtwork(artworkUri: String?): Bitmap? = key(artworkUri
                         )
                     }
                 }
-            }.getOrNull()
+            }.getOrNull()?.also { localArtCache.put(artworkUri, it) }
         }
     }.value
 }

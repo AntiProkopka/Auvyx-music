@@ -54,11 +54,50 @@ class SettingsStore(private val context: Context) {
             else -> "system"
         }
     }
-    val visualStyle = store.data.map { it[stringPreferencesKey("visual_style")] ?: "material" }
+    private val styleKey = stringPreferencesKey("interface_21")
+    private val accentKey = stringPreferencesKey("glass_accent")
+    private val photoKey = stringPreferencesKey("glass_photo")
+    private val blurKey = intPreferencesKey("glass_blur")
+    private val labelsKey = booleanPreferencesKey("recent_labels")
+    private val followsKey = stringPreferencesKey("followed_artists")
+    private val queriesKey = stringPreferencesKey("search_history")
+    private val openedKey = stringPreferencesKey("search_tracks")
+
+    val visualStyle = store.data.map { if (it[styleKey] == "material") "material" else "glass" }
     suspend fun setStyle(style: String) {
-        require(style in listOf("material", "hyper", "glass", "lane"))
-        store.edit { it[stringPreferencesKey("visual_style")] = style }
+        require(style == "glass" || style == "material")
+        store.edit { it[styleKey] = style }
     }
+    val accent = store.data.map { prefs -> GlassAccent.entries.find { it.name == prefs[accentKey] } ?: GlassAccent.Sunset }
+    val photo = store.data.map { it[photoKey].orEmpty() }
+    val blur = store.data.map { (it[blurKey] ?: 32).coerceIn(8, 56) }
+    val recentLabels = store.data.map { it[labelsKey] ?: true }
+    suspend fun selectAppearance(accent: GlassAccent, photo: String) {
+        store.edit { it[accentKey] = accent.name; it[photoKey] = photo }
+    }
+    suspend fun setBlur(value: Int) { store.edit { it[blurKey] = value.coerceIn(8, 56) } }
+    suspend fun setLabels(value: Boolean) { store.edit { it[labelsKey] = value } }
+
+    val followed = store.data.map { FollowedArtist.read(it[followsKey] ?: "[]") }
+    suspend fun toggleFollow(artist: FollowedArtist) {
+        store.edit { prefs ->
+            val artists = FollowedArtist.read(prefs[followsKey] ?: "[]")
+            val next = if (artists.any { it.key == artist.key }) artists.filterNot { it.key == artist.key } else artists + artist
+            prefs[followsKey] = JSONArray(next.map { it.json() }).toString()
+        }
+    }
+
+    val queries = store.data.map { orderedStrings(it[queriesKey]) }
+    val openedTracks = store.data.map { orderedStrings(it[openedKey]) }
+    suspend fun rememberSearch(query: String, uri: String? = null) {
+        val clean = query.trim().take(256)
+        store.edit { prefs ->
+            if (clean.isNotBlank()) prefs[queriesKey] = JSONArray((listOf(clean) + orderedStrings(prefs[queriesKey])
+                .filterNot { it.equals(clean, true) }).take(10)).toString()
+            if (uri != null) prefs[openedKey] = JSONArray((listOf(uri) + orderedStrings(prefs[openedKey])).distinct().take(20)).toString()
+        }
+    }
+    suspend fun clearSearch() { store.edit { it.remove(queriesKey); it.remove(openedKey) } }
     val crossfade = store.data.map { it[intPreferencesKey("crossfade_seconds")] ?: 0 }
     suspend fun setCrossfade(value: Int) { store.edit { it[intPreferencesKey("crossfade_seconds")] = value.coerceIn(0,12) } }
 
@@ -131,8 +170,16 @@ class SettingsStore(private val context: Context) {
         store.edit { prefs ->
             for (key in data.keys()) {
                 when (key) {
-                    "theme_mode", "library_sort", "user_nickname", "eq_preset", "visual_style" ->
+                    "interface_21", "glass_accent", "glass_photo", "theme_mode", "library_sort", "user_nickname", "eq_preset", "visual_style" ->
                         prefs[stringPreferencesKey(key)] = data.getString(key)
+                    "glass_blur" -> prefs[blurKey] = data.getInt(key).coerceIn(8, 56)
+                    "followed_artists" -> {
+                        val raw = data.getString(key)
+                        FollowedArtist.read(raw)
+                        prefs[followsKey] = raw
+                    }
+                    "search_history", "search_tracks" -> prefs[stringPreferencesKey(key)] =
+                        JSONArray(orderedStrings(data.getString(key)).distinct().take(if (key == "search_history") 10 else 20)).toString()
                     "catalog_pages" -> prefs[Keys.CATALOG_PAGES] = JSONObject(data.getString(key)).toString()
                     "folders", "disliked_tracks" -> {
                         val array = data.getJSONArray(key)
@@ -141,7 +188,7 @@ class SettingsStore(private val context: Context) {
                             if (key == "disliked_tracks" && value.toLongOrNull() != null) ids[value.toLong()]?.toString() else value
                         }.toSet()
                     }
-                    "shuffle", "eq_enabled" -> prefs[booleanPreferencesKey(key)] = data.getBoolean(key)
+                    "recent_labels", "shuffle", "eq_enabled" -> prefs[booleanPreferencesKey(key)] = data.getBoolean(key)
                     "queue_index" -> if (queueSize > 0) prefs[Keys.QUEUE_INDEX] = data.getInt(key).coerceIn(0, queueSize - 1)
                     "queue_position" -> if (queueSize > 0) prefs[Keys.QUEUE_POSITION] = data.getLong(key).coerceAtLeast(0)
                     "repeat_mode" -> prefs[Keys.REPEAT] = data.getInt(key).also { require(it in 0..2) }
@@ -206,6 +253,11 @@ class SettingsStore(private val context: Context) {
     /** Сбрасывает только внешний вид; медиатека, никнейм и звук остаются без изменений. */
     suspend fun resetUiSettings() {
         store.edit {
+            it.remove(styleKey)
+            it.remove(accentKey)
+            it.remove(photoKey)
+            it.remove(blurKey)
+            it.remove(labelsKey)
             it.remove(Keys.THEME)
             it.remove(Keys.SORT)
         }

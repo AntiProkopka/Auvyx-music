@@ -1,5 +1,10 @@
 package com.nexus.music.ui.theme
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.lerp
+import com.nexus.music.data.settings.GlassAccent
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import android.os.Build
@@ -99,8 +104,8 @@ private val expressiveTypography = Typography().run {
 }
 
 @Composable
-fun NexusTheme(themeMode: String, style: String, content: @Composable () -> Unit) {
-    val dark = when (themeMode) {
+fun NexusTheme(themeMode: String, style: String, accent: GlassAccent = GlassAccent.Sunset, content: @Composable () -> Unit) {
+    val dark = style == "glass" || when (themeMode) {
         "dark" -> true
         "light" -> false
         else -> isSystemInDarkTheme()
@@ -111,8 +116,19 @@ fun NexusTheme(themeMode: String, style: String, content: @Composable () -> Unit
     } else if (dark) AUVYXDark else AUVYXLight
     val colors = when (style) {
         "hyper" -> base.copy(surfaceContainer = base.surface.copy(alpha = .83f))
-        "glass" -> base.copy(surfaceContainer = base.surface.copy(alpha = .62f),
-            surfaceContainerLow = base.surfaceVariant.copy(alpha = .70f))
+        "glass" -> {
+            val light by animateColorAsState(Color(accent.light), tween(450))
+            val ink by animateColorAsState(Color(accent.ink), tween(450))
+            val mist by animateColorAsState(Color(accent.mist), tween(450))
+            val darkBase = lerp(Color(0xff0d0e13), ink, .065f)
+            AUVYXDark.copy(background = darkBase, surface = lerp(darkBase, ink, .07f),
+                primary = light, onPrimary = Color(0xff1a1417), tertiary = mist,
+                primaryContainer = lerp(darkBase, ink, .29f), onPrimaryContainer = Color.White,
+                secondaryContainer = lerp(darkBase, ink, .30f), onSecondaryContainer = Color.White,
+                surfaceContainerLow = lerp(darkBase, ink, .12f).copy(alpha = .74f),
+                surfaceContainer = lerp(darkBase, ink, .14f),
+                surfaceContainerHigh = lerp(darkBase, ink, .20f))
+        }
         "lane" -> base.copy(
             primary = if (dark) Color(0xFFC4E96D) else Color(0xFF486500),
             onPrimary = if (dark) Color(0xFF253600) else Color.White
@@ -139,7 +155,7 @@ fun NexusTheme(themeMode: String, style: String, content: @Composable () -> Unit
             motionScheme = MotionScheme.expressive(),
             shapes = when (style) {
                 "lane" -> Shapes(small = RoundedCornerShape(3.dp), medium = RoundedCornerShape(4.dp), large = RoundedCornerShape(6.dp))
-                "glass" -> Shapes(medium = RoundedCornerShape(30.dp), large = RoundedCornerShape(40.dp))
+                "glass" -> AUVYXShapes
                 else -> AUVYXShapes
             },
             content = { CompositionLocalProvider(LocalContentColor provides colors.onBackground) { content() } }

@@ -1,5 +1,23 @@
 package com.nexus.music.ui.screens
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.material3.TextButton
+import com.nexus.music.R
+import com.nexus.music.ui.theme.*
+import com.nexus.music.data.soundcloud.SoundCloudRepository
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -62,10 +80,40 @@ fun SearchScreen(vm: AppViewModel) {
     var pending by remember { mutableStateOf<TrackEntity?>(null) }
     var pendingSoundCloud by remember { mutableStateOf<SoundCloudTrack?>(null) }
 
-    val showLocal = source == "all" || source == "local"
-    val showSoundCloud = source == "all" || source == "soundcloud"
+    val glass = isGlass
+    var localEnabled by rememberSaveable { mutableStateOf(true) }
+    var cloudEnabled by rememberSaveable { mutableStateOf(true) }
+    val queries by vm.queries.collectAsStateWithLifecycle()
+    val opened by vm.searchTracks.collectAsStateWithLifecycle()
+    val keyboard = LocalSoftwareKeyboardController.current
+    val showLocal = if (glass) localEnabled else source == "all" || source == "local"
+    val showSoundCloud = if (glass) cloudEnabled else source == "all" || source == "soundcloud"
 
-    LaunchedEffect(query, source) {
+    var artists by remember { mutableStateOf(emptyList<SoundCloudRepository.Artist>()) }
+    var albums by remember { mutableStateOf(emptyList<SoundCloudRepository.Release>()) }
+    var artistError by remember { mutableStateOf(false) }
+    var albumError by remember { mutableStateOf(false) }
+    LaunchedEffect(query, showSoundCloud, glass) {
+        artists = emptyList()
+        artistError = false
+        if (glass && showSoundCloud && query.isNotBlank()) {
+            delay(450)
+            try { artists = SoundCloudRepository.searchArtists(query.trim()) }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { artistError = true }
+        }
+    }
+    LaunchedEffect(query, showSoundCloud, glass) {
+        albums = emptyList()
+        albumError = false
+        if (glass && showSoundCloud && query.isNotBlank()) {
+            delay(450)
+            try { albums = SoundCloudRepository.searchReleases(query.trim()) }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { albumError = true }
+        }
+    }
+    LaunchedEffect(query, showLocal, showSoundCloud) {
         vm.searchQuery.value = if (showLocal) query else ""
         if (showSoundCloud) {
             if (query.isBlank()) {
@@ -84,14 +132,21 @@ fun SearchScreen(vm: AppViewModel) {
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (glass) {
+                SourceToggle(localEnabled, "На устройстве", R.drawable.glass_phone) { localEnabled = it }
+                SourceToggle(cloudEnabled, "SoundCloud", R.drawable.platform_soundcloud, logo = true) { cloudEnabled = it }
+            } else {
             ExpressiveFilterChip(selected = source == "all", onClick = { savedSource = "all" }, label = { Text("Все") })
             ExpressiveFilterChip(selected = source == "local", onClick = { savedSource = "local" }, label = { Text("На устройстве") })
             ExpressiveFilterChip(selected = source == "soundcloud", onClick = { savedSource = "soundcloud" }, label = { Text("SoundCloud") })
+            }
         }
 
         OutlinedTextField(
             value = query,
-            onValueChange = { query = it },
+            onValueChange = { query = it.take(160) },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { vm.rememberSearch(query); keyboard?.hide() }),
             singleLine = true,
             shape = MaterialTheme.shapes.extraLarge,
             colors = OutlinedTextFieldDefaults.colors(
@@ -109,7 +164,7 @@ fun SearchScreen(vm: AppViewModel) {
                     }
                 }
             },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).frosted(MaterialTheme.shapes.extraLarge)
         )
 
         LazyColumn(
@@ -117,7 +172,20 @@ fun SearchScreen(vm: AppViewModel) {
             contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current)
         ) {
             if (query.isBlank()) {
-                item { EmptyHint("Введи запрос. Поиск одновременно проверит выбранные каталоги.") }
+                if (glass) {
+                    item { SearchHeading("Последние запросы") }
+                    itemsIndexed(queries) { _, term -> TextButton(onClick = { query = term; vm.rememberSearch(term) }) { Text(term) } }
+                    item { SearchHeading("Недавно открытые песни") }
+                    itemsIndexed(opened) { _, track ->
+                        TrackRow(track, current.mediaId == track.id.toString(), trackMenu(vm, track) { pending = it }) {
+                            vm.playTrack(track)
+                            vm.rememberSearch("", track.uri)
+                        }
+                    }
+                    if (queries.isNotEmpty() || opened.isNotEmpty()) item {
+                        TextButton(onClick = vm::clearSearch) { Text("Очистить историю поиска") }
+                    }
+                } else item { EmptyHint("Введи запрос. Поиск одновременно проверит выбранные каталоги.") }
             } else {
                 if (showLocal) {
                     item {
@@ -142,7 +210,7 @@ fun SearchScreen(vm: AppViewModel) {
                                 track = track,
                                 isCurrent = current.mediaId == track.id.toString(),
                                 menuItems = trackMenu(vm, track) { pending = it },
-                                onClick = { vm.playTrack(track) }
+                                onClick = { vm.playTrack(track); vm.rememberSearch(query, track.uri) }
                             )
                         }
                     }
@@ -183,7 +251,7 @@ fun SearchScreen(vm: AppViewModel) {
                                     it.source == "soundcloud" && it.sourceId == track.id.toString()
                                 },
                                 playEnabled = track.full,
-                                onPlay = { vm.playTrack(track) },
+                                onPlay = { vm.playTrack(track, query) },
                                 onFavorite = { vm.toggleSoundCloudFavorite(track) },
                                 onEnqueue = { vm.enqueueSoundCloud(track) },
                                 onArtist = { vm.openArtist(track) },
@@ -194,6 +262,23 @@ fun SearchScreen(vm: AppViewModel) {
                         }
                     }
                 }
+                if (glass) {
+                    val localArtists = if (showLocal) localResults.filter { it.artist.contains(query.trim(), true) }.distinctBy { it.artist.lowercase() } else emptyList()
+                    val localAlbums = if (showLocal) localResults.filter { it.album.contains(query.trim(), true) && AppViewModel.AlbumTarget.from(it) != null }
+                        .distinctBy { it.album.lowercase() to it.artist.lowercase() } else emptyList()
+                    if (localArtists.isNotEmpty() || artists.isNotEmpty() || artistError) item { SearchHeading("Исполнители") }
+                    itemsIndexed(localArtists) { _, track -> TextButton(onClick = { vm.rememberSearch(query); vm.openArtist(track) }) { Text(track.artist) } }
+                    itemsIndexed(artists) { _, artist -> TextButton(onClick = {
+                        vm.rememberSearch(query)
+                        vm.artistTarget.value = AppViewModel.ArtistTarget(artist.name, true, artist.id, null)
+                    }) { Text(artist.name) } }
+                    if (artistError) item { Text("Поиск исполнителей SoundCloud недоступен", Modifier.padding(horizontal = 16.dp)) }
+                    if (localAlbums.isNotEmpty() || albums.isNotEmpty() || albumError) item { SearchHeading("Альбомы") }
+                    itemsIndexed(localAlbums) { _, track -> TextButton(onClick = { vm.rememberSearch(query); vm.openAlbum(track) }) { Text(track.album) } }
+                    itemsIndexed(albums) { _, album -> TextButton(onClick = { vm.rememberSearch(query); vm.openRelease(album) }) { Text(album.title) } }
+                    if (albumError) item { Text("Поиск альбомов SoundCloud недоступен", Modifier.padding(horizontal = 16.dp)) }
+                    if (!showLocal && !showSoundCloud) item { EmptyHint("Выбери источник поиска") }
+                }
             }
         }
     }
@@ -201,5 +286,20 @@ fun SearchScreen(vm: AppViewModel) {
     pending?.let { track -> AddToPlaylistDialog(vm, track) { pending = null } }
     pendingSoundCloud?.let { track ->
         AddSoundCloudToPlaylistDialog(vm, track) { pendingSoundCloud = null }
+    }
+}
+
+@Composable
+private fun SearchHeading(title: String) {
+    Text(title, Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.titleMedium)
+}
+
+@Composable
+private fun SourceToggle(active: Boolean, label: String, icon: Int, logo: Boolean = false, change: (Boolean) -> Unit) {
+    Box(Modifier.size(54.dp, 46.dp).frosted(MaterialTheme.shapes.medium)
+        .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = .23f) else Color.Transparent)
+        .toggleable(active, role = Role.Checkbox, onValueChange = change), contentAlignment = Alignment.Center) {
+        if (logo) Image(painterResource(icon), label, Modifier.size(30.dp), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color(0xffff5600)))
+        else Icon(painterResource(icon), label, tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

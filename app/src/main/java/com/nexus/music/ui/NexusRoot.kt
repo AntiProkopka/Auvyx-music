@@ -1,5 +1,20 @@
 package com.nexus.music.ui
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material.icons.filled.SkipPrevious
+import dev.chrisbanes.haze.*
+import com.nexus.music.R
+import com.nexus.music.ui.theme.*
+import com.nexus.music.ui.components.BrandIcon
+import com.nexus.music.ui.components.rememberArtworkAccent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -74,6 +89,16 @@ import com.nexus.music.ui.screens.PlaylistScreen
 import com.nexus.music.ui.screens.SearchScreen
 import com.nexus.music.ui.screens.SettingsScreen
 
+internal val LocalTransition = staticCompositionLocalOf<SharedTransitionScope?> { null }
+internal val LocalVisibility = staticCompositionLocalOf<AnimatedVisibilityScope?> { null }
+
+@Composable
+internal fun Modifier.sharedCover(): Modifier {
+    val transition = LocalTransition.current ?: return this
+    val visibility = LocalVisibility.current ?: return this
+    return with(transition) { this@sharedCover.sharedElement(rememberSharedContentState("playing-cover"), visibility) }
+}
+
 internal val LocalBottomBarPadding = staticCompositionLocalOf { 0.dp }
 
 private data class NavItem(val route: String, val label: String, val icon: ImageVector)
@@ -120,12 +145,21 @@ fun NexusRoot(vm: AppViewModel) {
     LaunchedEffect(vm.player) { vm.player.errors.collect { snackbar.showSnackbar(it) } }
 
     val style = LocalStyle.current
-    val glass = style in listOf("hyper", "glass")
+    val glass = style == "glass"
+    val wallpaper = rememberHazeState()
+    val page = rememberHazeState()
+    val lamp = remember { mutableStateOf(Offset.Unspecified) }
+    val playingArt = if (glass) artworkBitmap(player.artworkUri) else null
+    LaunchedEffect(player.mediaId) { if (player.mediaId == null) lamp.value = Offset.Unspecified }
+    val primary = MaterialTheme.colorScheme.primary
+    val artLight by animateColorAsState(if (glass) rememberArtworkAccent(playingArt, primary) ?: Color.Transparent else Color.Transparent, tween(580))
+    SharedTransitionLayout {
+    CompositionLocalProvider(LocalWallpaper provides wallpaper, LocalPage provides page, LocalLamp provides lamp,
+        LocalArtLight provides artLight, LocalTransition provides if (glass) this else null) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (glass) {
-            Box(Modifier.fillMaxSize().blur(if (style == "hyper") 35.dp else 14.dp).background(
-                Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.background,
-                    MaterialTheme.colorScheme.tertiaryContainer))))
+        if (glass) Box(Modifier.fillMaxSize().hazeSource(page, zIndex = 0f).hazeSource(wallpaper).background(MaterialTheme.colorScheme.background)) {
+            GlassWallpaper(vm)
+            AtmosphericLight(route == "player")
         }
         Scaffold(
             containerColor = Color.Transparent,
@@ -157,15 +191,36 @@ fun NexusRoot(vm: AppViewModel) {
                 }
             },
             bottomBar = {
-                if (route != "player") {
+                AnimatedVisibility(visible = route != "player", exit = fadeOut(tween(210)), enter = fadeIn(tween(240))) {
+                    val miniVisibility = this
                     Column(
                         modifier = Modifier.fillMaxWidth()
                             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                             .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (player.mediaId != null) MiniPlayer(vm, onOpen = openPlayer)
-                        if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
+                        if (player.mediaId != null) CompositionLocalProvider(LocalVisibility provides miniVisibility) { MiniPlayer(vm, onOpen = openPlayer) }
+                        if (glass) {
+                            Row(Modifier.fillMaxWidth().height(64.dp).frosted(CircleShape, overPage = true).testTag("bottom-dock"),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                navItems.forEachIndexed { index, item ->
+                                    val active = route == item.route || (item.route == "library" && route?.startsWith("playlist") == true)
+                                    val color by animateColorAsState(if (active) primary else MaterialTheme.colorScheme.onSurfaceVariant, tween(180))
+                                    Box(Modifier.weight(1f).fillMaxHeight().testTag("nav-${item.route}")
+                                        .selectable(active, role = androidx.compose.ui.semantics.Role.Tab) {
+                                            vm.albumTarget.value = null
+                                            vm.artistTarget.value = null
+                                            navigateTo(nav, item.route)
+                                        }, contentAlignment = Alignment.Center) {
+                                        Icon(painterResource(listOf(R.drawable.glass_home, R.drawable.glass_search,
+                                            R.drawable.glass_library, R.drawable.glass_settings)[index]), item.label, tint = color)
+                                        if (active) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)
+                                            .size(20.dp, 3.dp).clip(CircleShape).background(Brush.horizontalGradient(
+                                                listOf(color.copy(alpha=.18f), color, color.copy(alpha=.18f)))))
+                                    }
+                                }
+                            }
+                        } else if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
                             modifier = Modifier.clip(MaterialTheme.shapes.extraLarge)
                                 .background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 1f))
                                 .testTag("bottom-dock"),
@@ -203,7 +258,7 @@ fun NexusRoot(vm: AppViewModel) {
                     top = padding.calculateTopPadding(),
                     end = padding.calculateEndPadding(direction),
                     bottom = if (route == "player") bottomPadding else 0.dp
-                ).fillMaxSize()) {
+                ).fillMaxSize().then(if (glass) Modifier.hazeSource(page, zIndex = 1f) else Modifier)) {
                     val motion = MaterialTheme.motionScheme
                     NavHost(
                         navController = nav,
@@ -218,7 +273,7 @@ fun NexusRoot(vm: AppViewModel) {
                         composable(route = "playlist/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
                             PlaylistScreen(vm, entry.arguments?.getLong("id") ?: 0L, onBack = { nav.popBackStack() })
                         }
-                        composable("player") { PlayerScreen(vm, onClose = { nav.popBackStack() }) }
+                        composable("player") { CompositionLocalProvider(LocalVisibility provides this) { PlayerScreen(vm, onClose = { nav.popBackStack() }) } }
                     }
                     album?.let { target ->
                         androidx.activity.compose.BackHandler(enabled = artist == null) { vm.albumTarget.value = null }
@@ -235,6 +290,8 @@ fun NexusRoot(vm: AppViewModel) {
                 }
             }
         }
+    }
+    }
     }
     FirstRunNicknameDialog(vm)
 }
@@ -284,21 +341,31 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
     Column(
         Modifier.fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 1f))
+            .then(if (isGlass) Modifier.frosted(MaterialTheme.shapes.large, overPage = true) else Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh))
             .clickable(interactionSource = null, indication = ripple(), onClick = onOpen)
     ) {
         Row(
             modifier = Modifier.padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (isGlass) {
+                val lamp = LocalLamp.current
+                ArtTile(s.artworkUri, "Обложка", Modifier.size(46.dp).sharedCover().onGloballyPositioned {
+                    lamp.value = it.positionInRoot() + Offset(it.size.width / 2f, it.size.height / 2f)
+                })
+                Spacer(Modifier.width(10.dp))
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(s.title.ifBlank { "Ничего не играет" }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
                 Text(s.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = { vm.player.togglePlayPause() }) {
-                Icon(if (s.showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.showPause) "Пауза" else "Играть")
+            if (isGlass) IconButton(onClick = vm.player::previous) {
+                BrandIcon(R.drawable.glass_previous, Icons.Default.SkipPrevious, "Предыдущий")
             }
-            IconButton(onClick = { vm.player.next() }) { Icon(Icons.Default.SkipNext, contentDescription = "Следующий") }
+            IconButton(onClick = { vm.player.togglePlayPause() }) {
+                BrandIcon(if (s.showPause) R.drawable.glass_pause else R.drawable.glass_play, if (s.showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.showPause) "Пауза" else "Играть")
+            }
+            IconButton(onClick = { vm.player.next() }) { BrandIcon(R.drawable.glass_next, Icons.Default.SkipNext, contentDescription = "Следующий") }
         }
         LinearProgressIndicator(
             progress = { (pos.toFloat() / duration.toFloat()).coerceIn(0f, 1f) },

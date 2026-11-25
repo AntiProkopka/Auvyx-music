@@ -35,7 +35,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val theme by vm.themeMode.collectAsStateWithLifecycle()
-            NexusTheme(themeMode = theme, style = "material") {
+            val style by vm.visualStyle.collectAsStateWithLifecycle()
+            val accent by vm.accent.collectAsStateWithLifecycle()
+            NexusTheme(themeMode = theme, style = style, accent = accent) {
                 NexusRoot(vm)
             }
         }

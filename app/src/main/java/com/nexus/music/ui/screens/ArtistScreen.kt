@@ -31,6 +31,7 @@ import com.nexus.music.ui.components.formatTime
 /** Artist page always uses a stable provider profile ID when SoundCloud is involved. */
 @Composable
 fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget, onOpenPlayer: () -> Unit) {
+    if (com.nexus.music.ui.theme.isGlass) { GlassArtist(vm, target, onOpenPlayer); return }
     val playback by vm.player.state.collectAsStateWithLifecycle()
     val known by vm.knownTracks.collectAsStateWithLifecycle()
     val current = known.firstOrNull { it.id.toString() == playback.mediaId }

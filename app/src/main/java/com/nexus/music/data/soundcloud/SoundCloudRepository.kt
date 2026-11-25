@@ -1,6 +1,7 @@
 package com.nexus.music.data.soundcloud
 
 import android.net.Uri
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -22,6 +23,7 @@ data class SoundCloudTrack(
     val credit: String = "",
     val full: Boolean = true,
     val artistId: Long? = null,
+    val plays: Long? = null,
     val albumTitle: String? = null
 )
 
@@ -95,23 +97,75 @@ object SoundCloudRepository {
                 !title.equals(album.label("title"), ignoreCase = true)) continue
             val entries = album.optJSONArray("tracks")?.objects().orEmpty()
             if (entries.none { it.optLong("id") == trackId }) continue
-            val existing = entries.mapNotNull(::parseTrack).associateBy { it.id }
-            val ids = entries.map { it.optLong("id") }.filter { it > 0L }
-            val remaining = ids.distinct().filterNot(existing::containsKey).chunked(50).flatMap { chunk ->
-                JSONArray(readUrl("$API/tracks?ids=${chunk.joinToString(",")}&client_id=$key"))
-                    .objects().mapNotNull(::parseTrack)
-            }.associateBy { it.id }
-            return@withContext Album(
-                title = album.label("title") ?: title,
-                artist = artist,
-                artworkUrl = album.label("artwork_url")?.takeIf(::isTrustedMediaUrl),
-                releaseDate = album.label("release_date")?.substringBefore('T'),
-                durationMs = album.optLong("duration").coerceAtLeast(0),
-                trackCount = album.optInt("track_count").coerceAtLeast(ids.size),
-                tracks = ids.mapNotNull { existing[it] ?: remaining[it] }
-            )
+            return@withContext parseAlbum(album, artist, key)
         }
         null
+    }
+
+    data class Release(val id: Long, val title: String, val artist: String, val owner: Long, val artwork: String?, val type: String)
+
+    private fun release(item: JSONObject): Release? {
+        if (!item.optBoolean("is_album")) return null
+        val id = item.optLong("id").takeIf { it > 0 } ?: return null
+        val owner = item.optLong("user_id").takeIf { it > 0 } ?: return null
+        return Release(id, item.label("title") ?: return null, item.optJSONObject("user")?.label("username").orEmpty(),
+            owner, item.label("artwork_url")?.takeIf(::isTrustedMediaUrl), item.label("set_type") ?: item.label("playlist_type").orEmpty())
+    }
+
+    suspend fun searchArtists(query: String): List<Artist> = withContext(Dispatchers.IO) {
+        val data = getJson("$API/search/users?q=${encode(query)}&limit=20&client_id=${clientId()}")
+        data.optJSONArray("collection")?.objects().orEmpty().mapNotNull { item ->
+            val id = item.optLong("id").takeIf { it > 0 } ?: return@mapNotNull null
+            Artist(item.label("username") ?: return@mapNotNull null, item.label("avatar_url")?.takeIf(::isTrustedMediaUrl), "", id)
+        }.distinctBy { it.id }
+    }
+
+    suspend fun searchReleases(query: String): List<Release> = withContext(Dispatchers.IO) {
+        val data = getJson("$API/search/albums?q=${encode(query)}&limit=20&client_id=${clientId()}")
+        data.optJSONArray("collection")?.objects().orEmpty().mapNotNull(::release).distinctBy { it.id }
+    }
+
+    suspend fun artistReleases(id: Long): List<Release> = withContext(Dispatchers.IO) {
+        val result = linkedMapOf<Long, Release>()
+        val visited = mutableSetOf<String>()
+        val path = "/users/$id/albums"
+        var next: String? = "$API$path?limit=50&linked_partitioning=1"
+        while (next != null && visited.add(next)) {
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            val uri = Uri.parse(next)
+            require(isTrustedApiUrl(next) && uri.path == path)
+            val url = if (uri.getQueryParameter("client_id") == null) uri.buildUpon().appendQueryParameter("client_id", clientId()).toString() else next
+            val data = getJson(url)
+            data.optJSONArray("collection")?.objects().orEmpty().mapNotNull(::release).filter { it.owner == id }.forEach { result[it.id] = it }
+            next = data.label("next_href")
+        }
+        result.values.toList()
+    }
+
+    suspend fun releaseAlbum(id: Long): Album? = withContext(Dispatchers.IO) {
+        val key = clientId()
+        val item = getJson("$API/playlists/$id?client_id=$key")
+        val release = release(item)?.takeIf { it.id == id } ?: return@withContext null
+        parseAlbum(item, release.artist, key)
+    }
+
+    private fun parseAlbum(album: JSONObject, artist: String, key: String): Album {
+        val entries = album.optJSONArray("tracks")?.objects().orEmpty()
+        val existing = entries.mapNotNull(::parseTrack).associateBy { it.id }
+        val ids = entries.map { it.optLong("id") }.filter { it > 0L }
+        val remaining = ids.distinct().filterNot(existing::containsKey).chunked(50).flatMap { chunk ->
+            JSONArray(readUrl("$API/tracks?ids=${chunk.joinToString(",")}&client_id=$key"))
+                .objects().mapNotNull(::parseTrack)
+        }.associateBy { it.id }
+        return Album(
+            title = album.getString("title"),
+            artist = artist,
+            artworkUrl = album.label("artwork_url")?.takeIf(::isTrustedMediaUrl),
+            releaseDate = album.label("release_date")?.substringBefore('T'),
+            durationMs = album.optLong("duration").coerceAtLeast(0),
+            trackCount = album.optInt("track_count").coerceAtLeast(ids.size),
+            tracks = ids.mapNotNull { existing[it] ?: remaining[it] }
+        )
     }
 
     suspend fun artist(id: Long?, permalink: String?): Artist = withContext(Dispatchers.IO) {
@@ -163,6 +217,7 @@ object SoundCloudRepository {
             credit = publisher?.label("artist").orEmpty(),
             full = item.optString("policy") !in setOf("SNIP", "BLOCK"),
             permalinkUrl = permalink,
+            plays = item.optLong("playback_count", -1).takeIf { it >= 0 },
             albumTitle = publisher?.albumTitle()
         )
     }
