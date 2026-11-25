@@ -48,6 +48,19 @@ class ThemeNavigationTest {
         compose.onNodeWithTag("nav-settings").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         compose.onNodeWithText("AUVYX Glass UI").performScrollTo().performClick()
         compose.onNodeWithText("Графика · Ultra").performScrollTo().assertIsDisplayed()
+        val accents = compose.onNode(SemanticsMatcher.keyIsDefined(
+            androidx.compose.ui.semantics.SemanticsProperties.HorizontalScrollAxisRange))
+        for ((index, accent) in com.nexus.music.data.settings.GlassAccent.entries.withIndex()) {
+            accents.performScrollToIndex(index)
+            compose.onNodeWithContentDescription(accent.title).performSemanticsAction(
+                androidx.compose.ui.semantics.SemanticsActions.OnClick)
+            compose.waitUntil(5000) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS)
+                kotlinx.coroutines.runBlocking { settings.accent.first() } == accent
+            }
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription(accent.title).assertIsSelected()
+        }
         compose.onNodeWithText("Material 3 Expressive").performScrollTo().performClick()
         compose.onNodeWithContentDescription("По умолчанию").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Неон").performScrollTo().assertIsDisplayed()
