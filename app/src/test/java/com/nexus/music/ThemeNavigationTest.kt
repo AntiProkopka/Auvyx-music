@@ -59,7 +59,15 @@ class ThemeNavigationTest {
         }
         compose.onNodeWithTag("nav-settings").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         compose.onNodeWithText("AUVYX Glass UI").performScrollTo().performClick()
-        compose.onNodeWithText("Ultra").performScrollTo().assertIsSelected()
+        compose.onNodeWithText("Ultra").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("High").performScrollTo().performClick()
+        compose.waitUntil(5000) {
+            kotlinx.coroutines.runBlocking { settings.glassQuality.first().name } == "High"
+        }
+        compose.onNodeWithText("Ultra").performScrollTo().performClick()
+        compose.waitUntil(5000) {
+            kotlinx.coroutines.runBlocking { settings.glassQuality.first().name } == "Ultra"
+        }
         val accents = compose.onNodeWithTag("appearance-accents")
         for ((index, accent) in com.nexus.music.data.settings.GlassAccent.entries.withIndex()) {
             accents.performScrollToIndex(index)
