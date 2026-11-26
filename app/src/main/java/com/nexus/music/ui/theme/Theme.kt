@@ -163,8 +163,9 @@ fun NexusTheme(themeMode: String, style: String, accent: GlassAccent = GlassAcce
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
-            window.statusBarColor = colors.surface.toArgb()
-            window.navigationBarColor = colors.surface.toArgb()
+            window.statusBarColor = Color.Transparent.toArgb()
+            window.navigationBarColor = Color.Transparent.toArgb()
+            window.isNavigationBarContrastEnforced = false
             val controller = WindowCompat.getInsetsController(window, view)
             controller.isAppearanceLightStatusBars = !dark
             controller.isAppearanceLightNavigationBars = !dark

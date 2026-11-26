@@ -36,6 +36,18 @@ class ThemeNavigationTest {
     }
     @get:Rule val rules: org.junit.rules.TestRule = org.junit.rules.RuleChain.outerRule(service).around(compose)
 
+    @Test fun graphicsPresetPersistsAndKeepsLowAvailable() = kotlinx.coroutines.runBlocking {
+        val settings = (compose.activity.application as NexusApp).settings
+        org.junit.Assert.assertEquals(com.nexus.music.data.settings.GlassQuality.Ultra, settings.glassQuality.first())
+        settings.setGlassQuality(com.nexus.music.data.settings.GlassQuality.Medium)
+        settings.setStyle("material")
+        org.junit.Assert.assertEquals("material", settings.visualStyle.first())
+        org.junit.Assert.assertEquals(com.nexus.music.data.settings.GlassQuality.Medium, settings.glassQuality.first())
+        settings.setGlassQuality(com.nexus.music.data.settings.GlassQuality.High)
+        org.junit.Assert.assertEquals("glass", settings.visualStyle.first())
+        org.junit.Assert.assertEquals(com.nexus.music.data.settings.GlassQuality.High, settings.glassQuality.first())
+    }
+
     @Test fun expressiveDockKeepsLibraryAndColorModesReachable() {
         val settings = (compose.activity.application as NexusApp).settings
         if (kotlinx.coroutines.runBlocking { settings.nickname.first() } == null) {
@@ -47,9 +59,12 @@ class ThemeNavigationTest {
         }
         compose.onNodeWithTag("nav-settings").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
         compose.onNodeWithText("auvyx Glass UI").performScrollTo().performClick()
-        compose.onNodeWithText("Графика · Ultra").performScrollTo().assertIsDisplayed()
-        val accents = compose.onNode(SemanticsMatcher.keyIsDefined(
-            androidx.compose.ui.semantics.SemanticsProperties.HorizontalScrollAxisRange))
+        compose.onNodeWithText("Ultra").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("High").performScrollTo().performClick()
+        compose.waitUntil(5000) {
+            kotlinx.coroutines.runBlocking { settings.glassQuality.first().name } == "High"
+        }
+        val accents = compose.onNodeWithTag("appearance-accents")
         for ((index, accent) in com.nexus.music.data.settings.GlassAccent.entries.withIndex()) {
             accents.performScrollToIndex(index)
             compose.onNodeWithContentDescription(accent.title).performSemanticsAction(

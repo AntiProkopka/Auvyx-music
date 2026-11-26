@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nexus.music.R
 import com.nexus.music.AppViewModel
 import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.ui.components.ExpressiveSlider
@@ -76,7 +77,7 @@ fun SettingsScreen(vm: AppViewModel) {
                 ListItem(
                     headlineContent = { Text("Профиль плеера") },
                     supportingContent = { Text("${nickname?.ifBlank { "Имя не задано" } ?: "Имя не задано"} · используется в названии встроенного динамика") },
-                    leadingContent = { Icon(Icons.Default.Storage, contentDescription = null) }
+                    leadingContent = { com.nexus.music.ui.components.BrandIcon(R.drawable.glass_files, Icons.Default.Storage, contentDescription = null) }
                 )
                 OutlinedButton(shapes = androidx.compose.material3.ButtonDefaults.shapes(), onClick = { editingNickname = true }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text("Изменить никнейм")
@@ -93,7 +94,7 @@ fun SettingsScreen(vm: AppViewModel) {
                 ListItem(
                     headlineContent = { Text("Цветовой режим") },
 
-                    leadingContent = { Icon(Icons.Default.Palette, contentDescription = null) }
+                    leadingContent = { com.nexus.music.ui.components.BrandIcon(R.drawable.glass_settings, Icons.Default.Palette, contentDescription = null) }
                 )
                 listOf("system" to "Как в системе", "light" to "Светлая", "dark" to "Тёмная").forEach { (key, label) ->
                     Row(
@@ -121,7 +122,7 @@ fun SettingsScreen(vm: AppViewModel) {
                 ListItem(
                     headlineContent = { Text("Медиатека") },
                     supportingContent = { Text("${tracks.size} треков · ${folders.size} подключённых папок") },
-                    leadingContent = { Icon(Icons.Default.Storage, contentDescription = null) }
+                    leadingContent = { com.nexus.music.ui.components.BrandIcon(R.drawable.glass_files, Icons.Default.Storage, contentDescription = null) }
                 )
                 OutlinedButton(shapes = androidx.compose.material3.ButtonDefaults.shapes(), onClick = { vm.refreshLibrary() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Icon(Icons.Default.Refresh, contentDescription = null)

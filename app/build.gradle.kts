@@ -28,7 +28,7 @@ android {
         applicationId = "com.nexus.music"
         minSdk = 29
         targetSdk = 34
-        versionCode = 17
+        versionCode = 18
         versionName = "Alpha 2.1"
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$spotifyClientId\"")
     }

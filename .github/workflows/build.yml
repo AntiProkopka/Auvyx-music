@@ -82,6 +82,23 @@ jobs:
             grep -F " $resource" "$RUNNER_TEMP/auvyx-resources.txt"
           done
 
+      - name: Verify wallpaper assets in APK
+        run: |
+          python3 - <<'PYTHON'
+          from collections import Counter
+          from zipfile import ZipFile
+
+          with ZipFile("app/build/outputs/apk/debug/app-debug.apk") as apk:
+              groups = Counter(
+                  name.split("/")[2] for name in apk.namelist()
+                  if name.startswith("assets/wallpapers/") and name.lower().endswith((".jpg", ".jpeg"))
+              )
+          expected = {"auvyx default": 6, "ice blue": 3, "emerald night": 3, "sunset glow": 8,
+                      "rose pulse": 4, "crimson wave": 3, "silver mist": 3, "ocean deep": 3, "forest haze": 3}
+          assert groups == expected, groups
+          print("Verified 36 original backgrounds across 9 accent themes")
+          PYTHON
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:

@@ -57,6 +57,7 @@ class SettingsStore(private val context: Context) {
     private val styleKey = stringPreferencesKey("interface_21")
     private val accentKey = stringPreferencesKey("glass_accent")
     private val photoKey = stringPreferencesKey("glass_photo")
+    private val qualityKey = stringPreferencesKey("glass_quality")
     private val blurKey = intPreferencesKey("glass_blur")
     private val labelsKey = booleanPreferencesKey("recent_labels")
     private val followsKey = stringPreferencesKey("followed_artists")
@@ -68,6 +69,13 @@ class SettingsStore(private val context: Context) {
         require(style == "glass" || style == "material")
         store.edit { it[styleKey] = style }
     }
+    val glassQuality = store.data.map { prefs ->
+        GlassQuality.entries.find { it.name == prefs[qualityKey] } ?: GlassQuality.Ultra
+    }
+    suspend fun setGlassQuality(quality: GlassQuality) {
+        store.edit { it[qualityKey] = quality.name; it[styleKey] = "glass" }
+    }
+
     val accent = store.data.map { prefs -> GlassAccent.entries.find { it.name == prefs[accentKey] } ?: GlassAccent.Sunset }
     val photo = store.data.map { it[photoKey].orEmpty() }
     val blur = store.data.map { (it[blurKey] ?: 32).coerceIn(8, 56) }
@@ -170,7 +178,7 @@ class SettingsStore(private val context: Context) {
         store.edit { prefs ->
             for (key in data.keys()) {
                 when (key) {
-                    "interface_21", "glass_accent", "glass_photo", "theme_mode", "library_sort", "user_nickname", "eq_preset", "visual_style" ->
+                    "interface_21", "glass_quality", "glass_accent", "glass_photo", "theme_mode", "library_sort", "user_nickname", "eq_preset", "visual_style" ->
                         prefs[stringPreferencesKey(key)] = data.getString(key)
                     "glass_blur" -> prefs[blurKey] = data.getInt(key).coerceIn(8, 56)
                     "followed_artists" -> {
@@ -257,6 +265,7 @@ class SettingsStore(private val context: Context) {
             it.remove(accentKey)
             it.remove(photoKey)
             it.remove(blurKey)
+            it.remove(qualityKey)
             it.remove(labelsKey)
             it.remove(Keys.THEME)
             it.remove(Keys.SORT)

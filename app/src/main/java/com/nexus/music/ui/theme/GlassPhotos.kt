@@ -14,10 +14,13 @@ import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
 import com.nexus.music.data.settings.GlassAccent
+import com.nexus.music.data.settings.GlassQuality
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -33,8 +36,10 @@ internal fun loadPhotoCatalog(): Map<GlassAccent, List<String>> {
     return produceState(emptyMap<GlassAccent, List<String>>(), assets) {
         value = withContext(Dispatchers.IO) {
             GlassAccent.entries.associateWith { group ->
-                val folder = "wallpapers/" + group.name
-                assets.list(folder).orEmpty().filter { it.endsWith(".webp") }.sorted().map { "$folder/$it" }
+                val folder = "wallpapers/" + group.photoFolder
+                assets.list(folder).orEmpty().filter {
+                    it.substringAfterLast('.').lowercase() in setOf("jpg", "jpeg", "webp")
+                }.sorted().map { "$folder/$it" }
             }
         }
     }.value
@@ -45,30 +50,57 @@ internal fun groupPhoto(vm: AppViewModel, alternate: Boolean = false): String? {
     val accent by vm.accent.collectAsStateWithLifecycle()
     val selected by vm.photo.collectAsStateWithLifecycle()
     val photos = LocalPhotos.current[accent].orEmpty()
-    val index = photos.indexOf(selected).coerceAtLeast(0)
+    val savedName = selected.substringAfterLast('/').substringBeforeLast('.')
+    val index = photos.indexOfFirst {
+        it == selected || it.substringAfterLast('/').substringBeforeLast('.') == savedName
+    }.coerceAtLeast(0)
     return if (alternate && photos.size > 1) photos[(index + 1) % photos.size] else photos.getOrNull(index)
 }
 
 @Composable
 internal fun GlassPhoto(path: String?, modifier: Modifier, small: Boolean = false) {
-    val assets = LocalContext.current.assets
-    val bitmap by produceState<Bitmap?>(null, path, small) {
-        value = withContext(Dispatchers.IO) {
-            path?.let {
-                val key = "$path/$small"
-                photoCache.get(key) ?: assets.open(path).use { stream ->
-                    BitmapFactory.decodeStream(stream, null, BitmapFactory.Options().apply { inSampleSize = if (small) 4 else 1 })
-                }?.also { photoCache.put(key, it) }
+    BoxWithConstraints(modifier) {
+        val assets = LocalContext.current.assets
+        val density = LocalDensity.current
+        val width = with(density) { maxWidth.roundToPx() }.coerceIn(1, if (small) 256 else 1600)
+        val height = with(density) { maxHeight.roundToPx() }.coerceIn(1, if (small) 256 else 2000)
+        val bitmap by produceState<Bitmap?>(null, assets, path, width, height) {
+            value = withContext(Dispatchers.IO) {
+                if (path == null) return@withContext null
+                val key = "$path/${width}x$height"
+                photoCache.get(key) ?: try {
+                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    assets.open(path).use { BitmapFactory.decodeStream(it, null, options) }
+                    if (options.outWidth <= 0 || options.outHeight <= 0) return@withContext null
+                    var sample = 1
+                    while ((options.outWidth / (sample * 2) >= width && options.outHeight / (sample * 2) >= height) ||
+                        maxOf(options.outWidth, options.outHeight) / sample > 2400
+                    ) {
+                        sample *= 2
+                    }
+                    options.inJustDecodeBounds = false
+                    options.inSampleSize = sample
+                    assets.open(path).use { BitmapFactory.decodeStream(it, null, options) }
+                        ?.also { photoCache.put(key, it) }
+                } catch (_: IOException) {
+                    null
+                }
             }
         }
-    }
-    Crossfade(bitmap, modifier, tween(450), label = "Wallpaper") { current ->
-        current?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+        Crossfade(bitmap, Modifier.fillMaxSize(), tween(450), label = "Wallpaper") { current ->
+            current?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+        }
     }
 }
 
 @Composable
 internal fun GlassWallpaper(vm: AppViewModel) {
     val blur by vm.blur.collectAsStateWithLifecycle()
-    GlassPhoto(groupPhoto(vm), Modifier.fillMaxSize().blur(blur.dp, BlurredEdgeTreatment.Rectangle), small = true)
+    val quality = LocalGlassQuality.current
+    val radius = when (quality) {
+        GlassQuality.Medium -> blur * .42f
+        GlassQuality.High -> blur * .72f
+        GlassQuality.Ultra -> blur.toFloat()
+    }
+    GlassPhoto(groupPhoto(vm), Modifier.fillMaxSize().blur(radius.dp, BlurredEdgeTreatment.Rectangle))
 }

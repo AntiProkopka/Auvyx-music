@@ -51,7 +51,7 @@ fun AppIconSettingsSection() {
             ListItem(
                 headlineContent = { Text("Иконка приложения") },
                 supportingContent = { Text("Выбери один из трёх вариантов auvyx") },
-                leadingContent = { androidx.compose.material3.Icon(Icons.Default.Apps, contentDescription = null) }
+                leadingContent = { com.nexus.music.ui.components.BrandIcon(R.drawable.glass_settings, Icons.Default.Apps, contentDescription = null) }
             )
             options.forEach { (id, label, iconRes) ->
                 Row(
