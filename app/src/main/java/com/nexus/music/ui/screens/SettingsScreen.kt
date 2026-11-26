@@ -92,7 +92,7 @@ fun SettingsScreen(vm: AppViewModel) {
                     leadingContent = { Icon(Icons.Default.Palette, contentDescription = null) }
                 )
                 val style by vm.visualStyle.collectAsStateWithLifecycle()
-                listOf("material" to "Material 3", "hyper" to "HyperOS", "glass" to "Liquid Glass", "lane" to "Studio · LANE").forEach { (id, name) ->
+                listOf("material" to "Material 3", "hyper" to "Системное оформление", "glass" to "Стеклянное оформление", "lane" to "Студия").forEach { (id, name) ->
                     Row(Modifier.fillMaxWidth().selectable(selected = style == id, onClick = { vm.setStyle(id) }).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = style == id, onClick = null)
                         Text(name)
