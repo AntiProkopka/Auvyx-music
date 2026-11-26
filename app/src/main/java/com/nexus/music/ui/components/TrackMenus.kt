@@ -59,6 +59,6 @@ fun trackMenu(
     if (t.source == "local" && t.downloadedPath == null) MenuAction("Выбрать файл заново") { vm.relinkTarget.value = t } else null,
     MenuAction("В плейлист…") { onAddToPlaylist(t) },
     MenuAction("Играть следующим") { vm.player.playNext(t) },
-    MenuAction("В конец очереди") { vm.player.enqueue(t) },
+    MenuAction("Добавить в очередь") { vm.player.enqueue(t) },
     MenuAction("Удалить из медиатеки") { vm.deleteTrack(t) }
 )

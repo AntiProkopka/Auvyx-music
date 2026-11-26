@@ -282,7 +282,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             soundCloudError.value = null
             return
         }
-        soundCloudSearchJob?.cancel()
         soundCloudSearchJob = viewModelScope.launch {
             soundCloudLoading.value = true
             soundCloudError.value = null
@@ -294,7 +293,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel
             } catch (error: Exception) {
                 soundCloudResults.value = emptyList()
-                soundCloudError.value = error.message ?: "Не удалось выполнить поиск SoundCloud."
+                android.util.Log.w("SoundCloud", "Не удалось выполнить поиск", error)
+                soundCloudError.value = when (error) {
+                    is java.net.UnknownHostException, is java.net.ConnectException ->
+                        "SoundCloud недоступен. Проверь подключение к интернету."
+                    is java.net.SocketTimeoutException -> "SoundCloud не ответил вовремя. Повтори поиск."
+                    else -> "Не удалось выполнить поиск SoundCloud."
+                }
             } finally {
                 if (kotlinx.coroutines.currentCoroutineContext()[Job]?.isActive == true) soundCloudLoading.value = false
             }

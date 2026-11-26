@@ -30,7 +30,7 @@ internal fun Appearance(vm: AppViewModel) {
     val labels by vm.recentLabels.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxWidth().frosted(MaterialTheme.shapes.large).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Внешний вид", style = MaterialTheme.typography.titleLarge)
-        listOf("glass" to "AUVYX Glass UI", "material" to "Material 3 Expressive").forEach { (id, name) ->
+        listOf("glass" to "auvyx Glass UI", "material" to "Material 3 Expressive").forEach { (id, name) ->
             Row(Modifier.fillMaxWidth().selectable(style == id, role = Role.RadioButton) { vm.setStyle(id) },
                 verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(style == id, null, Modifier.padding(9.dp))

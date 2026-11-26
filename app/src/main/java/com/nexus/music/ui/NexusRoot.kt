@@ -170,15 +170,6 @@ fun NexusRoot(vm: AppViewModel) {
                             if (glass) {
                                 Text(title, style = if (route == "home") MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineMedium,
                                     modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 19.dp, vertical = 8.dp))
-                            } else if (style == "lane") {
-                                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                                    navItems.forEach { item -> IconButton(modifier = Modifier.testTag("nav-${item.route}"), onClick = { vm.albumTarget.value = null; vm.artistTarget.value = null; navigateTo(nav, item.route) }) {
-                                        Icon(item.icon, item.label, tint = if (route == item.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                                    } }
-                                }
-                            } else if (style == "hyper") {
-                                Text(title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.statusBarsPadding().padding(horizontal = 22.dp, vertical = 10.dp))
                             } else CenterAlignedTopAppBar(
                                 title = {
                                     Text(
@@ -223,7 +214,7 @@ fun NexusRoot(vm: AppViewModel) {
                                             }
                                         }
                                     }
-                                } else if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
+                                } else NavigationBar(
                                     modifier = Modifier.clip(MaterialTheme.shapes.extraLarge)
                                         .background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 1f))
                                         .testTag("bottom-dock"),

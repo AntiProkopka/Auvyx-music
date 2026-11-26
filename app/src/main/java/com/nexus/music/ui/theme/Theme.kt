@@ -143,7 +143,6 @@ fun NexusTheme(themeMode: String, style: String, accent: GlassAccent = GlassAcce
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else if (dark) AUVYXDark else AUVYXLight
     val colors = when (style) {
-        "hyper" -> base.copy(surfaceContainer = base.surface.copy(alpha = .83f))
         "glass" -> {
             val light by animateColorAsState(Color(accent.light), tween(450))
             val ink by animateColorAsState(Color(accent.ink), tween(450))
@@ -157,10 +156,6 @@ fun NexusTheme(themeMode: String, style: String, accent: GlassAccent = GlassAcce
                 surfaceContainer = lerp(darkBase, ink, .14f),
                 surfaceContainerHigh = lerp(darkBase, ink, .20f))
         }
-        "lane" -> base.copy(
-            primary = if (dark) Color(0xFFC4E96D) else Color(0xFF486500),
-            onPrimary = if (dark) Color(0xFF253600) else Color.White
-        )
         else -> base
     }
     val view = LocalView.current
@@ -181,11 +176,7 @@ fun NexusTheme(themeMode: String, style: String, accent: GlassAccent = GlassAcce
             colorScheme = colors,
             typography = if (style == "glass") glassTypography else expressiveTypography,
             motionScheme = MotionScheme.expressive(),
-            shapes = when (style) {
-                "lane" -> Shapes(small = RoundedCornerShape(3.dp), medium = RoundedCornerShape(4.dp), large = RoundedCornerShape(6.dp))
-                "glass" -> AUVYXShapes
-                else -> AUVYXShapes
-            },
+            shapes = AUVYXShapes,
             content = { CompositionLocalProvider(LocalContentColor provides colors.onBackground) { content() } }
         )
     }

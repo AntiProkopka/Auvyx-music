@@ -1,4 +1,11 @@
-# AUVYX changelog
+# auvyx — журнал изменений
+
+## Alpha 2.1
+
+- Добавлены auvyx Glass UI, девять акцентов и выбор оформления.
+- Появились подписки на исполнителей и отдельная история поиска.
+- Исправлены прокрутка панели эквалайзера и Speed Lab, доступность длинных текстов и возврат к текущей строке.
+- Согласованы подписи действий в меню треков. Поиск SoundCloud показывает понятное сообщение при недоступной сети.
 
 ## Alpha 1.6
 - Rebranded the visible app name, in-app labels, launcher label, Gradle project name, and GitHub Actions workflow/artifact to AUVYX.

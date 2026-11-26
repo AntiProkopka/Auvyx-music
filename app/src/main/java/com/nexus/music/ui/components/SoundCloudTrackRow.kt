@@ -137,7 +137,7 @@ fun CatalogResultRow(title: String, artist: String, durationMs: Long, artwork: S
                             )
                         }
                         DropdownMenuItem(
-                            text = { Text("В конец очереди") },
+                            text = { Text("Добавить в очередь") },
                             enabled = playEnabled,
                             onClick = { menuExpanded = false; onEnqueue() }
                         )

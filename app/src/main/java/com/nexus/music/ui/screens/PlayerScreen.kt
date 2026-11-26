@@ -277,7 +277,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             animationSpec = tween(durationMillis = 420),
             label = "Artwork glow"
         )
-        val artworkWidthFraction = if (style == "lane") 1f else .86f
+        val artworkWidthFraction = .86f
         BoxWithConstraints(
             modifier = (if (compact) Modifier.height(160.dp) else Modifier.weight(1f))
                 .fillMaxWidth()
@@ -302,7 +302,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         ) {
                 val artworkSize = minOf(maxWidth * artworkWidthFraction, maxHeight)
                 Box(
-                    modifier = Modifier.size(artworkSize).aspectRatio(1f).sharedCover().clip(RoundedCornerShape(when (style) { "glass" -> 52.dp; "hyper" -> 40.dp; "lane" -> 4.dp; else -> 30.dp }))
+                    modifier = Modifier.size(artworkSize).aspectRatio(1f).sharedCover().clip(RoundedCornerShape(if (style == "glass") 52.dp else 30.dp))
                         .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer))),
                     contentAlignment = Alignment.Center
                 ) {
@@ -384,7 +384,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                             transfer != null -> "Копирование: ${transfer.bytes / 1024} КБ"
                             selected.downloadedPath != null -> "Доступен офлайн"
                             OfflineAudio.canSave(selected) -> "Офлайн-копии нет"
-                            selected.source == "soundcloud" -> "В AUVYX офлайн-копии SoundCloud недоступны"
+                            selected.source == "soundcloud" -> "В auvyx офлайн-копии SoundCloud недоступны"
                             else -> "Офлайн-сохранение недоступно"
                         }
                         DropdownMenuItem(text = { Text(offlineStatus) }, enabled = false, onClick = {})
@@ -410,7 +410,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                             showTrackMenu = false
                         })
                     }
-                    DropdownMenuItem(text = { Text("Добавить в плейлист") }, onClick = {
+                    DropdownMenuItem(text = { Text("В плейлист…") }, onClick = {
                         showTrackMenu = false
                         showPlaylist = true
                     })
@@ -422,7 +422,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                         vm.player.stop()
                         showTrackMenu = false
                     })
-                    DropdownMenuItem(text = { Text("В конец очереди") }, onClick = {
+                    DropdownMenuItem(text = { Text("Добавить в очередь") }, onClick = {
                         track?.let(vm.player::enqueue)
                         showTrackMenu = false
                     })
@@ -524,7 +524,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("Удалить из медиатеки?") },
-            text = { Text("«${selected.title}» будет удалён из медиатеки AUVYX. Исходный файл останется на устройстве.") },
+            text = { Text("«${selected.title}» будет удалён из медиатеки auvyx. Исходный файл останется на устройстве.") },
             confirmButton = {
                 TextButton(onClick = { vm.deleteTrack(selected); deleteTarget = null }) { Text("Удалить") }
             },

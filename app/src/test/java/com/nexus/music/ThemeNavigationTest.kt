@@ -46,7 +46,7 @@ class ThemeNavigationTest {
             compose.onNodeWithText("Пропустить").performClick()
         }
         compose.onNodeWithTag("nav-settings").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
-        compose.onNodeWithText("AUVYX Glass UI").performScrollTo().performClick()
+        compose.onNodeWithText("auvyx Glass UI").performScrollTo().performClick()
         compose.onNodeWithText("Графика · Ultra").performScrollTo().assertIsDisplayed()
         val accents = compose.onNode(SemanticsMatcher.keyIsDefined(
             androidx.compose.ui.semantics.SemanticsProperties.HorizontalScrollAxisRange))
