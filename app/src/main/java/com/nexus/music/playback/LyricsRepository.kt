@@ -38,7 +38,9 @@ object LyricsRepository {
             setRequestProperty("Accept", "application/json")
         }
         try {
-            if (connection.responseCode != 200) return@withContext null
+            val status = connection.responseCode
+            if (status == HttpURLConnection.HTTP_NOT_FOUND) return@withContext null
+            if (status != HttpURLConnection.HTTP_OK) throw java.io.IOException("Lyrics lookup returned HTTP $status")
             val response = connection.inputStream.bufferedReader().use { it.readText().take(400_000) }
             val candidates = JSONArray(response)
             val wantedTitle = normalized(title)

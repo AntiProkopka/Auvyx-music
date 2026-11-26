@@ -147,12 +147,97 @@ class ThemeNavigationTest {
         }
     }
 
+    @Test
+    @Config(qualifiers = "w320dp-h480dp")
+    fun soundPanelRemainsScrollableAndDismissibleOnSmallScreen() {
+        val app = compose.activity.application as NexusApp
+        val track = seedTracks(app).first()
+        compose.runOnUiThread {
+            compose.activity.setContent {
+                val vm: AppViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 1.6f)
+                ) {
+                    NexusTheme("dark", "glass") { com.nexus.music.ui.screens.PlayerScreen(vm) {} }
+                }
+            }
+            app.playerController.playTrack(track)
+        }
+        compose.waitUntil(15000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS)
+            app.playerController.state.value.mediaId == track.id.toString() &&
+                app.playerController.state.value.canSeek
+        }
+        compose.runOnUiThread { app.playerController.pause() }
+        repeat(2) { opening ->
+            compose.onNodeWithContentDescription("Эквалайзер и Speed Lab").performScrollTo()
+                .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+            compose.onNodeWithText("Эквалайзер").assertIsDisplayed()
+            compose.onNodeWithText("Vocal Boost").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("Custom").performScrollTo().assertIsDisplayed()
+            for (frequency in listOf(60, 150, 400, 1000, 2400, 15000)) {
+                compose.onNodeWithContentDescription("$frequency Гц").performScrollTo().assertIsDisplayed()
+            }
+            if (opening == 0) {
+                compose.onNodeWithContentDescription("60 Гц").performScrollTo()
+                    .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(7f) }
+                compose.waitUntil(5000) {
+                    org.robolectric.shadows.ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    kotlinx.coroutines.runBlocking { app.settings.equalizerGains.first().first() } == 7f
+                }
+            } else compose.onNodeWithText("Custom").performScrollTo().assertIsSelected()
+            compose.onNodeWithText("Speed Up").performScrollTo().assertIsDisplayed()
+            compose.runOnUiThread { org.robolectric.shadows.ShadowDialog.getLatestDialog().onBackPressed() }
+            compose.onNodeWithText("Эквалайзер").assertDoesNotExist()
+        }
+    }
+
+    @Test
+    @Config(qualifiers = "w320dp-h480dp")
+    fun plainLyricsPanelKeepsLastLineReachable() {
+        val app = compose.activity.application as NexusApp
+        kotlinx.coroutines.runBlocking {
+            app.settings.saveLyrics("100", (1..44).joinToString("\n") { "Verse $it" })
+        }
+        val visible = androidx.compose.runtime.mutableStateOf(true)
+        compose.runOnUiThread {
+            compose.activity.setContent {
+                val vm: AppViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 1.6f)
+                ) {
+                    NexusTheme("dark", "glass") {
+                        if (visible.value) com.nexus.music.ui.screens.TrackLyricsSheet(
+                            vm, "100", "A long track name that wraps on a small display",
+                            "Test artist", 12000L, 0L, null
+                        ) { visible.value = false }
+                    }
+                }
+            }
+        }
+        compose.waitUntil(5000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS)
+            compose.onAllNodesWithText("Verse 1").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Импортировать LRC или TXT").assertIsDisplayed()
+        compose.onNodeWithTag("lyrics-scroll").performScrollToIndex(44)
+        compose.onNodeWithText("Verse 44").assertIsDisplayed()
+        compose.runOnUiThread { org.robolectric.shadows.ShadowDialog.getLatestDialog().onBackPressed() }
+        compose.onNodeWithTag("lyrics-scroll").assertDoesNotExist()
+    }
+
     @Test fun timedLyricHighlightFollowsPositionInBothDirections() {
         val position = mutableLongStateOf(2_000L)
         compose.runOnUiThread {
             compose.activity.setContent {
                 NexusTheme(themeMode = "light", style = "material") {
-                    LyricsContent("[00:01.00]First verse\n[00:04.00]Second verse", position.longValue)
+                    LyricsContent(
+                        "[00:01.00]First verse\n[00:04.00]Second verse\n" +
+                            (5..50).joinToString("\n") { "[00:%02d.00]Verse %d".format(java.util.Locale.ROOT, it, it) },
+                        position.longValue
+                    )
                 }
             }
         }
@@ -161,6 +246,14 @@ class ThemeNavigationTest {
         compose.onNodeWithText("Second verse").assertIsSelected()
         compose.runOnIdle { position.longValue = 2_000L }
         compose.onNodeWithText("First verse").assertIsSelected()
+        val list = compose.onNodeWithTag("lyrics-scroll")
+        list.performTouchInput { swipeUp() }
+        compose.onNodeWithText("К текущей строке").assertIsDisplayed()
+        list.performScrollToIndex(47)
+        compose.runOnIdle { position.longValue = 4_500L }
+        compose.onNodeWithText("Verse 50").assertIsDisplayed()
+        compose.onNodeWithText("К текущей строке").performClick()
+        compose.onNodeWithText("Second verse").assertIsSelected().assertIsDisplayed()
     }
 
 }

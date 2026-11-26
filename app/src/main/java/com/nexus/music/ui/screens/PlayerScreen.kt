@@ -1,5 +1,20 @@
 package com.nexus.music.ui.screens
 
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.SliderState
+import androidx.compose.material3.VerticalSlider
+import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -15,10 +30,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.Lifecycle
@@ -56,7 +68,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -119,6 +130,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
 import com.nexus.music.data.db.availableAlbumTitle
 import com.nexus.music.data.local.OfflineAudio
+import com.nexus.music.playback.SixBandEqualizer
 import com.nexus.music.playback.PlaybackAudioRouting
 import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.formatTime
@@ -146,8 +158,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     val eqPreset by vm.equalizerPreset.collectAsStateWithLifecycle()
     val nickname by vm.nickname.collectAsStateWithLifecycle()
     var showQueue by remember { mutableStateOf(false) }
-    var showEqualizer by remember { mutableStateOf(false) }
-    var showLyrics by remember { mutableStateOf(false) }
+    var panel by remember { mutableStateOf<PlayerPanel?>(null) }
     var showTrackMenu by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<com.nexus.music.data.db.TrackEntity?>(null) }
     val offlineTransfers by vm.offlineTransfers.collectAsStateWithLifecycle()
@@ -479,7 +490,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             }
         }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(enabled = s.mediaId != null, onClick = { showLyrics = true }) {
+            IconButton(enabled = s.mediaId != null, onClick = { panel = PlayerPanel.Lyrics }) {
                 BrandIcon(R.drawable.glass_lyrics, Icons.Default.Lyrics, "Текст песни")
             }
             val outputLabel = currentOutput?.let { audioDeviceLabel(it, nickname) } ?: "Системный вывод"
@@ -492,7 +503,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                 Text(outputLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BrandIcon(R.drawable.glass_chevrondown, Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(16.dp))
             }
-            IconButton(onClick = { showEqualizer = true }) {
+            IconButton(onClick = { panel = PlayerPanel.Sound }) {
                 BrandIcon(R.drawable.glass_equalizer, Icons.Default.Tune, "Эквалайзер и Speed Lab")
             }
         }
@@ -502,7 +513,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             val lines = remember(text) { com.nexus.music.playback.timedLyrics(text) }
             val preview = lines.getOrNull(com.nexus.music.playback.activeLyricIndex(lines, pos))?.second
                 ?: lines.firstOrNull()?.second ?: text.lineSequence().firstOrNull()
-            if (!preview.isNullOrBlank()) TextButton(onClick = { showLyrics = true }) {
+            if (!preview.isNullOrBlank()) TextButton(onClick = { panel = PlayerPanel.Lyrics }) {
                 Text(preview, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -523,14 +534,14 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     if (showPlaylist && track != null) {
         AddToPlaylistDialog(vm, track, onDismiss = { showPlaylist = false })
     }
-    if (showLyrics && s.mediaId != null) {
+    if (panel == PlayerPanel.Lyrics && s.mediaId != null) {
         key(s.mediaId) {
             TrackLyricsSheet(vm, s.mediaId.orEmpty(), s.title, s.artist, s.durationMs, pos,
-                track?.takeIf { it.source == "soundcloud" }?.sourceUrl) { showLyrics = false }
+                track?.takeIf { it.source == "soundcloud" }?.sourceUrl) { if (panel == PlayerPanel.Lyrics) panel = null }
         }
     }
-    if (showEqualizer) {
-        SoundToolsSheet(vm, eqGains, eqEnabled, eqPreset, s.speed, s.pitch) { showEqualizer = false }
+    if (panel == PlayerPanel.Sound) {
+        SoundToolsSheet(vm, eqGains, eqEnabled, eqPreset, s.speed, s.pitch) { if (panel == PlayerPanel.Sound) panel = null }
     }
     if (showOutput) {
         AudioOutputDialog(
@@ -538,6 +549,28 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             onSelect = { device -> PlaybackAudioRouting.select(device); showOutput = false },
             onDismiss = { showOutput = false }
         )
+    }
+}
+
+private enum class PlayerPanel { Sound, Lyrics }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlayerBottomSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val sheet = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+    )
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheet,
+        shape = MaterialTheme.shapes.extraLarge,
+        // The sheet owns its surface. A clip on the outer modifier stays above
+        // Material's moving anchor and can cut the sheet in its translated position.
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(.90f), content = content)
     }
 }
 
@@ -552,9 +585,10 @@ private fun SoundToolsSheet(
     pitch: Float,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge, overPage = true), shape = MaterialTheme.shapes.extraLarge,
-        containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 10.dp)) {
+    PlayerBottomSheet(onDismiss) {
+        Column(Modifier.fillMaxWidth().weight(1f).testTag("sound-tools-scroll")
+            .verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Эквалайзер", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 Switch(checked = enabled, onCheckedChange = vm::setEqualizerEnabled)
@@ -569,16 +603,17 @@ private fun SoundToolsSheet(
                 listOf("60", "150", "400", "1k", "2.4k", "15k").forEachIndexed { index, name ->
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         val gain = gains.getOrElse(index) { 0f }.coerceIn(-12f, 12f)
-                        ExpressiveSlider(value = gain, enabled = enabled, valueRange = -12f..12f,
+                        val slider = remember { SliderState(gain, 0, -12f..12f) }
+                        slider.value = gain
+                        VerticalSlider(
+                            state = slider,
                             onValueChange = { vm.setEqualizerBand(index, it) },
-                            modifier = Modifier.width(44.dp).height(126.dp).layout { measurable, constraints ->
-                                val width = constraints.maxWidth
-                                val height = constraints.maxHeight
-                                val item = measurable.measure(Constraints.fixed(height, width))
-                                layout(width, height) {
-                                    item.placeRelative((width - height) / 2, (height - width) / 2)
-                                }
-                            }.rotate(-90f))
+                            modifier = Modifier.height(126.dp).fillMaxWidth().semantics {
+                                contentDescription = "${SixBandEqualizer.FREQUENCIES[index].toInt()} Гц"
+                            },
+                            enabled = enabled,
+                            topToBottom = false
+                        )
                         Text(name, style = MaterialTheme.typography.labelSmall)
                         Text("%+.1f".format(gain), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     }
@@ -601,7 +636,7 @@ private fun SoundToolsSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, artist: String,
+internal fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, artist: String,
                              durationMs: Long, position: Long, soundCloudPermalink: String?, onDismiss: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -612,7 +647,7 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
     var lookupAttempt by remember(mediaId) { mutableIntStateOf(0) }
     val hasReadSavedLyrics = content != null
     LaunchedEffect(mediaId, hasReadSavedLyrics, lookupAttempt, soundCloudPermalink) {
-        if (hasReadSavedLyrics && content.isNullOrEmpty()) {
+        if (hasReadSavedLyrics && content.isNullOrBlank()) {
             lookupState = "loading"
             try {
                 val result = LyricsRepository.findForTrack(title, artist, durationMs, soundCloudPermalink)
@@ -623,7 +658,7 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
             } catch (cancel: kotlinx.coroutines.CancellationException) {
                 throw cancel
             } catch (_: Exception) {
-                lookupState = "missing"
+                lookupState = "failed"
             }
         }
     }
@@ -652,41 +687,75 @@ private fun TrackLyricsSheet(vm: AppViewModel, mediaId: String, title: String, a
         }
     }
     val lyrics = content.orEmpty()
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge, overPage = true), shape = MaterialTheme.shapes.extraLarge,
-        containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+    PlayerBottomSheet(onDismiss) {
+        LyricsContent(lyrics, position, modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.headlineSmall)
             if (error) Text("Не удалось прочитать файл текста.")
-            if (lookupState == "loading") Text("Ищем текст и синхронизацию…")
-            if (lookupState == "missing" && lyrics.isBlank()) {
-                Text("Автоматически найти текст не удалось.")
+            if (lyrics.isBlank()) when (lookupState) {
+                "missing" -> Text("Текст песни не найден.")
+                "failed" -> Text("Не удалось загрузить текст песни.")
+                else -> Text("Ищем текст песни…")
+            }
+            if (lyrics.isBlank() && lookupState in listOf("missing", "failed")) {
                 TextButton(onClick = { lookupAttempt++ }) { Text("Повторить поиск") }
             }
-            TextButton(onClick = { requestedId = mediaId; picker.launch(arrayOf("text/*", "application/octet-stream")) }) { Text("Импортировать LRC или TXT") }
-            LyricsContent(lyrics, position)
+            TextButton(onClick = {
+                requestedId = mediaId
+                picker.launch(arrayOf("text/*", "application/octet-stream"))
+            }) { Text("Импортировать LRC или TXT") }
         }
     }
 }
 
 @Composable
-internal fun LyricsContent(lyrics: String, position: Long) {
-    if (lyrics.isBlank()) return
-    val lines = remember(lyrics) { com.nexus.music.playback.timedLyrics(lyrics) }
-    if (lines.isEmpty()) {
-        Text(lyrics, modifier = Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()))
-        return
+internal fun LyricsContent(
+    lyrics: String,
+    position: Long,
+    modifier: Modifier = Modifier,
+    header: (@Composable () -> Unit)? = null
+) {
+    val timed = remember(lyrics) { com.nexus.music.playback.timedLyrics(lyrics) }
+    val plain = remember(lyrics, timed) { if (timed.isEmpty() && lyrics.isNotBlank()) lyrics.lines() else emptyList() }
+    val active = com.nexus.music.playback.activeLyricIndex(timed, position)
+    val listState = rememberLazyListState()
+    var follow by remember(lyrics) { mutableStateOf(true) }
+    val manualScroll = remember(timed) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y != 0f && timed.isNotEmpty()) follow = false
+                return Offset.Zero
+            }
+        }
     }
-    val active = com.nexus.music.playback.activeLyricIndex(lines, position)
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    LaunchedEffect(active) { listState.scrollToItem(active.coerceAtLeast(0)) }
-    LazyColumn(state = listState, modifier = Modifier.heightIn(max = 430.dp)) {
-        itemsIndexed(lines) { index, line ->
-            val highlighted = index == active
-            Text(
-                line.second,
-                modifier = Modifier.padding(vertical = 7.dp).semantics { selected = highlighted },
-                color = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+    val headerCount = if (header == null) 0 else 1
+    LaunchedEffect(active, follow, lyrics) {
+        if (follow && timed.isNotEmpty()) {
+            val index = if (active >= 0) active + headerCount else 0
+            if (listState.layoutInfo.visibleItemsInfo.none { item ->
+                item.index == index && item.offset >= listState.layoutInfo.viewportStartOffset &&
+                    item.offset + item.size <= listState.layoutInfo.viewportEndOffset
+            }) listState.scrollToItem(index)
+        }
+    }
+    Column(modifier.fillMaxWidth()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f).testTag("lyrics-scroll").nestedScroll(manualScroll),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp)
+        ) {
+            if (header != null) item { header() }
+            items(plain) { line -> Text(line, modifier = Modifier.padding(vertical = 3.dp)) }
+            itemsIndexed(timed) { index, line ->
+                val highlighted = index == active
+                Text(
+                    line.second,
+                    modifier = Modifier.padding(vertical = 7.dp).semantics { selected = highlighted },
+                    color = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (!follow) TextButton(onClick = { follow = true }, modifier = Modifier.padding(horizontal = 12.dp)) {
+            Text("К текущей строке")
         }
     }
 }
