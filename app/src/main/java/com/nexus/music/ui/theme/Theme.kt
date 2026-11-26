@@ -110,13 +110,8 @@ fun NexusTheme(themeMode: String, style: String, content: @Composable () -> Unit
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else if (dark) AUVYXDark else AUVYXLight
     val colors = when (style) {
-        "hyper" -> base.copy(surfaceContainer = base.surface.copy(alpha = .83f))
         "glass" -> base.copy(surfaceContainer = base.surface.copy(alpha = .62f),
             surfaceContainerLow = base.surfaceVariant.copy(alpha = .70f))
-        "lane" -> base.copy(
-            primary = if (dark) Color(0xFFC4E96D) else Color(0xFF486500),
-            onPrimary = if (dark) Color(0xFF253600) else Color.White
-        )
         else -> base
     }
     val view = LocalView.current
@@ -138,7 +133,6 @@ fun NexusTheme(themeMode: String, style: String, content: @Composable () -> Unit
             typography = expressiveTypography,
             motionScheme = MotionScheme.expressive(),
             shapes = when (style) {
-                "lane" -> Shapes(small = RoundedCornerShape(3.dp), medium = RoundedCornerShape(4.dp), large = RoundedCornerShape(6.dp))
                 "glass" -> Shapes(medium = RoundedCornerShape(30.dp), large = RoundedCornerShape(40.dp))
                 else -> AUVYXShapes
             },

@@ -49,7 +49,7 @@ class ThemeNavigationTest {
         compose.onNodeWithContentDescription("По умолчанию").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Неон").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Стекло").performScrollTo().assertIsDisplayed()
-        listOf("HyperOS", "Liquid Glass", "Studio · LANE").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+        listOf("Системное оформление", "Стеклянное оформление", "Студия").forEach { compose.onNodeWithText(it).assertDoesNotExist() }
         compose.onNodeWithText("Цветовой режим").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Как в системе").assertExists()
         compose.onNodeWithText("Светлая").assertExists()

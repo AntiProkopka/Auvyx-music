@@ -74,8 +74,8 @@ fun TrackRow(
     val style = com.nexus.music.ui.theme.LocalStyle.current
     val shape = MaterialTheme.shapes.medium
     ListItem(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = if (style in listOf("hyper","glass")) 10.dp else 0.dp,
-            vertical = if (style in listOf("hyper","glass")) 3.dp else 0.dp).clip(shape).clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = if (style == "glass") 10.dp else 0.dp,
+            vertical = if (style == "glass") 3.dp else 0.dp).clip(shape).clickable(onClick = onClick),
         colors = ListItemDefaults.colors(containerColor = if (isCurrent) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow),
         leadingContent = {
             Box(

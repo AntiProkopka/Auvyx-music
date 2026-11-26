@@ -258,7 +258,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             animationSpec = tween(durationMillis = 420),
             label = "Artwork glow"
         )
-        val artworkWidthFraction = if (style == "lane") 1f else .86f
+        val artworkWidthFraction = .86f
         BoxWithConstraints(
             modifier = (if (compact) Modifier.height(160.dp) else Modifier.weight(1f))
                 .fillMaxWidth()
@@ -283,7 +283,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         ) {
                 val artworkSize = minOf(maxWidth * artworkWidthFraction, maxHeight)
                 Box(
-                    modifier = Modifier.size(artworkSize).aspectRatio(1f).clip(RoundedCornerShape(when (style) { "glass" -> 52.dp; "hyper" -> 40.dp; "lane" -> 4.dp; else -> 30.dp }))
+                    modifier = Modifier.size(artworkSize).aspectRatio(1f).clip(RoundedCornerShape(if (style == "glass") 52.dp else 30.dp))
                         .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer))),
                     contentAlignment = Alignment.Center
                 ) {

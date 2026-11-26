@@ -120,10 +120,10 @@ fun NexusRoot(vm: AppViewModel) {
     LaunchedEffect(vm.player) { vm.player.errors.collect { snackbar.showSnackbar(it) } }
 
     val style = LocalStyle.current
-    val glass = style in listOf("hyper", "glass")
+    val glass = style == "glass"
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (glass) {
-            Box(Modifier.fillMaxSize().blur(if (style == "hyper") 35.dp else 14.dp).background(
+            Box(Modifier.fillMaxSize().blur(14.dp).background(
                 Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.background,
                     MaterialTheme.colorScheme.tertiaryContainer))))
         }
@@ -132,16 +132,7 @@ fun NexusRoot(vm: AppViewModel) {
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
                 if (route != "player" && route?.startsWith("playlist") != true) {
-                    if (style == "lane") {
-                        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            navItems.forEach { item -> IconButton(modifier = Modifier.testTag("nav-${item.route}"), onClick = { vm.albumTarget.value = null; vm.artistTarget.value = null; navigateTo(nav, item.route) }) {
-                                Icon(item.icon, item.label, tint = if (route == item.route) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                            } }
-                        }
-                    } else if (style == "hyper") {
-                        Text(title, style = MaterialTheme.typography.displaySmall, modifier = Modifier.statusBarsPadding().padding(horizontal = 22.dp, vertical = 10.dp))
-                    } else CenterAlignedTopAppBar(
+                    CenterAlignedTopAppBar(
                         title = {
                             Text(
                                 title,
@@ -165,7 +156,7 @@ fun NexusRoot(vm: AppViewModel) {
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (player.mediaId != null) MiniPlayer(vm, onOpen = openPlayer)
-                        if (style != "lane" || route?.startsWith("playlist") == true) NavigationBar(
+                        NavigationBar(
                             modifier = Modifier.clip(MaterialTheme.shapes.extraLarge)
                                 .background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 1f))
                                 .testTag("bottom-dock"),
