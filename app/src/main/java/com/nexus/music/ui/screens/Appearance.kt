@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -48,7 +49,7 @@ internal fun Appearance(vm: AppViewModel) {
         }
         if (!isGlass) return@Column
         Text(accent.title, style = MaterialTheme.typography.titleMedium)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyRow(modifier = Modifier.testTag("appearance-accents"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(GlassAccent.entries) { entry ->
                 Box(Modifier.size(44.dp).clip(CircleShape).background(Color(entry.light))
                     .selectable(accent == entry) { vm.selectAppearance(entry) }.semantics { contentDescription = entry.title },

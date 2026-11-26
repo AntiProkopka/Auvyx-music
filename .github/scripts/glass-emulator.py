@@ -59,7 +59,15 @@ def screenshot(name):
 def main():
     # The fixture is imported with Android's document picker, exercising the same
     # permissions and Media3 path as a user picking a local song.
-    adb("push", ".github/fixtures/Glass-audio.mp3", "/sdcard/Download/Glass-audio.mp3")
+    for attempt in range(8):
+        try:
+            adb("shell", "mkdir", "-p", "/sdcard/Download")
+            adb("push", ".github/fixtures/Glass-audio.mp3", "/sdcard/Download/Glass-audio.mp3")
+            break
+        except subprocess.CalledProcessError:
+            if attempt == 7:
+                raise
+            time.sleep(2)
     adb("shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
         "-d", "file:///sdcard/Download/Glass-audio.mp3")
     adb("shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS")
