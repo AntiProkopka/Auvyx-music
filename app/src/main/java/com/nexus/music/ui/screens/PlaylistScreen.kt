@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nexus.music.R
 import com.nexus.music.AppViewModel
 import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.ui.components.EmptyHint
@@ -57,7 +58,7 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Назад") }
+            IconButton(onClick = onBack) { com.nexus.music.ui.components.BrandIcon(R.drawable.glass_back, Icons.Default.ArrowBack, contentDescription = "Назад") }
             Text(
                 text = playlist?.name ?: "",
                 style = MaterialTheme.typography.titleLarge,
@@ -86,12 +87,12 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilledTonalButton(shapes = ButtonDefaults.shapes(), modifier = Modifier.weight(1f), enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks, 0) }) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                com.nexus.music.ui.components.BrandIcon(R.drawable.glass_play, Icons.Default.PlayArrow, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
                 Text("Играть", maxLines = 1)
             }
             FilledTonalButton(shapes = ButtonDefaults.shapes(), modifier = Modifier.weight(1f), enabled = tracks.isNotEmpty(), onClick = { vm.player.playTracks(tracks, 0, shuffle = true) }) {
-                Icon(Icons.Default.Shuffle, contentDescription = null)
+                com.nexus.music.ui.components.BrandIcon(R.drawable.glass_shuffle, Icons.Default.Shuffle, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
                 Text("Вперемешку", maxLines = 1)
             }

@@ -20,12 +20,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
 import com.nexus.music.R
 import com.nexus.music.data.settings.GlassAccent
+import com.nexus.music.data.settings.GlassQuality
 import com.nexus.music.ui.theme.*
 import com.nexus.music.ui.components.ExpressiveSlider
 
 @Composable
 internal fun Appearance(vm: AppViewModel) {
     val style by vm.visualStyle.collectAsStateWithLifecycle()
+    val quality by vm.glassQuality.collectAsStateWithLifecycle()
     val accent by vm.accent.collectAsStateWithLifecycle()
     val labels by vm.recentLabels.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxWidth().frosted(MaterialTheme.shapes.large).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -35,6 +37,13 @@ internal fun Appearance(vm: AppViewModel) {
                 verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(style == id, null, Modifier.padding(9.dp))
                 Text(name)
+                if (id == "material") Text(" · Low", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        Text("Качество графики", style = MaterialTheme.typography.titleMedium)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            GlassQuality.entries.forEach { preset ->
+                FilterChip(selected = isGlass && quality == preset, onClick = { vm.setGlassQuality(preset) }, label = { Text(preset.name) })
             }
         }
         if (!isGlass) return@Column
@@ -66,6 +75,6 @@ internal fun Appearance(vm: AppViewModel) {
             Text("Подписи Recently Played", Modifier.weight(1f))
             Switch(labels, vm::setRecentLabels)
         }
-        Text("Графика · Ultra", style = MaterialTheme.typography.labelLarge)
+
     }
 }

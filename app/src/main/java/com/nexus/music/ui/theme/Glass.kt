@@ -21,31 +21,48 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import com.nexus.music.ui.components.*
+import com.nexus.music.data.settings.GlassQuality
 import dev.chrisbanes.haze.*
 
+internal val LocalGlassQuality = staticCompositionLocalOf { GlassQuality.Ultra }
 internal val LocalWallpaper = staticCompositionLocalOf<HazeState?> { null }
 internal val LocalPage = staticCompositionLocalOf<HazeState?> { null }
-internal val LocalArtLight = compositionLocalOf { Color.Transparent }
+internal val LocalArtLight = staticCompositionLocalOf<State<Color>> { mutableStateOf(Color.Transparent) }
 internal val LocalLamp = staticCompositionLocalOf { mutableStateOf(Offset.Unspecified) }
 internal val isGlass: Boolean @Composable get() = LocalStyle.current == "glass"
 
 @Composable
 internal fun Modifier.frosted(shape: Shape, overPage: Boolean = false): Modifier {
     if (!isGlass) return this
+    val quality = LocalGlassQuality.current
     val source = if (overPage) LocalPage.current else LocalWallpaper.current
-    val smoked = Color(0xff201c23)
+    val colors = MaterialTheme.colorScheme
+    val smoked = lerp(colors.background, colors.surfaceContainerHigh, if (overPage) .57f else .35f)
+    val tint = smoked.copy(alpha = if (overPage) .67f else .55f)
     val clipped = clip(shape)
-    if (source == null) return clipped.background(smoked)
-    val highlight = LocalArtLight.current
+    if (source == null || quality == GlassQuality.Medium) {
+        return clipped.background(smoked.copy(alpha = if (overPage) .92f else .80f))
+    }
+    val highlightState = LocalArtLight.current
     val lamp = LocalLamp.current
     val origin = remember { mutableStateOf(Offset.Unspecified) }
-    return clipped.onGloballyPositioned { origin.value = it.positionInRoot() }.hazeEffect(source, HazeStyle(
-        backgroundColor = MaterialTheme.colorScheme.background,
-        tint = HazeTint(smoked.copy(alpha = if (overPage) .58f else .43f)),
-        noiseFactor = .025f, blurRadius = if (overPage) 22.dp else 14.dp,
-        fallbackTint = HazeTint(smoked.copy(alpha = .94f))
+    val blur = when (quality) {
+        GlassQuality.High -> if (overPage) 15.dp else 9.dp
+        GlassQuality.Ultra -> if (overPage) 26.dp else 16.dp
+        GlassQuality.Medium -> 0.dp
+    }
+    return clipped.then(
+        if (quality == GlassQuality.Ultra && overPage) Modifier.onGloballyPositioned { origin.value = it.positionInRoot() }
+        else Modifier
+    ).hazeEffect(source, HazeStyle(
+        backgroundColor = colors.background,
+        tint = HazeTint(tint),
+        noiseFactor = 0f,
+        blurRadius = blur,
+        fallbackTint = HazeTint(smoked.copy(alpha = .88f))
     )).drawWithContent {
-        if (highlight.alpha > 0 && origin.value != Offset.Unspecified && lamp.value != Offset.Unspecified) {
+        val highlight = highlightState.value
+        if (quality == GlassQuality.Ultra && overPage && highlight.alpha > 0 && origin.value != Offset.Unspecified && lamp.value != Offset.Unspecified) {
             val center = lamp.value - origin.value
             val radius = 244.dp.toPx()
             if (center.x in -radius..(size.width + radius) && center.y in -radius..(size.height + radius)) {
@@ -79,7 +96,8 @@ internal fun HaloArtwork(uri: String?, description: String?, modifier: Modifier)
 internal fun AtmosphericLight(fullPlayer: Boolean) {
     val accent = MaterialTheme.colorScheme.primary
     val mist = MaterialTheme.colorScheme.tertiary
-    val art = LocalArtLight.current
+    val quality = LocalGlassQuality.current
+    val artState = LocalArtLight.current
     val lamp = LocalLamp.current
     Canvas(Modifier.fillMaxSize()) {
         fun pool(color: Color, location: Offset, radius: Float, opacity: Float) {
@@ -87,12 +105,18 @@ internal fun AtmosphericLight(fullPlayer: Boolean) {
             drawCircle(Brush.radialGradient(listOf(color.copy(alpha = color.alpha * opacity),
                 color.copy(alpha = color.alpha * opacity * .40f), color.copy(alpha = 0f)), location, radius), radius, location)
         }
-        pool(accent, Offset(size.width * .1f, size.height * .17f), size.width * 1.15f, .30f)
-        pool(mist, Offset(size.width * 1.05f, size.height * .54f), size.width * .94f, .13f)
+        pool(accent, Offset(size.width * .1f, size.height * .17f), size.width * 1.15f, .18f)
+        if (quality != GlassQuality.Medium) pool(mist, Offset(size.width * 1.05f, size.height * .54f), size.width * .94f, .10f)
+        val art = artState.value
         val center = if (fullPlayer) Offset(size.width * .5f, size.height * .34f) else lamp.value
         if (center != Offset.Unspecified) {
-            pool(art, center, size.width * (if (fullPlayer) 1.25f else .82f), .46f)
-            pool(art, center, size.width * .35f, .55f)
+            val opacity = when (quality) {
+                GlassQuality.Medium -> .14f
+                GlassQuality.High -> .22f
+                GlassQuality.Ultra -> .32f
+            }
+            pool(lerp(accent, art, .63f).copy(alpha = art.alpha), center,
+                size.width * (if (fullPlayer) 1.25f else .82f), opacity)
         }
     }
 }

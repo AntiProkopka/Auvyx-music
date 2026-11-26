@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nexus.music.R
 import com.nexus.music.AppViewModel
 import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.data.db.availableAlbumTitle
@@ -93,7 +94,7 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget, onOpenPlay
                     if (target.cloud && !avatar.isNullOrBlank()) {
                         RemoteArtworkImage(avatar, "Исполнитель ${target.name}", Modifier.fillMaxSize())
                     } else {
-                        Icon(Icons.Default.MusicNote, contentDescription = null,
+                        com.nexus.music.ui.components.BrandIcon(R.drawable.glass_library, Icons.Default.MusicNote, contentDescription = null,
                             modifier = Modifier.size(54.dp), tint = colors.onSurfaceVariant)
                     }
                 }
@@ -125,7 +126,7 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget, onOpenPlay
                         }
                     }
                 ) {
-                    Icon(if (showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null)
+                    com.nexus.music.ui.components.BrandIcon(if (showPause) R.drawable.glass_pause else R.drawable.glass_play, if (showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text(if (showPause) "Пауза" else "Слушать")
                 }
@@ -152,7 +153,7 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget, onOpenPlay
                         Text(if (song.full) formatTime(song.durationMs) else "Недоступна полная версия",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     },
-                    trailingContent = { Icon(if (showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null) }
+                    trailingContent = { com.nexus.music.ui.components.BrandIcon(if (showPause) R.drawable.glass_pause else R.drawable.glass_play, if (showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null) }
                 )
             }
             item {
@@ -184,7 +185,7 @@ fun ArtistScreen(vm: AppViewModel, target: AppViewModel.ArtistTarget, onOpenPlay
                             .filterNotNull().joinToString(" · "),
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     },
-                    trailingContent = { Icon(if (showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null) }
+                    trailingContent = { com.nexus.music.ui.components.BrandIcon(if (showPause) R.drawable.glass_pause else R.drawable.glass_play, if (showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null) }
                 )
             }
             if (songs.isEmpty()) item { Text("У исполнителя пока нет треков в медиатеке") }

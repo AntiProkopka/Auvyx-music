@@ -146,30 +146,39 @@ fun NexusRoot(vm: AppViewModel) {
 
     val style = LocalStyle.current
     val glass = style == "glass"
+    val quality by vm.glassQuality.collectAsStateWithLifecycle()
+    val keyboardVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
     val wallpaper = rememberHazeState()
     val page = rememberHazeState()
     val lamp = remember { mutableStateOf(Offset.Unspecified) }
     val playingArt = if (glass) artworkBitmap(player.artworkUri) else null
     LaunchedEffect(player.mediaId) { if (player.mediaId == null) lamp.value = Offset.Unspecified }
     val primary = MaterialTheme.colorScheme.primary
-    val artLight by animateColorAsState(if (glass) rememberArtworkAccent(playingArt, primary) ?: Color.Transparent else Color.Transparent, tween(580))
+    val artLight = animateColorAsState(if (glass) rememberArtworkAccent(playingArt, primary) ?: Color.Transparent else Color.Transparent, tween(580))
     SharedTransitionLayout {
         CompositionLocalProvider(LocalPhotos provides if (glass) loadPhotoCatalog() else emptyMap(), LocalWallpaper provides wallpaper, LocalPage provides page, LocalLamp provides lamp,
-            LocalArtLight provides artLight, LocalTransition provides if (glass) this else null) {
+            LocalArtLight provides artLight, LocalGlassQuality provides quality, LocalTransition provides if (glass) this else null) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 if (glass) Box(Modifier.fillMaxSize().hazeSource(page, zIndex = 0f).hazeSource(wallpaper).background(MaterialTheme.colorScheme.background)) {
                     GlassWallpaper(vm)
-                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .38f)))
+                    val shade = MaterialTheme.colorScheme.background
+                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+                        0f to shade.copy(alpha = .76f),
+                        .40f to shade.copy(alpha = .40f),
+                        .73f to shade.copy(alpha = .54f),
+                        1f to shade.copy(alpha = .86f)
+                    )))
                     AtmosphericLight(route == "player")
                 }
                 Scaffold(
+                    modifier = Modifier.imePadding(),
                     containerColor = Color.Transparent,
                     snackbarHost = { SnackbarHost(snackbar) },
                     topBar = {
-                        if (route != "player" && route?.startsWith("playlist") != true) {
+                        if (route != "player" && !(route == "search" && !glass) && route?.startsWith("playlist") != true) {
                             if (glass) {
                                 Text(title, style = if (route == "home") MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineMedium,
-                                    modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 19.dp, vertical = 8.dp))
+                                    modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).padding(horizontal = 19.dp, vertical = 8.dp))
                             } else if (style == "lane") {
                                 Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -195,7 +204,7 @@ fun NexusRoot(vm: AppViewModel) {
                         }
                     },
                     bottomBar = {
-                        AnimatedVisibility(visible = route != "player", exit = fadeOut(tween(210)), enter = fadeIn(tween(240))) {
+                        AnimatedVisibility(visible = route != "player" && !(route == "search" && keyboardVisible), exit = fadeOut(tween(210)), enter = fadeIn(tween(240))) {
                             val miniVisibility = this
                             Column(
                                 modifier = Modifier.fillMaxWidth()
@@ -218,8 +227,7 @@ fun NexusRoot(vm: AppViewModel) {
                                                 }, contentAlignment = Alignment.Center) {
                                                 Icon(painterResource(item.glassIcon), item.label, tint = color)
                                                 if (active) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)
-                                                    .size(20.dp, 3.dp).clip(CircleShape).background(Brush.horizontalGradient(
-                                                        listOf(color.copy(alpha=.18f), color, color.copy(alpha=.18f)))))
+                                                    .size(20.dp, 3.dp).clip(CircleShape).background(primary))
                                             }
                                         }
                                     }
@@ -238,8 +246,8 @@ fun NexusRoot(vm: AppViewModel) {
                                             modifier = Modifier.testTag("nav-${item.route}"),
                                             selected = selected,
                                             colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
-                                                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                                                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                                indicatorColor = primary,
+                                                selectedIconColor = MaterialTheme.colorScheme.onPrimary
                                             ),
                                             onClick = { vm.albumTarget.value = null; vm.artistTarget.value = null; navigateTo(nav, item.route) },
                                             icon = { Icon(item.icon, contentDescription = item.label) }
@@ -281,7 +289,7 @@ fun NexusRoot(vm: AppViewModel) {
                             AnimatedContent(album, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(150)) },
                                 label = "Album page") { target -> if (target != null) {
                                 androidx.activity.compose.BackHandler(enabled = artist == null && album == target) { vm.albumTarget.value = null }
-                                Surface(Modifier.fillMaxSize()) {
+                                Surface(Modifier.fillMaxSize(), color = if (glass) MaterialTheme.colorScheme.background.copy(alpha = .78f) else MaterialTheme.colorScheme.surface) {
                                     androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.AlbumScreen(vm, target) }
                                 }
                             }
@@ -289,7 +297,7 @@ fun NexusRoot(vm: AppViewModel) {
                             AnimatedContent(artist, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(150)) },
                                 label = "Artist page") { target -> if (target != null) {
                                 androidx.activity.compose.BackHandler(enabled = artist == target) { vm.artistTarget.value = null }
-                                Surface(Modifier.fillMaxSize()) {
+                                Surface(Modifier.fillMaxSize(), color = if (glass) MaterialTheme.colorScheme.background.copy(alpha = .78f) else MaterialTheme.colorScheme.surface) {
                                     androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.ArtistScreen(vm, target, onOpenPlayer = openPlayer) }
                                 }
                             }

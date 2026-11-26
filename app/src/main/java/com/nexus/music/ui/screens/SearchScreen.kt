@@ -154,17 +154,17 @@ fun SearchScreen(vm: AppViewModel) {
             singleLine = true,
             shape = MaterialTheme.shapes.extraLarge,
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                focusedContainerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow,
+                unfocusedContainerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
             ),
-            label = { Text("Трек или исполнитель") },
+            label = if (glass) { { Text("Трек или исполнитель") } } else null,
             placeholder = { Text("Название композиции или артиста") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            leadingIcon = { com.nexus.music.ui.components.BrandIcon(R.drawable.glass_search, Icons.Default.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     IconButton(onClick = { query = "" }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Очистить")
+                        com.nexus.music.ui.components.BrandIcon(R.drawable.glass_close, Icons.Default.Clear, contentDescription = "Очистить")
                     }
                 }
             },

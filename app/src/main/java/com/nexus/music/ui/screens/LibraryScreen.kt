@@ -58,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nexus.music.R
 import com.nexus.music.AppViewModel
 import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.data.db.TrackEntity
@@ -124,7 +125,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                     onClick = { filePicker.launch(arrayOf("audio/*", "application/ogg", "application/octet-stream")) }
                 ) {
                     if (!compactTools) {
-                        Icon(Icons.Default.Add, contentDescription = null)
+                        com.nexus.music.ui.components.BrandIcon(R.drawable.glass_plus, Icons.Default.Add, contentDescription = null)
                         Spacer(Modifier.width(4.dp))
                     }
                     Text("Файлы", maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
@@ -136,7 +137,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                     onClick = { folderPicker.launch(null) }
                 ) {
                     if (!compactTools) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = null)
+                        com.nexus.music.ui.components.BrandIcon(R.drawable.glass_files, Icons.Default.FolderOpen, contentDescription = null)
                         Spacer(Modifier.width(4.dp))
                     }
                     Text("Папка", maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
@@ -247,7 +248,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
             }
             2 -> {
                 TextButton(onClick = { creatingPlaylist = true }, modifier = Modifier.padding(start = 8.dp)) {
-                    Icon(Icons.Default.Add, contentDescription = null)
+                    com.nexus.music.ui.components.BrandIcon(R.drawable.glass_plus, Icons.Default.Add, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("Новый плейлист")
                 }
@@ -268,7 +269,7 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                                 }
                             } else ListItem(
                                 modifier = Modifier.fillMaxWidth().clickable { onOpenPlaylist(playlist.id) },
-                                leadingContent = { Icon(Icons.Default.QueueMusic, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                                leadingContent = { com.nexus.music.ui.components.BrandIcon(R.drawable.glass_queue, Icons.Default.QueueMusic, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                                 headlineContent = { Text(playlist.name, style = MaterialTheme.typography.titleSmall) },
                                 supportingContent = { Text("Треков: ${playlist.trackCount}", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             )

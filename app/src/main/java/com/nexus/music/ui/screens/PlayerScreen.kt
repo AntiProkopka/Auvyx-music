@@ -273,7 +273,8 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         val primary = MaterialTheme.colorScheme.primary
         val accent = rememberArtworkAccent(artwork, primary)
         val glowColor by animateColorAsState(
-            targetValue = accent?.copy(alpha = .48f) ?: primary.copy(alpha = 0f),
+            targetValue = accent?.let { if (isGlass) androidx.compose.ui.graphics.lerp(primary, it, .66f).copy(alpha = .38f) else it.copy(alpha = .48f) }
+                ?: primary.copy(alpha = 0f),
             animationSpec = tween(durationMillis = 420),
             label = "Artwork glow"
         )
@@ -306,12 +307,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                         .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer))),
                     contentAlignment = Alignment.Center
                 ) {
-                    val artModifier = if (isGlass) Modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                        .drawWithContent {
-                            drawContent()
-                            drawRect(Brush.radialGradient(0f to Color.White, .76f to Color.White, 1f to Color.White.copy(alpha=.28f),
-                                radius = size.minDimension * .71f), blendMode = BlendMode.DstIn)
-                        } else Modifier.fillMaxSize()
+                    val artModifier = Modifier.fillMaxSize()
                     if (!artworkUri.isNullOrBlank()) {
                         if (remoteArtwork) {
                             RemoteArtworkBitmap(artwork, "Обложка ${s.title}", artModifier)
@@ -460,8 +456,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                 onClick = { vm.player.togglePlayPause() },
                 modifier = Modifier.size(64.dp),
                 colors = if (isGlass) androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
-                    containerColor = androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.primary, LocalArtLight.current.copy(alpha = 1f),
-                        LocalArtLight.current.alpha * .38f), contentColor = Color(0xff101015)
+                    containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary
                 ) else androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(),
                 shapes = androidx.compose.material3.IconButtonDefaults.shapes(
                     shape = RoundedCornerShape(playCorner),

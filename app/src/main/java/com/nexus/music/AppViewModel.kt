@@ -2,6 +2,7 @@ package com.nexus.music
 
 import androidx.room.withTransaction
 import com.nexus.music.data.settings.GlassAccent
+import com.nexus.music.data.settings.GlassQuality
 import com.nexus.music.data.settings.FollowedArtist
 import kotlinx.coroutines.flow.combine
 import android.app.Application
@@ -65,6 +66,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setStyle(style: String) { viewModelScope.launch { settings.setStyle(style) } }
     val accent = settings.accent.stateIn(viewModelScope, lazily, GlassAccent.Sunset)
     val photo = settings.photo.stateIn(viewModelScope, lazily, "")
+    val glassQuality = settings.glassQuality.stateIn(viewModelScope, SharingStarted.Eagerly, GlassQuality.Ultra)
+    fun setGlassQuality(quality: GlassQuality) {
+        viewModelScope.launch { settings.setGlassQuality(quality) }
+    }
     val blur = settings.blur.stateIn(viewModelScope, lazily, 32)
     val recentLabels = settings.recentLabels.stateIn(viewModelScope, lazily, true)
     val followed = settings.followed.stateIn(viewModelScope, lazily, emptyList())
