@@ -2,17 +2,19 @@
 
 ## Alpha 2.1
 
-- Добавлены auvyx Glass UI, девять акцентов и выбор оформления.
-- Появились подписки на исполнителей и отдельная история поиска.
-- Исправлены прокрутка панели эквалайзера и Speed Lab, доступность длинных текстов и возврат к текущей строке.
-- Согласованы подписи действий в меню треков. Поиск SoundCloud показывает понятное сообщение при недоступной сети.
+- Добавлены Glass UI, цветовые акценты и режимы качества графики.
+- Добавлены подписки на исполнителей и история поиска.
+- Исправлено отображение панелей эквалайзера и текста песни.
+- Согласованы действия в меню треков и сообщения об ошибках поиска.
+## Alpha 2.0
+
+- Обновлено оформление и управление воспроизведением.
+- Улучшены музыкальная медиатека и настройки звука.
 
 ## Alpha 1.6
-- Rebranded the visible app name, in-app labels, launcher label, Gradle project name, and GitHub Actions workflow/artifact to AUVYX.
-- Set the next release label to Alpha 1.6 and incremented Android versionCode to 6.
-- Kept applicationId `com.nexus.music` to preserve update compatibility with the existing installed app.
-- Retained the Material 3 interface and limited official SoundCloud embedded-player integration from the previous project state.
 
-## Alpha 1.5 baseline
-- Local media library, playback, playlists, favourites, history, and Speed Lab.
-- Material 3 app shell and official SoundCloud embedded-player prototype.
+- Обновлено название приложения и добавлена поддержка ссылок SoundCloud.
+
+## Alpha 1.5
+
+- Добавлены локальное воспроизведение, медиатека, плейлисты, избранное, история и Speed Lab.
