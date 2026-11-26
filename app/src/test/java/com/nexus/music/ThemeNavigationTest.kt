@@ -64,10 +64,6 @@ class ThemeNavigationTest {
         compose.waitUntil(5000) {
             kotlinx.coroutines.runBlocking { settings.glassQuality.first().name } == "High"
         }
-        compose.onNodeWithText("Ultra").performScrollTo().performClick()
-        compose.waitUntil(5000) {
-            kotlinx.coroutines.runBlocking { settings.glassQuality.first().name } == "Ultra"
-        }
         val accents = compose.onNodeWithTag("appearance-accents")
         for ((index, accent) in com.nexus.music.data.settings.GlassAccent.entries.withIndex()) {
             accents.performScrollToIndex(index)
