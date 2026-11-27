@@ -109,4 +109,21 @@ class TrackToolsTest {
         }
     }
 
+    @Test fun collectionCombinesTagAndFavoriteAndRejectsUnknownRules() {
+        val id = "sample"
+        fun item(n: Long, favorite: Boolean) = TrackEntity(id = n, uri = "content://test/$n",
+            title = "Song $n", artist = "Artist", album = "", addedAt = 1, durationMs = 1000, isFavorite = favorite)
+        val tag = java.util.UUID.randomUUID().toString()
+        val list = SmartCollection(id, "Подборка", true, 50)
+        val rules = listOf(CollectionCondition(id, 0, "FAVORITE", ""), CollectionCondition(id, 1, "TAG", tag))
+        val tracks = listOf(item(1, true), item(2, true), item(3, false))
+        val links = listOf(TrackTag(1, tag), TrackTag(3, tag))
+        fun matching(collection: SmartCollection, conditions: List<CollectionCondition>, tags: List<TrackTag>) =
+            collectionTracks(collection, conditions, tracks, tags, emptySet(), emptyMap(), 100).map { it.id }
+        assertEquals(listOf(1L), matching(list, rules, links))
+        assertEquals(listOf(1L, 2L, 3L), matching(list.copy(matchAll = false), rules, links))
+        assertTrue(matching(list, rules, emptyList()).isEmpty())
+        assertTrue(matching(list, listOf(rules[0].copy(kind = "unknown")), links).isEmpty())
+    }
+
 }

@@ -52,6 +52,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val settings = nexus.settings
     val player = nexus.playerController
     internal val trackTools = db.trackTools()
+    internal val smartCollections = db.smartCollections()
     internal val trackToolsTarget = MutableStateFlow<TrackEntity?>(null)
     internal val activeMoment = nexus.activeMoment.asStateFlow()
 

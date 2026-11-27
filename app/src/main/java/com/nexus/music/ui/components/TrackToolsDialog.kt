@@ -252,7 +252,7 @@ private fun mark(start: Long, end: Long?): String {
 }
 
 @Composable
-private fun ToolList(title: String, close: () -> Unit, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
+internal fun ToolList(title: String, close: () -> Unit, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
     AlertDialog(onDismissRequest = close, title = { Text(title) },
         text = { LazyColumn(Modifier.fillMaxWidth().heightIn(max = 390.dp), verticalArrangement = Arrangement.spacedBy(4.dp), content = content) },
         confirmButton = { TextButton(onClick = close) { Text("Готово") } })
@@ -262,11 +262,14 @@ private fun ToolList(title: String, close: () -> Unit, content: androidx.compose
 internal fun LibraryTrackTools(vm: AppViewModel) {
     var section by remember { mutableStateOf<Tool?>(null) }
     val close = { section = null }
+    var smart by remember { mutableStateOf(false) }
     Row(Modifier.horizontalScroll(rememberScrollState())) {
         TextButton(onClick = { section = Tool.Tags }) { Text("Теги") }
         TextButton(onClick = { section = Tool.Moments }) { Text("Моменты") }
         TextButton(onClick = { section = Tool.Rediscover }) { Text(Tool.Rediscover.label) }
+        TextButton(onClick = { smart = true }) { Text("Умные коллекции") }
     }
+    if (smart) SmartCollectionsDialog(vm) { smart = false }
     if (section == null) return
     if (section == Tool.Rediscover) {
         RediscoverDialog(vm, close)

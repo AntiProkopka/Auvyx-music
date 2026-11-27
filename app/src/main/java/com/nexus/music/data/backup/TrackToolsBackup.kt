@@ -5,7 +5,7 @@ import com.nexus.music.playback.MIN_TRACK_GAIN
 import org.json.JSONObject
 import java.util.UUID
 
-internal val trackToolTables = listOf("track_gain", "skip_ranges", "skip_disabled", "track_moments", "track_tags", "tags", "track_links")
+internal val trackToolTables = listOf("track_gain", "skip_ranges", "skip_disabled", "track_moments", "track_tags", "tags", "track_links", "collection_conditions", "smart_collections")
 
 internal suspend fun restoreTrackTools(tables: JSONObject, ids: Map<Long, Long>, db: NexusDatabase) {
     val tools = db.trackTools()
@@ -65,4 +65,19 @@ internal suspend fun restoreTrackTools(tables: JSONObject, ids: Map<Long, Long>,
         require(first != second)
         tools.putLink(TrackLink(minOf(first, second), maxOf(first, second), row.shortText("label"), row.getLong("createdAt")))
     }
+    val conditions = rows("collection_conditions").groupBy { it.getString("collectionId") }.toMutableMap()
+    for (row in rows("smart_collections")) {
+        val id = UUID.fromString(row.getString("id")).toString()
+        val mode = row.getInt("matchAll")
+        require(mode in 0..1)
+        val collection = SmartCollection(id, row.shortText("name"), mode == 1, row.getInt("limit"))
+        val rules = conditions.remove(id).orEmpty().sortedBy { it.getInt("position") }.map { item ->
+            val kind = item.getString("kind")
+            val argument = item.shortText("argument")
+            CollectionCondition(id, item.getInt("position"), kind, if (kind == "TAG") tags[argument] ?: argument else argument)
+        }
+        db.smartCollections().save(collection, rules)
+    }
+    require(conditions.isEmpty())
+
 }

@@ -20,9 +20,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TrackMoment::class,
         MusicalTag::class,
         TrackTag::class,
-        TrackLink::class
+        TrackLink::class,
+        SmartCollection::class,
+        CollectionCondition::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class NexusDatabase : RoomDatabase() {
@@ -31,11 +33,19 @@ abstract class NexusDatabase : RoomDatabase() {
     abstract fun historyDao(): HistoryDao
     abstract fun queueDao(): QueueDao
     abstract fun trackTools(): TrackToolsDao
+    abstract fun smartCollections(): SmartCollectionDao
     companion object {
         fun create(context: Context): NexusDatabase =
             Room.databaseBuilder(context.applicationContext, NexusDatabase::class.java, "nexus.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
+
+        internal val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE smart_collections (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, matchAll INTEGER NOT NULL, `limit` INTEGER NOT NULL)")
+                db.execSQL("CREATE TABLE collection_conditions (collectionId TEXT NOT NULL, position INTEGER NOT NULL, kind TEXT NOT NULL, argument TEXT NOT NULL, PRIMARY KEY(collectionId,position), FOREIGN KEY(collectionId) REFERENCES smart_collections(id) ON DELETE CASCADE)")
+            }
+        }
 
         internal val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
