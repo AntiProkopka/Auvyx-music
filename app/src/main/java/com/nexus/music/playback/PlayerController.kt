@@ -239,12 +239,14 @@ class PlayerController(
         }
     }
 
-    fun next() = withController { setFiniteRepeat(null); it.seekToNext() }
-    fun previous() = withController { setFiniteRepeat(null); it.seekToPrevious() }
+    fun next() = withController { stopMoment(); setFiniteRepeat(null); it.seekToNext() }
+    fun previous() = withController { stopMoment(); setFiniteRepeat(null); it.seekToPrevious() }
 
     internal fun playMoment(track: TrackEntity, moment: com.nexus.music.data.db.TrackMoment, loop: Boolean) {
         withController { c ->
-            val index = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == track.id.toString() }
+            val id = track.id.toString()
+            val index = if (c.currentMediaItem?.mediaId == id) c.currentMediaItemIndex
+            else (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == id }
             activeMoment.value = moment.takeIf { loop && it.endMs != null }
             if (index == null) {
                 val insertAt = if (c.mediaItemCount == 0) 0 else c.currentMediaItemIndex + 1

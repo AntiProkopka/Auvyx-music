@@ -1,5 +1,6 @@
 package com.nexus.music.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -10,6 +11,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -137,7 +140,9 @@ private fun LinksDialog(vm: AppViewModel, track: TrackEntity, close: () -> Unit)
     }
 }
 
-private data class RangeDraft(val range: SkipRange? = null, val moment: TrackMoment? = null)
+private data class RangeDraft(val range: SkipRange? = null, val moment: TrackMoment? = null) {
+    val momentId: String = moment?.id ?: UUID.randomUUID().toString()
+}
 
 @Composable
 private fun RangeDialog(vm: AppViewModel, track: TrackEntity, moments: Boolean, close: () -> Unit) {
@@ -154,6 +159,11 @@ private fun RangeDialog(vm: AppViewModel, track: TrackEntity, moments: Boolean, 
     ToolList(if (moments) Tool.Moments.label else Tool.Skip.label, close) {
         item {
             if (!canEdit) Text("Редактирование доступно при известной длительности и поддержке перемотки. Для онлайн-трека сначала откройте его в плеере.")
+            duration?.let { length ->
+                val marks = if (moments) saved.map { it.startMs to it.endMs }
+                else ranges.filter { it.enabled }.map { it.startMs to it.endMs }
+                TrackTimeScale(length, marks)
+            }
             TextButton(enabled = canEdit, onClick = { draft = RangeDraft() }) { Text("Добавить") }
             if (!moments) Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Автопропуск для трека", Modifier.weight(1f))
@@ -209,7 +219,9 @@ private fun RangeDialog(vm: AppViewModel, track: TrackEntity, moments: Boolean, 
                     TimeField(start, { start = it }, "Начало, мс", if (current) ({ start = vm.player.position.value.toString() }) else null)
                     TimeField(end, { end = it }, if (moments) "Конец, мс (необязательно)" else "Конец, мс",
                         if (current) ({ end = vm.player.position.value.toString() }) else null)
-                    duration?.let { Text("Длительность · ${mark(it, null)}") }
+                    duration?.let { length ->
+                        TrackTimeScale(length, listOfNotNull(start.toLongOrNull()?.let { it to end.toLongOrNull() }))
+                    }
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
@@ -228,8 +240,8 @@ private fun RangeDialog(vm: AppViewModel, track: TrackEntity, moments: Boolean, 
                 }.exceptionOrNull()
                 if (problem != null) error = problem.message
                 else vm.saveTrackTools {
-                    if (moments) vm.trackTools.putMoment(TrackMoment(value.moment?.id ?: UUID.randomUUID().toString(),
-                        track.id, requireNotNull(first), last, name.trim().ifBlank { "Момент" }))
+                    if (moments) vm.trackTools.putMoment(TrackMoment(value.momentId, track.id, requireNotNull(first),
+                        last, name.trim().ifBlank { "Момент" }, value.moment?.createdAt ?: System.currentTimeMillis()))
                     else vm.trackTools.replaceRange(value.range, SkipRange(track.id, requireNotNull(first),
                         requireNotNull(last), name.trim(), value.range?.enabled ?: true))
                     draft = null
@@ -244,6 +256,29 @@ private fun TimeField(value: String, edit: (String) -> Unit, label: String, from
     OutlinedTextField(value, { edit(it.take(12)) }, label = { Text(label) }, singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
     fromPosition?.let { TextButton(onClick = it) { Text("Из текущей позиции") } }
+}
+
+@Composable
+private fun TrackTimeScale(duration: Long, marks: List<Pair<Long, Long?>>) {
+    val scheme = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(12.dp)) {
+            val y = size.height / 2
+            fun position(time: Long) = (time.toDouble() / duration).coerceIn(0.0, 1.0).toFloat() * size.width
+            drawLine(scheme.surfaceVariant, Offset(0f, y), Offset(size.width, y), 4.dp.toPx(), StrokeCap.Round)
+            for ((start, end) in marks) {
+                if (start !in 0..duration) continue
+                val origin = Offset(position(start), y)
+                if (end != null && end > start) {
+                    drawLine(scheme.primary, origin, Offset(position(end), y), 5.dp.toPx(), StrokeCap.Round)
+                } else drawCircle(scheme.primary, 3.dp.toPx(), origin)
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(formatTime(0), style = MaterialTheme.typography.labelSmall)
+            Text(formatTime(duration), style = MaterialTheme.typography.labelSmall)
+        }
+    }
 }
 
 private fun mark(start: Long, end: Long?): String {
@@ -322,15 +357,44 @@ internal fun LibraryTrackTools(vm: AppViewModel) {
 
     } else {
         val rows by remember { vm.trackTools.moments() }.collectAsStateWithLifecycle(emptyList())
+        val player by vm.player.state.collectAsStateWithLifecycle()
+        var editing by remember { mutableStateOf<TrackEntity?>(null) }
+        val date = remember { java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM) }
         ToolList("Коллекция моментов", close) {
             if (rows.isEmpty()) item { Text("Сохраните момент через меню трека.") }
-            items(rows, key = { it.id }) { row ->
-                byId[row.trackId]?.let { track -> TextButton(onClick = {
-                    close()
-                    vm.trackToolsTarget.value = track
-                }) { Text("${row.name} · ${track.title} · ${mark(row.startMs, row.endMs)}") } }
+            items(rows.sortedByDescending { it.createdAt }, key = { it.id }) { row ->
+                val track = byId[row.trackId]
+                if (track == null) {
+                    Text("${row.name} · Трек недоступен")
+                } else {
+                    val current = player.mediaId == track.id.toString()
+                    val seekable = if (current) player.canSeek else track.source == "local"
+                    val duration = if (current && player.durationMs > 0) player.durationMs else track.durationMs
+                    val canPlay = seekable && row.startMs < duration && (row.endMs == null || row.endMs <= duration)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        val modifier = Modifier.size(44.dp)
+                        if (track.source == "soundcloud") RemoteArtworkImage(track.artworkUri, null, modifier)
+                        else ArtworkImage(track.artworkUri, null, modifier)
+                        Column {
+                            Text(row.name, style = MaterialTheme.typography.titleSmall)
+                            Text(track.title, style = MaterialTheme.typography.bodyMedium)
+                            val timestamp = if (row.createdAt > 0) " · ${date.format(java.util.Date(row.createdAt))}" else ""
+                            Text(mark(row.startMs, row.endMs) + timestamp, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    if (!canPlay) Text("Для запуска нужна доступная дорожка с перемоткой и подходящей длительностью.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Row(Modifier.horizontalScroll(rememberScrollState())) {
+                        TextButton(enabled = canPlay, onClick = { vm.player.playMoment(track, row, false); close() }) { Text("Играть") }
+                        if (row.endMs != null) TextButton(enabled = canPlay, onClick = {
+                            vm.player.playMoment(track, row, true); close()
+                        }) { Text("Повторять") }
+                        TextButton(onClick = { editing = track }) { Text("Действия") }
+                    }
+                }
             }
         }
+        editing?.let { RangeDialog(vm, it, moments = true) { editing = null } }
     }
 }
 

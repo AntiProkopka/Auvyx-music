@@ -2,6 +2,8 @@ package com.nexus.music
 
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import com.nexus.music.ui.screens.LyricsContent
 import com.nexus.music.ui.theme.NexusTheme
@@ -75,10 +77,10 @@ class ThemeNavigationTest {
                 androidx.compose.ui.semantics.SemanticsActions.OnClick)
             compose.waitUntil(5000) {
                 org.robolectric.shadows.ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS)
-                kotlinx.coroutines.runBlocking { settings.accent.first() } == accent
+                compose.onAllNodesWithContentDescription(accent.title).fetchSemanticsNodes().singleOrNull()
+                    ?.config?.getOrNull(SemanticsProperties.Selected) == true
             }
-            compose.waitForIdle()
-            compose.onNodeWithContentDescription(accent.title).assertIsSelected()
+            org.junit.Assert.assertEquals(accent, kotlinx.coroutines.runBlocking { settings.accent.first() })
         }
         compose.onNodeWithText("Material 3 Expressive").performScrollTo().performClick()
         compose.waitUntil(5000) {
@@ -160,6 +162,12 @@ class ThemeNavigationTest {
         awaitState { controller.finiteRepeat.value == null &&
             controller.state.value.repeatMode != androidx.media3.common.Player.REPEAT_MODE_ONE }
 
+        val moment = com.nexus.music.data.db.TrackMoment("session-moment", tracks[1].id, 2500L, 6500L, "Test")
+        compose.runOnUiThread { controller.playMoment(tracks[1], moment, true) }
+        awaitState { controller.state.value.mediaId == tracks[1].id.toString() &&
+            controller.position.value in 2500L..6499L && app.activeMoment.value == moment }
+        compose.runOnUiThread { controller.next() }
+        awaitState { app.activeMoment.value == null }
     }
 
     private fun seedTracks(app: NexusApp) = kotlinx.coroutines.runBlocking {

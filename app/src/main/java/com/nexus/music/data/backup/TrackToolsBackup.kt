@@ -41,7 +41,7 @@ internal suspend fun restoreTrackTools(tables: JSONObject, ids: Map<Long, Long>,
         require(name.isNotBlank())
         val track = row.track()
         require(tools.momentById(id)?.trackId.let { it == null || it == track })
-        tools.putMoment(TrackMoment(id, track, start, end, name))
+        tools.putMoment(TrackMoment(id, track, start, end, name, row.optLong("createdAt").coerceAtLeast(0L)))
     }
     val tags = mutableMapOf<String, String>()
     for (row in rows("tags")) {

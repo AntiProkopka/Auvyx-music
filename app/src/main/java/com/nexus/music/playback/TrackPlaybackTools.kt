@@ -1,6 +1,6 @@
 package com.nexus.music.playback
 
-import android.os.SystemClock
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.nexus.music.data.db.SkipRange
@@ -39,9 +39,15 @@ internal class TrackPlaybackTools(
     private val clearMoment: () -> Unit
 ) : Player.Listener {
     var ranges: List<SkipRange> = emptyList()
+        set(value) {
+            field = value
+            normalizedDuration = 0L
+        }
     private var job: Job? = null
     private var guardedRange: LongRange? = null
-    private var manualRangeUntil = 0L
+    private var manualRange: LongRange? = null
+    private var normalizedDuration = 0L
+    private var normalizedRanges = emptyList<LongRange>()
     private var commandedSeek = false
     private var autoTarget: Long? = null
 
@@ -55,9 +61,10 @@ internal class TrackPlaybackTools(
         } else null
     }
 
-    override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         guardedRange = null
-        manualRangeUntil = 0L
+        if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) manualRange = null
+        normalizedDuration = 0L
         autoTarget = null
         if (moment.value?.trackId?.toString() != mediaItem?.mediaId) clearMoment()
     }
@@ -70,7 +77,7 @@ internal class TrackPlaybackTools(
             return
         }
         guardedRange = null
-        manualRangeUntil = SystemClock.elapsedRealtime() + 1250
+        manualRange = skipRanges().firstOrNull { newPosition.positionMs in it }
         val active = moment.value ?: return
         val end = active.endMs ?: return
         if (newPosition.positionMs !in active.startMs until end) clearMoment()
@@ -85,12 +92,24 @@ internal class TrackPlaybackTools(
             else if (position >= active.endMs) seek(active.startMs)
             return
         }
-        val range = mergedRanges(ranges, player.duration).firstOrNull { position in it }
+        val range = skipRanges().firstOrNull { position in it }
+        if (range != manualRange) manualRange = null
         if (range == null) guardedRange = null
-        else if (guardedRange != range && SystemClock.elapsedRealtime() >= manualRangeUntil) {
+        else if (guardedRange != range && manualRange != range) {
             guardedRange = range
             seek(range.last + 1)
         }
+    }
+
+    private fun skipRanges(): List<LongRange> {
+        val duration = player.duration
+        if (duration <= 0) return emptyList()
+        if (duration != normalizedDuration) {
+            val trackId = player.currentMediaItem?.mediaId?.toLongOrNull()
+            normalizedRanges = mergedRanges(ranges.filter { it.trackId == trackId }, duration)
+            normalizedDuration = duration
+        }
+        return normalizedRanges
     }
 
     private fun seek(position: Long) {

@@ -23,7 +23,14 @@ data class SkipDisabled(@PrimaryKey val trackId: Long)
 @Entity(tableName = "track_moments", foreignKeys = [
     ForeignKey(TrackEntity::class, ["id"], ["trackId"], onDelete = ForeignKey.CASCADE)
 ], indices = [Index("trackId")])
-data class TrackMoment(@PrimaryKey val id: String, val trackId: Long, val startMs: Long, val endMs: Long?, val name: String)
+data class TrackMoment(
+    @PrimaryKey val id: String,
+    val trackId: Long,
+    val startMs: Long,
+    val endMs: Long?,
+    val name: String,
+    @ColumnInfo(defaultValue = "0") val createdAt: Long = 0L
+)
 
 @Entity(tableName = "tags", indices = [Index(value = ["normalized"], unique = true)])
 data class MusicalTag(@PrimaryKey val id: String, val name: String, val normalized: String)
