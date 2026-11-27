@@ -54,6 +54,10 @@ class LibraryRegressionTest {
             settings.setPlayback(1,753)
             settings.setNickname("Alpha")
             settings.saveLyrics(local.toString(), "lyrics")
+            source.trackTools().assignTag(local, "Ночь")
+            source.trackTools().putGain(com.nexus.music.data.db.TrackGain(local, -4f))
+            source.trackTools().putLink(com.nexus.music.data.db.TrackLink(minOf(local, cloud), maxOf(local, cloud), "Связь", 1))
+
             LibraryExport.write(context.contentResolver,uri,source,settings)
             settings.setNickname("Changed")
             dest.trackDao().insertOrIgnore(track(3))
@@ -63,6 +67,11 @@ class LibraryRegressionTest {
             assertEquals(3,dest.trackDao().getAll().size)
             val fav = dest.trackDao().observeFavorites().first().single()
             assertEquals("lyrics",settings.lyrics(fav.id.toString()).first())
+            assertEquals("Ночь", dest.trackTools().tags(fav.id).first().single().name)
+            assertEquals(-4f, dest.trackTools().gain(fav.id).first()!!.decibels, 0f)
+            assertEquals("soundcloud", dest.trackDao().getByIds(listOf(
+                dest.trackTools().links(fav.id).first().single().other(fav.id))).single().source)
+
             assertEquals("Alpha",settings.nickname.first())
             assertEquals(753L,settings.queuePosition.first())
             assertEquals(fav.id,dest.queueDao().getAll()[1].trackId)

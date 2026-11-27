@@ -1,6 +1,8 @@
 package com.nexus.music.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -19,7 +21,7 @@ import java.util.UUID
 
 private enum class Tool(val label: String) {
     Gain("Индивидуальная громкость"), Skip("Пропуск фрагментов"), Moments("Моменты"),
-    Tags("Музыкальные теги"), Links("Связанные композиции")
+    Tags("Музыкальные теги"), Links("Связанные композиции"), Rediscover("Когда-то на повторе")
 }
 
 @Composable
@@ -32,7 +34,7 @@ internal fun TrackToolsHost(vm: AppViewModel) {
             if (tool == null) AlertDialog(
                 onDismissRequest = close,
                 title = { Text(selected.title) },
-                text = { Column { Tool.entries.forEach { item -> TextButton(onClick = { tool = item }) { Text(item.label) } } } },
+                text = { Column { Tool.entries.filterNot { it == Tool.Rediscover }.forEach { item -> TextButton(onClick = { tool = item }) { Text(item.label) } } } },
                 confirmButton = { TextButton(onClick = close) { Text("Закрыть") } }
             )
             when (tool) {
@@ -41,7 +43,7 @@ internal fun TrackToolsHost(vm: AppViewModel) {
                 Tool.Moments -> RangeDialog(vm, selected, moments = true) { tool = null }
                 Tool.Tags -> TagsDialog(vm, selected) { tool = null }
                 Tool.Links -> LinksDialog(vm, selected) { tool = null }
-                null -> Unit
+                Tool.Rediscover, null -> Unit
             }
         }
     }
@@ -78,14 +80,14 @@ private fun TagsDialog(vm: AppViewModel, track: TrackEntity, close: () -> Unit) 
             OutlinedTextField(input, { input = it.take(40) }, label = { Text("Тег") }, singleLine = true)
             TextButton(enabled = input.isNotBlank(), onClick = {
                 val entered = input
-                vm.saveTrackTools { vm.trackTools.putTag(TrackTag(track.id, canonicalTag(entered))); input = "" }
+                vm.saveTrackTools { vm.trackTools.assignTag(track.id, entered); input = "" }
             }) { Text("Добавить тег") }
             if (rows.isEmpty()) Text("Добавьте тег, чтобы найти этот трек в разделе тегов медиатеки.")
         }
-        items(rows, key = { it.tag }) { row ->
+        items(rows, key = { it.id }) { row ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(row.tag, Modifier.weight(1f))
-                TextButton(onClick = { vm.saveTrackTools { vm.trackTools.deleteTag(row) } }) { Text("Убрать") }
+                Text(row.name, Modifier.weight(1f))
+                TextButton(onClick = { vm.saveTrackTools { vm.trackTools.deleteTag(TrackTag(track.id, row.id)) } }) { Text("Убрать") }
             }
         }
     }
@@ -260,29 +262,61 @@ private fun ToolList(title: String, close: () -> Unit, content: androidx.compose
 internal fun LibraryTrackTools(vm: AppViewModel) {
     var section by remember { mutableStateOf<Tool?>(null) }
     val close = { section = null }
-    Row {
+    Row(Modifier.horizontalScroll(rememberScrollState())) {
         TextButton(onClick = { section = Tool.Tags }) { Text("Теги") }
         TextButton(onClick = { section = Tool.Moments }) { Text("Моменты") }
+        TextButton(onClick = { section = Tool.Rediscover }) { Text(Tool.Rediscover.label) }
     }
     if (section == null) return
+    if (section == Tool.Rediscover) {
+        RediscoverDialog(vm, close)
+        return
+    }
     val tracks by vm.knownTracks.collectAsStateWithLifecycle()
     val byId = remember(tracks) { tracks.associateBy { it.id } }
     if (section == Tool.Tags) {
         val rows by remember { vm.trackTools.tags() }.collectAsStateWithLifecycle(emptyList())
+        val catalog by remember { vm.trackTools.catalog() }.collectAsStateWithLifecycle(emptyList())
         var filter by remember { mutableStateOf("") }
-        var selected by remember { mutableStateOf<String?>(null) }
-        val tags = remember(rows, filter) { rows.map { it.tag }.distinct().filter { it.contains(filter, true) } }
+        var selected by remember { mutableStateOf(emptySet<String>()) }
+        var all by remember { mutableStateOf(true) }
+        var rename by remember { mutableStateOf<MusicalTag?>(null) }
+        var remove by remember { mutableStateOf<MusicalTag?>(null) }
+        val matches = remember(rows, selected, all, tracks) {
+            val ids = taggedTrackIds(rows, selected, all)
+            tracks.filter { it.id in ids }
+        }
         ToolList("Музыкальные теги", close) {
             item {
-                if (selected == null) OutlinedTextField(filter, { filter = it }, label = { Text("Поиск тега") })
-                else TextButton(onClick = { selected = null }) { Text("Все теги · $selected") }
-                if (rows.isEmpty()) Text("Добавьте теги через меню трека.")
+                OutlinedTextField(filter, { filter = it }, label = { Text("Поиск тега") })
+                if (catalog.isEmpty()) Text("Добавьте теги через меню трека.")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (all) "Все выбранные теги" else "Любой выбранный тег", Modifier.weight(1f))
+                    Switch(all, { all = it })
+                }
             }
-            if (selected == null) items(tags, key = { it }) { tag -> TextButton(onClick = { selected = tag }) { Text(tag) } }
-            else items(rows.filter { it.tag == selected }, key = { it.trackId }) { row ->
-                byId[row.trackId]?.let { track -> TextButton(onClick = { vm.playTrack(track); close() }) { Text(track.title) } }
+            items(catalog.filter { it.name.contains(filter, true) }, key = { it.id }) { tag ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(tag.id in selected, { checked -> selected = if (checked) selected + tag.id else selected - tag.id })
+                    Text(tag.name, Modifier.weight(1f))
+                    TextButton(onClick = { rename = tag }) { Text("Имя") }
+                    TextButton(onClick = { remove = tag }) { Text("Удалить") }
+                }
+            }
+            if (selected.isNotEmpty()) item { Text("Треки · ${matches.size}") }
+            items(matches, key = { it.id }) { track ->
+                TextButton(onClick = { vm.playTrack(track); close() }) { Text(track.title) }
             }
         }
+        rename?.let { tag -> NameDialog("Переименовать тег", tag.name, "Сохранить", onConfirm = { name ->
+            vm.saveTrackTools { vm.trackTools.renameTag(tag, name); rename = null }
+        }, onDismiss = { rename = null }) }
+        remove?.let { tag -> AlertDialog(onDismissRequest = { remove = null }, title = { Text("Удалить тег «${tag.name}»?") },
+            text = { Text("Тег будет снят с треков: ${rows.count { it.tagId == tag.id }}.") },
+            confirmButton = { TextButton(onClick = {
+                vm.saveTrackTools { vm.trackTools.deleteTag(tag); selected = selected - tag.id; remove = null }
+            }) { Text("Удалить") } }, dismissButton = { TextButton(onClick = { remove = null }) { Text("Отмена") } }) }
+
     } else {
         val rows by remember { vm.trackTools.moments() }.collectAsStateWithLifecycle(emptyList())
         ToolList("Коллекция моментов", close) {
@@ -295,4 +329,40 @@ internal fun LibraryTrackTools(vm: AppViewModel) {
             }
         }
     }
+}
+
+
+@Composable
+private fun RediscoverDialog(vm: AppViewModel, close: () -> Unit) {
+    val rows by remember(vm) { vm.forgottenTracks() }.collectAsStateWithLifecycle(null)
+    val candidates = rows.orEmpty()
+    var naming by remember { mutableStateOf(false) }
+    val date = remember { java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM) }
+    ToolList(Tool.Rediscover.label, close) {
+        item {
+            when {
+                rows == null -> CircularProgressIndicator()
+                candidates.isEmpty() -> Text("Здесь появятся треки, которые запускались хотя бы три раза и давно не звучали.")
+                else -> {
+                    Text("Треки из истории, которые не запускались минимум 30 дней.")
+                    TextButton(onClick = { vm.player.playTracks(candidates.map { it.track }, 0); close() }) { Text("Играть подборку") }
+                    TextButton(onClick = { naming = true }) { Text("Сохранить плейлист") }
+                }
+            }
+        }
+        items(candidates, key = { it.track.id }) { row ->
+            Text(row.track.title)
+            Text("Запусков: ${row.starts} · ${date.format(java.util.Date(row.lastPlayed))}",
+                style = MaterialTheme.typography.bodySmall)
+            Row {
+                TextButton(onClick = { vm.playTrack(row.track); close() }) { Text("Играть") }
+                TextButton(onClick = { vm.hideForgotten(row.track.id) }) { Text("Скрыть") }
+            }
+        }
+        item { TextButton(onClick = vm::showHiddenForgotten) { Text("Вернуть скрытые предложения") } }
+    }
+    if (naming) NameDialog("Сохранить подборку", Tool.Rediscover.label, "Сохранить", onConfirm = {
+        vm.savePlaylistSnapshot(it, candidates.map { row -> row.track })
+        naming = false
+    }, onDismiss = { naming = false })
 }

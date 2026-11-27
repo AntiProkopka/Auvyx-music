@@ -25,10 +25,14 @@ data class SkipDisabled(@PrimaryKey val trackId: Long)
 ], indices = [Index("trackId")])
 data class TrackMoment(@PrimaryKey val id: String, val trackId: Long, val startMs: Long, val endMs: Long?, val name: String)
 
-@Entity(tableName = "track_tags", primaryKeys = ["trackId", "tag"], foreignKeys = [
-    ForeignKey(TrackEntity::class, ["id"], ["trackId"], onDelete = ForeignKey.CASCADE)
-], indices = [Index("tag")])
-data class TrackTag(val trackId: Long, val tag: String)
+@Entity(tableName = "tags", indices = [Index(value = ["normalized"], unique = true)])
+data class MusicalTag(@PrimaryKey val id: String, val name: String, val normalized: String)
+
+@Entity(tableName = "track_tags", primaryKeys = ["trackId", "tagId"], foreignKeys = [
+    ForeignKey(TrackEntity::class, ["id"], ["trackId"], onDelete = ForeignKey.CASCADE),
+    ForeignKey(MusicalTag::class, ["id"], ["tagId"], onDelete = ForeignKey.CASCADE)
+], indices = [Index("tagId")])
+data class TrackTag(val trackId: Long, val tagId: String)
 
 @Entity(tableName = "track_links", primaryKeys = ["firstId", "secondId"], foreignKeys = [
     ForeignKey(TrackEntity::class, ["id"], ["firstId"], onDelete = ForeignKey.CASCADE),
@@ -75,12 +79,40 @@ abstract class TrackToolsDao {
     @Upsert abstract suspend fun putMoment(row: TrackMoment)
     @Delete abstract suspend fun deleteMoment(row: TrackMoment)
 
-    @Query("SELECT * FROM track_tags ORDER BY tag, trackId")
+    @Query("SELECT * FROM tags ORDER BY normalized")
+    abstract fun catalog(): Flow<List<MusicalTag>>
+    @Query("SELECT * FROM track_tags")
     abstract fun tags(): Flow<List<TrackTag>>
-    @Query("SELECT * FROM track_tags WHERE trackId = :id ORDER BY tag")
-    abstract fun tags(id: Long): Flow<List<TrackTag>>
-    @Upsert abstract suspend fun putTag(row: TrackTag)
+    @Query("SELECT tags.* FROM tags JOIN track_tags ON tags.id = track_tags.tagId WHERE trackId = :id ORDER BY normalized")
+    abstract fun tags(id: Long): Flow<List<MusicalTag>>
+    @Query("SELECT * FROM tags WHERE normalized = :name")
+    abstract suspend fun findTag(name: String): MusicalTag?
+    @Query("SELECT * FROM tags WHERE id = :id")
+    abstract suspend fun tagById(id: String): MusicalTag?
+    @Query("SELECT COUNT(*) FROM track_tags WHERE trackId = :id")
+    abstract suspend fun tagCount(id: Long): Int
+    @Query("SELECT EXISTS(SELECT 1 FROM track_tags WHERE trackId = :track AND tagId = :tag)")
+    abstract suspend fun hasTag(track: Long, tag: String): Boolean
+    @Insert(onConflict = OnConflictStrategy.IGNORE) abstract suspend fun putTag(row: TrackTag)
+    @Insert abstract suspend fun createTag(row: MusicalTag)
+    @Update abstract suspend fun updateTag(row: MusicalTag)
     @Delete abstract suspend fun deleteTag(row: TrackTag)
+    @Delete abstract suspend fun deleteTag(row: MusicalTag)
+    @Transaction
+    open suspend fun assignTag(track: Long, name: String) {
+        val normalized = canonicalTag(name)
+        val tag = findTag(normalized) ?: MusicalTag(java.util.UUID.randomUUID().toString(),
+            tagDisplayName(name), normalized).also { createTag(it) }
+        require(hasTag(track, tag.id) || tagCount(track) < 32) { "У трека уже 32 тега" }
+        putTag(TrackTag(track, tag.id))
+    }
+
+    @Transaction
+    open suspend fun renameTag(tag: MusicalTag, name: String) {
+        val normalized = canonicalTag(name)
+        require(findTag(normalized).let { it == null || it.id == tag.id }) { "Такой тег уже есть" }
+        updateTag(tag.copy(name = tagDisplayName(name), normalized = normalized))
+    }
 
     @Query("SELECT * FROM track_links WHERE firstId = :id OR secondId = :id ORDER BY createdAt, firstId, secondId")
     abstract fun links(id: Long): Flow<List<TrackLink>>
@@ -88,8 +120,18 @@ abstract class TrackToolsDao {
     @Delete abstract suspend fun deleteLink(row: TrackLink)
 }
 
-internal fun canonicalTag(text: String): String = text.trim().replace(Regex("\\s+"), " ")
-    .lowercase(Locale.ROOT).also { require(it.length in 1..40) { "Укажите тег длиной до 40 символов" } }
+internal fun tagDisplayName(text: String): String =
+    java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFKC).trim()
+        .replace(Regex("[\\p{Z}\\s]+"), " ")
+        .also { require(it.length in 1..40) { "Укажите тег длиной до 40 символов" } }
+
+internal fun canonicalTag(text: String): String = tagDisplayName(text).lowercase(Locale.ROOT)
+
+internal fun taggedTrackIds(rows: List<TrackTag>, tags: Set<String>, matchAll: Boolean): Set<Long> {
+    if (tags.isEmpty()) return emptySet()
+    val matches = rows.asSequence().filter { it.tagId in tags }.groupingBy { it.trackId }.eachCount()
+    return if (matchAll) matches.filterValues { it == tags.size }.keys else matches.keys
+}
 
 internal fun validateRange(start: Long, end: Long?, duration: Long?) {
     require(start >= 0 && (end == null || end > start)) { "Конец должен быть позже начала" }

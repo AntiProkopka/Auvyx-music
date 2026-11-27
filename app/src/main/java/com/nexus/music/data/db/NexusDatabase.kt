@@ -18,6 +18,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SkipRange::class,
         SkipDisabled::class,
         TrackMoment::class,
+        MusicalTag::class,
         TrackTag::class,
         TrackLink::class
     ],
@@ -44,8 +45,10 @@ abstract class NexusDatabase : RoomDatabase() {
                 db.execSQL("CREATE TABLE skip_disabled (trackId INTEGER NOT NULL PRIMARY KEY, $track)")
                 db.execSQL("CREATE TABLE track_moments (id TEXT NOT NULL PRIMARY KEY, trackId INTEGER NOT NULL, startMs INTEGER NOT NULL, endMs INTEGER, name TEXT NOT NULL, $track)")
                 db.execSQL("CREATE INDEX index_track_moments_trackId ON track_moments(trackId)")
-                db.execSQL("CREATE TABLE track_tags (trackId INTEGER NOT NULL, tag TEXT NOT NULL, PRIMARY KEY(trackId,tag), $track)")
-                db.execSQL("CREATE INDEX index_track_tags_tag ON track_tags(tag)")
+                db.execSQL("CREATE TABLE tags (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, normalized TEXT NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX index_tags_normalized ON tags(normalized)")
+                db.execSQL("CREATE TABLE track_tags (trackId INTEGER NOT NULL, tagId TEXT NOT NULL, PRIMARY KEY(trackId,tagId), $track, FOREIGN KEY(tagId) REFERENCES tags(id) ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX index_track_tags_tagId ON track_tags(tagId)")
                 db.execSQL("CREATE TABLE track_links (firstId INTEGER NOT NULL, secondId INTEGER NOT NULL, label TEXT NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(firstId,secondId), FOREIGN KEY(firstId) REFERENCES tracks(id) ON DELETE CASCADE, FOREIGN KEY(secondId) REFERENCES tracks(id) ON DELETE CASCADE)")
                 db.execSQL("CREATE INDEX index_track_links_secondId ON track_links(secondId)")
             }

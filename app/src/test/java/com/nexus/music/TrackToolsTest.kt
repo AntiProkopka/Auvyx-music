@@ -40,9 +40,19 @@ class TrackToolsTest {
             val b = tracks.insertOrIgnore(track("content://test/b"))
             val tools = db.trackTools()
             assertNotEquals(a, b)
-            tools.putTag(TrackTag(a, canonicalTag("  Ночной   микс  ")))
-            tools.putTag(TrackTag(a, canonicalTag("НОЧНОЙ микс")))
-            assertEquals(listOf(TrackTag(a, "ночной микс")), tools.tags().first())
+            tools.assignTag(a, "  Ночной   микс  ")
+            tools.assignTag(a, "НОЧНОЙ микс")
+            tools.assignTag(b, "Ночной микс")
+            tools.assignTag(b, "Фонк")
+            val night = tools.findTag("ночной микс")!!
+            val phonk = tools.findTag("фонк")!!
+            assertEquals("Ночной микс", night.name)
+            assertEquals(setOf(b), taggedTrackIds(tools.tags().first(), setOf(night.id, phonk.id), true))
+            assertEquals(setOf(a, b), taggedTrackIds(tools.tags().first(), setOf(night.id, phonk.id), false))
+            tools.renameTag(night, "Ночь")
+            assertEquals(night.id, tools.findTag("ночь")!!.id)
+            tools.deleteTag(TrackTag(a, night.id))
+            assertEquals(night.id, tools.findTag("ночь")!!.id)
             val link = TrackLink(a, b, "Атмосфера", 1)
             tools.putLink(link)
             assertEquals(a, tools.links(b).first().single().other(b))
@@ -61,4 +71,29 @@ class TrackToolsTest {
             db.close()
         }
     }
+    @Test fun forgottenTracksRespectFrequencyAndMostRecentStart() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), NexusDatabase::class.java).build()
+        try {
+            fun item(n: Int) = TrackEntity(uri = "content://test/$n", title = "Song $n", artist = "Artist",
+                album = "", durationMs = 1000, addedAt = 1)
+            val forgotten = db.trackDao().insertOrIgnore(item(1))
+            val recent = db.trackDao().insertOrIgnore(item(2))
+            val rare = db.trackDao().insertOrIgnore(item(3))
+            (1L..3L).forEach { time ->
+                db.historyDao().insert(HistoryEntity(trackId = forgotten, playedAt = time))
+                db.historyDao().insert(HistoryEntity(trackId = recent, playedAt = time))
+            }
+            db.historyDao().insert(HistoryEntity(trackId = recent, playedAt = 5))
+            db.historyDao().insert(HistoryEntity(trackId = rare, playedAt = 1))
+            val rows = db.historyDao().forgotten(3, 3).first()
+            assertEquals(forgotten, rows.single().track.id)
+            assertEquals(3L, rows.single().starts)
+            assertEquals(3L, rows.single().lastPlayed)
+            db.historyDao().insert(HistoryEntity(trackId = forgotten, playedAt = 6))
+            assertTrue(db.historyDao().forgotten(3, 3).first().isEmpty())
+        } finally {
+            db.close()
+        }
+    }
+
 }

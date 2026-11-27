@@ -5,7 +5,7 @@ import com.nexus.music.playback.MIN_TRACK_GAIN
 import org.json.JSONObject
 import java.util.UUID
 
-internal val trackToolTables = listOf("track_gain", "skip_ranges", "skip_disabled", "track_moments", "track_tags", "track_links")
+internal val trackToolTables = listOf("track_gain", "skip_ranges", "skip_disabled", "track_moments", "track_tags", "tags", "track_links")
 
 internal suspend fun restoreTrackTools(tables: JSONObject, ids: Map<Long, Long>, db: NexusDatabase) {
     val tools = db.trackTools()
@@ -43,7 +43,22 @@ internal suspend fun restoreTrackTools(tables: JSONObject, ids: Map<Long, Long>,
         require(tools.momentById(id)?.trackId.let { it == null || it == track })
         tools.putMoment(TrackMoment(id, track, start, end, name))
     }
-    for (row in rows("track_tags")) tools.putTag(TrackTag(row.track(), canonicalTag(row.getString("tag"))))
+    val tags = mutableMapOf<String, String>()
+    for (row in rows("tags")) {
+        val id = UUID.fromString(row.getString("id")).toString()
+        require(id !in tags)
+        val name = tagDisplayName(row.getString("name"))
+        val key = canonicalTag(name)
+        val known = tools.tagById(id) ?: tools.findTag(key)
+        val resolved = known ?: MusicalTag(id, name, key).also { tools.createTag(it) }
+        tags[id] = resolved.id
+    }
+    for (row in rows("track_tags")) {
+        val track = row.track()
+        val tag = tags.getValue(UUID.fromString(row.getString("tagId")).toString())
+        require(tools.hasTag(track, tag) || tools.tagCount(track) < 32)
+        tools.putTag(TrackTag(track, tag))
+    }
     for (row in rows("track_links")) {
         val first = row.track("firstId")
         val second = row.track("secondId")

@@ -147,6 +147,13 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    private val rediscoverHiddenKey = stringSetPreferencesKey("rediscover_hidden")
+    val rediscoverHidden = store.data.map { it[rediscoverHiddenKey].orEmpty() }
+    suspend fun hideRediscover(id: Long) {
+        store.edit { it[rediscoverHiddenKey] = it[rediscoverHiddenKey].orEmpty() + id.toString() }
+    }
+    suspend fun resetRediscoverHidden() { store.edit { it.remove(rediscoverHiddenKey) } }
+
     val dislikedTracks: Flow<Set<String>> = store.data.map { it[Keys.DISLIKED].orEmpty() }
 
     suspend fun toggleDisliked(id: String) {
@@ -189,11 +196,12 @@ class SettingsStore(private val context: Context) {
                     "search_history", "search_tracks" -> prefs[stringPreferencesKey(key)] =
                         JSONArray(orderedStrings(data.getString(key)).distinct().take(if (key == "search_history") 10 else 20)).toString()
                     "catalog_pages" -> prefs[Keys.CATALOG_PAGES] = JSONObject(data.getString(key)).toString()
-                    "folders", "disliked_tracks" -> {
+                    "folders", "disliked_tracks", "rediscover_hidden" -> {
                         val array = data.getJSONArray(key)
                         prefs[stringSetPreferencesKey(key)] = (0 until array.length()).mapNotNull {
                             val value = array.getString(it)
-                            if (key == "disliked_tracks" && value.toLongOrNull() != null) ids[value.toLong()]?.toString() else value
+                            if (key == "rediscover_hidden" || (key == "disliked_tracks" && value.toLongOrNull() != null))
+                                ids[value.toLongOrNull()]?.toString() else value
                         }.toSet()
                     }
                     "recent_labels", "shuffle", "eq_enabled" -> prefs[booleanPreferencesKey(key)] = data.getBoolean(key)

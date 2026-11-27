@@ -9,6 +9,11 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexus.music.data.db.DAY_MILLIS
+import com.nexus.music.data.db.ForgottenTrack
+import com.nexus.music.data.db.REDISCOVER_DAYS
+import com.nexus.music.data.db.REDISCOVER_MIN_STARTS
+import com.nexus.music.data.db.diversifyForgotten
 import com.nexus.music.data.db.PlaylistEntity
 import com.nexus.music.data.db.PlaylistSummary
 import com.nexus.music.data.db.PlaylistTrackEntity
@@ -598,6 +603,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // Playlists
     fun playlist(id: Long): Flow<PlaylistEntity?> = db.playlistDao().observePlaylist(id)
     fun playlistTracks(id: Long): Flow<List<TrackEntity>> = db.playlistDao().observeTracks(id).map { tracks -> tracks.filter { it.hasEnabledSource } }
+
+    internal fun forgottenTracks(): Flow<List<ForgottenTrack>> = combine(
+        db.historyDao().forgotten(System.currentTimeMillis() - REDISCOVER_DAYS * DAY_MILLIS, REDISCOVER_MIN_STARTS),
+        settings.dislikedTracks,
+        settings.rediscoverHidden
+    ) { rows, disliked, hidden ->
+        withContext(Dispatchers.IO) {
+            val resolver = nexus.contentResolver
+            val eligible = rows.asSequence().filter {
+                val track = it.track
+                track.id.toString() !in disliked && track.id.toString() !in hidden
+            }.filter {
+                val track = it.track
+                val copy = track.downloadedPath?.let { path -> java.io.File(path).canRead() } == true
+                copy || if (track.source == "soundcloud") !track.sourceUrl.isNullOrBlank() else {
+                    try {
+                        val uri = Uri.parse(track.uri)
+                        if (uri.scheme == "file") uri.path?.let { path -> java.io.File(path).canRead() } == true
+                        else resolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false
+                    } catch (_: java.io.IOException) {
+                        false
+                    } catch (_: SecurityException) {
+                        false
+                    } catch (_: IllegalArgumentException) {
+                        false
+                    }
+                }
+            }.take(90).toList()
+            diversifyForgotten(eligible, 30)
+        }
+    }
+
+    internal fun hideForgotten(id: Long) = saveTrackTools { settings.hideRediscover(id) }
+    internal fun showHiddenForgotten() = saveTrackTools { settings.resetRediscoverHidden() }
+
+    internal fun savePlaylistSnapshot(name: String, tracks: List<TrackEntity>) = saveTrackTools {
+        require(name.isNotBlank() && tracks.isNotEmpty())
+        db.withTransaction {
+            val dao = db.playlistDao()
+            val id = dao.insertPlaylist(PlaylistEntity(name = name.trim(), createdAt = System.currentTimeMillis()))
+            tracks.distinctBy { it.id }.forEachIndexed { position, track ->
+                dao.insertLink(PlaylistTrackEntity(playlistId = id, trackId = track.id, position = position))
+            }
+        }
+        messages.emit("Плейлист «${name.trim()}» создан")
+    }
 
     fun createPlaylist(name: String) {
         viewModelScope.launch {

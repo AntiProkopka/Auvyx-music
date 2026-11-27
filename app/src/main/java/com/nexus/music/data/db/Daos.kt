@@ -113,6 +113,18 @@ interface HistoryDao {
     @Query("SELECT trackId, COUNT(*) AS listens FROM history GROUP BY trackId")
     fun observeCounts(): Flow<List<TrackListens>>
 
+    @Query("""
+        SELECT t.*, h.starts, h.lastPlayed
+        FROM tracks t JOIN (
+            SELECT trackId, COUNT(*) AS starts, MAX(playedAt) AS lastPlayed
+            FROM history GROUP BY trackId
+            HAVING COUNT(*) >= :minimum AND MAX(playedAt) <= :cutoff
+        ) h ON h.trackId = t.id
+        WHERE t.source IN ('local', 'soundcloud')
+        ORDER BY h.starts DESC, h.lastPlayed ASC, t.id ASC LIMIT 240
+    """)
+    fun forgotten(cutoff: Long, minimum: Long): Flow<List<ForgottenTrack>>
+
     @Insert
     suspend fun insert(item: HistoryEntity)
 
