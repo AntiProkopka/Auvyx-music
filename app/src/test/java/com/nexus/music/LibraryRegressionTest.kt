@@ -120,7 +120,7 @@ class LibraryRegressionTest {
 
     @Test fun allSavedStylesAndPlaybackSettingsSurviveNewReader() = runBlocking {
         val store = SettingsStore(context)
-        for (style in listOf("material", "glass")) {
+        for (style in listOf("material", "classic", "glass")) {
             store.setStyle(style)
             assertEquals(style, SettingsStore(context).visualStyle.first())
         }

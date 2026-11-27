@@ -33,7 +33,7 @@ internal fun Appearance(vm: AppViewModel) {
     val labels by vm.recentLabels.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxWidth().frosted(MaterialTheme.shapes.large).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Внешний вид", style = MaterialTheme.typography.titleLarge)
-        listOf("glass" to "auvyx Glass UI", "material" to "Material 3 Expressive").forEach { (id, name) ->
+        listOf("classic" to "auvyx Classic", "glass" to "auvyx Glass UI", "material" to "Material 3 Expressive").forEach { (id, name) ->
             Row(Modifier.fillMaxWidth().selectable(style == id, role = Role.RadioButton) { vm.setStyle(id) },
                 verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(style == id, null, Modifier.padding(9.dp))
@@ -41,10 +41,12 @@ internal fun Appearance(vm: AppViewModel) {
             }
         }
         if (!isGlass) return@Column
-        Text("Качество графики", style = MaterialTheme.typography.titleMedium)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            GlassQuality.entries.forEach { preset ->
-                FilterChip(selected = isGlass && quality == preset, onClick = { vm.setGlassQuality(preset) }, label = { Text(preset.name) })
+        if (style == "glass") {
+            Text("Качество графики", style = MaterialTheme.typography.titleMedium)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                GlassQuality.entries.forEach { preset ->
+                    FilterChip(selected = isGlass && quality == preset, onClick = { vm.setGlassQuality(preset) }, label = { Text(preset.name) })
+                }
             }
         }
         Text(accent.title, style = MaterialTheme.typography.titleMedium)

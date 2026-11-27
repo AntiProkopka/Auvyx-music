@@ -24,7 +24,6 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import com.nexus.music.ui.theme.LocalStyle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -144,11 +143,11 @@ fun NexusRoot(vm: AppViewModel) {
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(vm.player) { vm.player.errors.collect { snackbar.showSnackbar(it) } }
 
-    val style = LocalStyle.current
-    val glass = style == "glass"
+    val glass = isGlass
+    val v4 = usesGlassV4
     val quality by vm.glassQuality.collectAsStateWithLifecycle()
     val keyboardVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
-    val live = glass && quality.liveBackdrop && android.os.Build.VERSION.SDK_INT >= 31
+    val live = glass && (quality.liveBackdrop || (v4 && quality == com.nexus.music.data.settings.GlassQuality.Medium)) && android.os.Build.VERSION.SDK_INT >= 31
     val backdrop = if (live) rememberHazeState() else null
     val lamp = remember { mutableStateOf(Offset.Unspecified) }
     val playingArt = if (glass) artworkBitmap(player.artworkUri) else null
@@ -165,15 +164,7 @@ fun NexusRoot(vm: AppViewModel) {
             LocalArtLight provides artLight, LocalGlassQuality provides quality, LocalTransition provides if (glass) this else null) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 if (glass) Box(Modifier.fillMaxSize().then(if (backdrop != null) Modifier.hazeSource(backdrop, zIndex = 0f) else Modifier).background(MaterialTheme.colorScheme.background)) {
-                    GlassWallpaper(vm)
-                    val shade = MaterialTheme.colorScheme.background
-                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-                        0f to shade.copy(alpha = .76f),
-                        .40f to shade.copy(alpha = .52f),
-                        .73f to shade.copy(alpha = .54f),
-                        1f to shade.copy(alpha = .86f)
-                    )))
-                    AtmosphericLight(route == "player")
+                    GlassScene(vm, route == "player")
                 }
                 Scaffold(
                     modifier = Modifier.imePadding(),
@@ -223,7 +214,7 @@ fun NexusRoot(vm: AppViewModel) {
                                             val active = route == item.route || (item.route == "library" && route?.startsWith("playlist") == true)
                                             val color by animateColorAsState(if (active) primary else MaterialTheme.colorScheme.onSurfaceVariant, tween(180))
                                             Box(Modifier.weight(1f).fillMaxHeight().testTag("nav-${item.route}")
-                                                .selectable(active, role = androidx.compose.ui.semantics.Role.Tab) {
+                                                .selectable(active, interactionSource = null, indication = ripple(bounded = false, radius = 23.dp), role = androidx.compose.ui.semantics.Role.Tab) {
                                                     vm.albumTarget.value = null
                                                     vm.artistTarget.value = null
                                                     navigateTo(nav, item.route)
@@ -293,7 +284,10 @@ fun NexusRoot(vm: AppViewModel) {
                                 label = "Album page") { target -> if (target != null) {
                                 androidx.activity.compose.BackHandler(enabled = artist == null && album == target) { vm.albumTarget.value = null }
                                 Surface(Modifier.fillMaxSize(), color = if (glass) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface) {
-                                    androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.AlbumScreen(vm, target) }
+                                    Box(Modifier.fillMaxSize()) {
+                                        if (v4) GlassScene(vm, false, showTrackLight = false)
+                                        androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.AlbumScreen(vm, target) }
+                                    }
                                 }
                             }
                             }
@@ -301,7 +295,10 @@ fun NexusRoot(vm: AppViewModel) {
                                 label = "Artist page") { target -> if (target != null) {
                                 androidx.activity.compose.BackHandler(enabled = artist == target) { vm.artistTarget.value = null }
                                 Surface(Modifier.fillMaxSize(), color = if (glass) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface) {
-                                    androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.ArtistScreen(vm, target, onOpenPlayer = openPlayer) }
+                                    Box(Modifier.fillMaxSize()) {
+                                        if (v4) GlassScene(vm, false, showTrackLight = false)
+                                        androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.ArtistScreen(vm, target, onOpenPlayer = openPlayer) }
+                                    }
                                 }
                             }
                             }
@@ -312,6 +309,20 @@ fun NexusRoot(vm: AppViewModel) {
         }
     }
     FirstRunNicknameDialog(vm)
+}
+
+@Composable
+private fun GlassScene(vm: AppViewModel, fullPlayer: Boolean, showTrackLight: Boolean = true) {
+    GlassWallpaper(vm)
+    val shade = MaterialTheme.colorScheme.background
+    val v4 = usesGlassV4
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+        0f to shade.copy(alpha = if (v4) .66f else .76f),
+        .40f to shade.copy(alpha = if (v4) .42f else .52f),
+        .73f to shade.copy(alpha = .54f),
+        1f to shade.copy(alpha = .86f)
+    )))
+    if (showTrackLight) AtmosphericLight(fullPlayer)
 }
 
 @Composable

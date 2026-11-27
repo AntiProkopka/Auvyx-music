@@ -117,9 +117,9 @@ internal fun GlassArtist(vm: AppViewModel, target: AppViewModel.ArtistTarget, on
         item { Text("Популярные песни", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleLarge) }
         if (top.isEmpty()) item { Text("Нет данных о прослушиваниях", Modifier.padding(horizontal = 16.dp)) }
         items(top, key = { it.key }) { song ->
-            ListItem(modifier = Modifier.clickable(onClick = song.onClick), headlineContent = { Text(song.title) },
+            ListItem(modifier = Modifier.frosted(MaterialTheme.shapes.medium, GlassRole.Row).clickable(onClick = song.onClick), headlineContent = { Text(song.title) },
                 leadingContent = { ArtTile(song.artwork, null, Modifier.size(48.dp)) },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow))
+                colors = ListItemDefaults.colors(containerColor = if (usesGlassV4) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow))
         }
         item { CoverCarousel("Все песни", songs, empty = "Песни не найдены") }
         item { CoverCarousel("Синглы", singles, empty = "Нет данных о синглах") }

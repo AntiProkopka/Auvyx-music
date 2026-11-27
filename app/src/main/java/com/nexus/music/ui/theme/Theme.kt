@@ -107,7 +107,7 @@ private val expressiveTypography = Typography().run {
     )
 }
 
-private val glassFamily = FontFamily(listOf(FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold).map {
+private val glassFamily = FontFamily(listOf(FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold, FontWeight.ExtraBold, FontWeight.Black).map {
     Font(R.font.nunito, weight = it, variationSettings = FontVariation.Settings(FontVariation.weight(it.weight)))
 })
 
@@ -131,9 +131,22 @@ private val glassTypography = expressiveTypography.run {
     )
 }
 
+private val glassV4Typography = glassTypography.run {
+    copy(
+        headlineLarge = headlineLarge.copy(fontWeight = FontWeight.ExtraBold),
+        headlineMedium = headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
+        headlineSmall = headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+        titleLarge = titleLarge.copy(fontWeight = FontWeight.Bold),
+        titleMedium = titleMedium.copy(fontWeight = FontWeight.Bold),
+        titleSmall = titleSmall.copy(fontWeight = FontWeight.Bold),
+        bodyMedium = bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+        bodySmall = bodySmall.copy(fontWeight = FontWeight.Medium)
+    )
+}
+
 @Composable
 fun NexusTheme(themeMode: String, style: String, accent: GlassAccent = GlassAccent.Sunset, content: @Composable () -> Unit) {
-    val dark = style == "glass" || when (themeMode) {
+    val dark = style != "material" || when (themeMode) {
         "dark" -> true
         "light" -> false
         else -> isSystemInDarkTheme()
@@ -143,7 +156,7 @@ fun NexusTheme(themeMode: String, style: String, accent: GlassAccent = GlassAcce
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else if (dark) AUVYXDark else AUVYXLight
     val colors = when (style) {
-        "glass" -> androidx.compose.runtime.remember(accent) {
+        "glass", "classic" -> androidx.compose.runtime.remember(accent) {
             val light = Color(accent.light)
             val ink = Color(accent.ink)
             val mist = Color(accent.mist)
@@ -175,7 +188,7 @@ fun NexusTheme(themeMode: String, style: String, accent: GlassAccent = GlassAcce
     androidx.compose.runtime.CompositionLocalProvider(LocalStyle provides style) {
         MaterialExpressiveTheme(
             colorScheme = colors,
-            typography = if (style == "glass") glassTypography else expressiveTypography,
+            typography = when (style) { "glass" -> glassV4Typography; "classic" -> glassTypography; else -> expressiveTypography },
             motionScheme = MotionScheme.expressive(),
             shapes = AUVYXShapes,
             content = { CompositionLocalProvider(LocalContentColor provides colors.onBackground) { content() } }

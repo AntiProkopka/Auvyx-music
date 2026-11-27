@@ -64,9 +64,9 @@ class SettingsStore(private val context: Context) {
     private val queriesKey = stringPreferencesKey("search_history")
     private val openedKey = stringPreferencesKey("search_tracks")
 
-    val visualStyle = store.data.map { if (it[styleKey] == "material") "material" else "glass" }
+    val visualStyle = store.data.map { when (it[styleKey]) { "material" -> "material"; "classic" -> "classic"; else -> "glass" } }
     suspend fun setStyle(style: String) {
-        require(style == "glass" || style == "material")
+        require(style in setOf("glass", "classic", "material"))
         store.edit { it[styleKey] = style }
     }
     val glassQuality = store.data.map { prefs ->
