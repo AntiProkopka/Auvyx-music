@@ -88,6 +88,7 @@ class LibraryRegressionTest {
             old.execSQL("CREATE TABLE soundcloud_history(id INTEGER PRIMARY KEY, trackId INTEGER,title TEXT,artist TEXT,durationMs INTEGER,artworkUrl TEXT,permalinkUrl TEXT,playedAt INTEGER)")
             old.execSQL("CREATE TABLE soundcloud_favorites(trackId INTEGER PRIMARY KEY)")
             old.execSQL("INSERT INTO soundcloud_history VALUES(1,77,'Song','Artist',1500,NULL,'https://soundcloud.com/a/b',9)")
+            com.nexus.music.data.backup.trackToolTables.forEach { old.execSQL("DROP TABLE $it") }
             old.version=4
         }
         val upgraded = NexusDatabase.create(context)
@@ -99,7 +100,7 @@ class LibraryRegressionTest {
         } finally { upgraded.close() }
     }
 
-    @Test fun versionOneDatabaseMigratesThroughAllFourSteps() = runBlocking {
+    @Test fun versionOneDatabaseMigratesToCurrentSchema() = runBlocking {
         val db = NexusDatabase.create(context)
         db.trackDao().getAll()
         db.close()
@@ -109,6 +110,7 @@ class LibraryRegressionTest {
             old.execSQL("CREATE UNIQUE INDEX index_tracks_uri ON tracks(uri)")
             old.execSQL("INSERT INTO tracks VALUES(19,'content://docs/a','Audio','Name','Album',1000,1,1)")
             old.execSQL("INSERT INTO play_queue VALUES(0,19)")
+            com.nexus.music.data.backup.trackToolTables.forEach { old.execSQL("DROP TABLE $it") }
             old.version = 1
         }
         val current = NexusDatabase.create(context)

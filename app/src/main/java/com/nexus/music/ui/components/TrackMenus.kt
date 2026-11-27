@@ -57,6 +57,7 @@ fun trackMenu(
     if (OfflineAudio.canSave(t) && t.downloadedPath == null) MenuAction("Сохранить офлайн") { vm.saveOffline(t) } else null,
     if (t.source == "local" && t.downloadedPath != null) MenuAction("Удалить офлайн-копию") { vm.removeOffline(t) } else null,
     if (t.source == "local" && t.downloadedPath == null) MenuAction("Выбрать файл заново") { vm.relinkTarget.value = t } else null,
+    MenuAction("Инструменты трека") { vm.trackToolsTarget.value = t },
     MenuAction("В плейлист…") { onAddToPlaylist(t) },
     MenuAction("Играть следующим") { vm.player.playNext(t) },
     MenuAction("Добавить в очередь") { vm.player.enqueue(t) },

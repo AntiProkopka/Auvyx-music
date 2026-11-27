@@ -317,6 +317,7 @@ fun NexusRoot(vm: AppViewModel) {
             }
         }
     }
+    com.nexus.music.ui.components.TrackToolsHost(vm)
     FirstRunNicknameDialog(vm)
 }
 

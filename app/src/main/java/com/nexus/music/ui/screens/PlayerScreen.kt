@@ -398,6 +398,10 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                                 showTrackMenu = false
                             })
                         }
+                        DropdownMenuItem(text = { Text("Инструменты трека") }, onClick = {
+                            vm.trackToolsTarget.value = selected
+                            showTrackMenu = false
+                        })
                         DropdownMenuItem(text = { Text("Удалить из медиатеки") }, onClick = {
                             deleteTarget = selected
                             showTrackMenu = false

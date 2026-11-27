@@ -46,6 +46,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val library = nexus.library
     private val settings = nexus.settings
     val player = nexus.playerController
+    internal val trackTools = db.trackTools()
+    internal val trackToolsTarget = MutableStateFlow<TrackEntity?>(null)
+    internal val activeMoment = nexus.activeMoment.asStateFlow()
+
+    internal fun saveTrackTools(action: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                action()
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (failure: Exception) {
+                messages.emit(if (failure is IllegalArgumentException) failure.message ?: "Проверьте значения"
+                    else "Не удалось сохранить изменения трека")
+            }
+        }
+    }
+
     private val lazily = SharingStarted.WhileSubscribed(5_000)
 
     val tracks: StateFlow<List<TrackEntity>> =

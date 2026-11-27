@@ -13,9 +13,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlaylistEntity::class,
         PlaylistTrackEntity::class,
         HistoryEntity::class,
-        QueueEntity::class
+        QueueEntity::class,
+        TrackGain::class,
+        SkipRange::class,
+        SkipDisabled::class,
+        TrackMoment::class,
+        TrackTag::class,
+        TrackLink::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class NexusDatabase : RoomDatabase() {
@@ -23,11 +29,27 @@ abstract class NexusDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
     abstract fun historyDao(): HistoryDao
     abstract fun queueDao(): QueueDao
+    abstract fun trackTools(): TrackToolsDao
     companion object {
         fun create(context: Context): NexusDatabase =
             Room.databaseBuilder(context.applicationContext, NexusDatabase::class.java, "nexus.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
+
+        internal val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                val track = "FOREIGN KEY(trackId) REFERENCES tracks(id) ON DELETE CASCADE"
+                db.execSQL("CREATE TABLE track_gain (trackId INTEGER NOT NULL PRIMARY KEY, decibels REAL NOT NULL, $track)")
+                db.execSQL("CREATE TABLE skip_ranges (trackId INTEGER NOT NULL, startMs INTEGER NOT NULL, endMs INTEGER NOT NULL, name TEXT NOT NULL, enabled INTEGER NOT NULL, PRIMARY KEY(trackId,startMs,endMs), $track)")
+                db.execSQL("CREATE TABLE skip_disabled (trackId INTEGER NOT NULL PRIMARY KEY, $track)")
+                db.execSQL("CREATE TABLE track_moments (id TEXT NOT NULL PRIMARY KEY, trackId INTEGER NOT NULL, startMs INTEGER NOT NULL, endMs INTEGER, name TEXT NOT NULL, $track)")
+                db.execSQL("CREATE INDEX index_track_moments_trackId ON track_moments(trackId)")
+                db.execSQL("CREATE TABLE track_tags (trackId INTEGER NOT NULL, tag TEXT NOT NULL, PRIMARY KEY(trackId,tag), $track)")
+                db.execSQL("CREATE INDEX index_track_tags_tag ON track_tags(tag)")
+                db.execSQL("CREATE TABLE track_links (firstId INTEGER NOT NULL, secondId INTEGER NOT NULL, label TEXT NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(firstId,secondId), FOREIGN KEY(firstId) REFERENCES tracks(id) ON DELETE CASCADE, FOREIGN KEY(secondId) REFERENCES tracks(id) ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX index_track_links_secondId ON track_links(secondId)")
+            }
+        }
 
         internal val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(database: SupportSQLiteDatabase) {

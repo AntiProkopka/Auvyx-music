@@ -13,7 +13,7 @@ internal object LibraryExport {
     suspend fun write(resolver: ContentResolver, uri: Uri, database: NexusDatabase, settings: SettingsStore) {
         val tables = database.withTransaction {
             JSONObject().apply {
-                for (table in listOf("tracks", "playlists", "playlist_tracks", "history", "play_queue")) {
+                for (table in listOf("tracks", "playlists", "playlist_tracks", "history", "play_queue") + trackToolTables) {
                     val rows = JSONArray()
                     database.query("SELECT * FROM $table", emptyArray<Any>()).use { cursor ->
                         while (cursor.moveToNext()) {
@@ -37,7 +37,7 @@ internal object LibraryExport {
         }
         val backup = JSONObject()
             .put("format", "auvyx-library")
-            .put("version", 1)
+            .put("version", 2)
             .put("settings", settings.backupSettings())
             .put("tables", tables)
         checkNotNull(resolver.openOutputStream(uri, "wt")).bufferedWriter().use { it.write(backup.toString()) }

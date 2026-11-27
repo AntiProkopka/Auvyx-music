@@ -53,6 +53,22 @@ class PlaybackService : MediaSessionService() {
         serviceScope.launch { settings.crossfade.collect { crossfade?.seconds = it } }
         serviceScope.launch { settings.equalizerEnabled.collect(equalizer::setEnabled) }
         serviceScope.launch { settings.equalizerGains.collect(equalizer::setGains) }
+        val app = application as NexusApp
+        val tools = app.database.trackTools()
+        val trackPlayback = TrackPlaybackTools(player, serviceScope, app.activeMoment) { app.activeMoment.value = null }
+        player.addListener(trackPlayback)
+        var skips = emptyMap<Long, List<com.nexus.music.data.db.SkipRange>>()
+        fun updateRanges() {
+            trackPlayback.ranges = skips[player.currentMediaItem?.mediaId?.toLongOrNull()].orEmpty()
+        }
+        player.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) = updateRanges()
+        })
+        crossfade?.canMixTrack = { id -> id.toLongOrNull() !in skips && app.activeMoment.value?.trackId?.toString() != id }
+        serviceScope.launch { tools.allActiveRanges().collect { rows -> skips = rows.groupBy { it.trackId }; updateRanges() } }
+        serviceScope.launch { tools.gains().collect { rows ->
+            crossfade?.setAttenuation(rows.associate { it.trackId.toString() to attenuation(it.decibels) })
+        } }
         exoPlayer = player
         PlaybackAudioRouting.attach(player)
         session = MediaSession.Builder(this, player).build()

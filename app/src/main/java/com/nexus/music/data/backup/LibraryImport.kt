@@ -27,7 +27,7 @@ internal object LibraryImport {
             out.toString()
         }
         val root = JSONObject(raw)
-        require(root.getString("format") == "auvyx-library" && root.getInt("version") == 1) { "Неподдерживаемая версия" }
+        require(root.getString("format") == "auvyx-library" && root.getInt("version") in 1..2) { "Неподдерживаемая версия" }
         val tables = root.getJSONObject("tables")
         val prefs = root.getJSONObject("settings")
         db.withTransaction {
@@ -83,6 +83,7 @@ internal object LibraryImport {
             }
             val restoreQueue = queue.isNotEmpty() && db.queueDao().getAll().isEmpty()
             if (restoreQueue) db.queueDao().replace(queue)
+            restoreTrackTools(tables, tracks, db)
             settings.restoreSettings(prefs, tracks, if (restoreQueue) queue.size else 0)
         }
     }

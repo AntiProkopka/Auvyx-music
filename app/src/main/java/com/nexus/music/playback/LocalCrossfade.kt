@@ -9,6 +9,17 @@ import androidx.media3.exoplayer.ExoPlayer
 /** Overlaps seekable local files and on-demand SoundCloud streams. The session player remains the owner of the timeline. */
 @UnstableApi
 internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOverlay: () -> ExoPlayer) : Player.Listener {
+    private var attenuationById = emptyMap<String, Float>()
+    var canMixTrack: (String) -> Boolean = { true }
+
+    fun setAttenuation(gains: Map<String, Float>) {
+        attenuationById = gains
+        if (overlay == null) primary.volume = gain(primary.currentMediaItem)
+        else update()
+    }
+
+    private fun gain(item: MediaItem?): Float = attenuationById[item?.mediaId] ?: 1f
+
     var seconds = 0
         set(value) {
             val duration = value.coerceIn(0, 12)
@@ -40,7 +51,8 @@ internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOv
         val index = primary.nextMediaItemIndex
         if (seconds == 0 || !primary.isPlaying || index < 0 || index == primary.currentMediaItemIndex ||
             primary.repeatMode == Player.REPEAT_MODE_ONE || primary.duration <= 0 ||
-            primary.isCurrentMediaItemLive || !primary.isCurrentMediaItemSeekable || !canOverlap(primary.currentMediaItem)) {
+            primary.isCurrentMediaItemLive || !primary.isCurrentMediaItemSeekable || !canOverlap(primary.currentMediaItem) ||
+            !canMixTrack(primary.currentMediaItem?.mediaId.orEmpty())) {
             reset()
             return
         }
@@ -48,7 +60,7 @@ internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOv
         val remaining = primary.duration - primary.currentPosition
         val requested = minOf((seconds * 1000L * primary.playbackParameters.speed).toLong(), primary.duration / 2)
         val lead = if (next.localConfiguration?.uri?.scheme == "auvyx-sc") 6000L else 1500L
-        if (!canOverlap(next) || remaining > requested + lead ||
+        if (!canOverlap(next) || !canMixTrack(next.mediaId) || remaining > requested + lead ||
             (incoming != null && incoming != next)) { reset(); return }
         if (failedIndex == primary.currentMediaItemIndex) return
         val player = overlay ?: makeOverlay().also {
@@ -79,8 +91,8 @@ internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOv
         }
         val fraction = (1f - remaining.toFloat() / windowMs.coerceAtLeast(1)).coerceIn(0f, 1f)
         // Keep the sum at unity so coincident peaks from the two audio tracks cannot overload the mix.
-        primary.volume = 1f - fraction
-        player.volume = fraction
+        primary.volume = gain(primary.currentMediaItem) * (1f - fraction)
+        player.volume = gain(next) * fraction
     }
 
     override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
@@ -98,6 +110,10 @@ internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOv
         }
     }
 
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        if (overlay == null) primary.volume = gain(mediaItem)
+    }
+
     override fun onIsPlayingChanged(isPlaying: Boolean) { schedule() }
     override fun onPlaybackStateChanged(playbackState: Int) {
         if (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED) schedule()
@@ -110,8 +126,8 @@ internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOv
         if (previousOverlay != null) {
             PlaybackAudioRouting.clearOverlay()
             previousOverlay.release()
-            primary.volume = 1f
         }
+        primary.volume = gain(primary.currentMediaItem)
     }
     fun release() { handler.removeCallbacks(tick); primary.removeListener(this); reset() }
 }

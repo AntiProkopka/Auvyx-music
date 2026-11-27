@@ -59,7 +59,8 @@ class PlayerController(
     private val context: Context,
     private val db: NexusDatabase,
     private val settings: SettingsStore,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val activeMoment: MutableStateFlow<com.nexus.music.data.db.TrackMoment?> = MutableStateFlow(null)
 ) {
     private val _state = MutableStateFlow(PlayerState())
     val state: StateFlow<PlayerState> = _state.asStateFlow()
@@ -216,6 +217,24 @@ class PlayerController(
 
     fun next() = withController { it.seekToNext() }
     fun previous() = withController { it.seekToPrevious() }
+
+    internal fun playMoment(track: TrackEntity, moment: com.nexus.music.data.db.TrackMoment, loop: Boolean) {
+        withController { c ->
+            val index = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == track.id.toString() }
+            activeMoment.value = moment.takeIf { loop && it.endMs != null }
+            if (index == null) {
+                val insertAt = if (c.mediaItemCount == 0) 0 else c.currentMediaItemIndex + 1
+                c.addMediaItem(insertAt, toMediaItem(track))
+                c.seekTo(insertAt, moment.startMs)
+            } else {
+                c.seekTo(index, moment.startMs)
+            }
+            if (c.playbackState == Player.STATE_IDLE) c.prepare()
+            c.play()
+        }
+    }
+
+    internal fun stopMoment() { activeMoment.value = null }
 
     fun seekTo(positionMs: Long) {
         withController { c ->

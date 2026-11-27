@@ -172,6 +172,8 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
             }
         }
 
+        com.nexus.music.ui.components.LibraryTrackTools(vm)
+
         when (tab) {
             7 -> LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = LocalBottomBarPadding.current),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
