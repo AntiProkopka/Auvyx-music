@@ -143,10 +143,10 @@ fun NexusTheme(themeMode: String, style: String, accent: GlassAccent = GlassAcce
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else if (dark) AUVYXDark else AUVYXLight
     val colors = when (style) {
-        "glass" -> {
-            val light by animateColorAsState(Color(accent.light), tween(450))
-            val ink by animateColorAsState(Color(accent.ink), tween(450))
-            val mist by animateColorAsState(Color(accent.mist), tween(450))
+        "glass" -> androidx.compose.runtime.remember(accent) {
+            val light = Color(accent.light)
+            val ink = Color(accent.ink)
+            val mist = Color(accent.mist)
             val darkBase = lerp(Color(0xff0d0e13), ink, .065f)
             AUVYXDark.copy(background = darkBase, surface = lerp(darkBase, ink, .07f),
                 primary = light, onPrimary = Color(0xff1a1417), tertiary = mist,

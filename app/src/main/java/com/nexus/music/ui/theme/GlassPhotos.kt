@@ -64,16 +64,18 @@ internal fun GlassPhoto(path: String?, modifier: Modifier, small: Boolean = fals
         val density = LocalDensity.current
         val width = with(density) { maxWidth.roundToPx() }.coerceIn(1, if (small) 256 else 1600)
         val height = with(density) { maxHeight.roundToPx() }.coerceIn(1, if (small) 256 else 2000)
-        val bitmap by produceState<Bitmap?>(null, assets, path, width, height) {
+        val widthClass = ((width + 127) / 128) * 128
+        val heightClass = ((height + 127) / 128) * 128
+        val bitmap by produceState<Bitmap?>(null, assets, path, widthClass, heightClass) {
             value = withContext(Dispatchers.IO) {
                 if (path == null) return@withContext null
-                val key = "$path/${width}x$height"
+                val key = "$path/${widthClass}x$heightClass"
                 photoCache.get(key) ?: try {
                     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     assets.open(path).use { BitmapFactory.decodeStream(it, null, options) }
                     if (options.outWidth <= 0 || options.outHeight <= 0) return@withContext null
                     var sample = 1
-                    while ((options.outWidth / (sample * 2) >= width && options.outHeight / (sample * 2) >= height) ||
+                    while ((options.outWidth / (sample * 2) >= widthClass && options.outHeight / (sample * 2) >= heightClass) ||
                         maxOf(options.outWidth, options.outHeight) / sample > 2400
                     ) {
                         sample *= 2

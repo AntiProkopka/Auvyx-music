@@ -140,6 +140,9 @@ import com.nexus.music.ui.components.RemoteArtworkBitmap
 import com.nexus.music.ui.components.rememberRemoteArtwork
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
@@ -264,39 +267,40 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         val remoteArtwork = artworkUri?.startsWith("https://", ignoreCase = true) == true
         val artwork = if (remoteArtwork) rememberRemoteArtwork(artworkUri) else rememberLocalArtwork(artworkUri)
         val primary = MaterialTheme.colorScheme.primary
-        val accent = rememberArtworkAccent(artwork, primary)
+        val accent = rememberArtworkAccent(artwork)
         val glowColor by animateColorAsState(
             targetValue = accent?.let { if (isGlass) androidx.compose.ui.graphics.lerp(primary, it, .66f).copy(alpha = .38f) else it.copy(alpha = .48f) }
                 ?: primary.copy(alpha = 0f),
             animationSpec = tween(durationMillis = 420),
             label = "Artwork glow"
         )
+        val lamp = LocalLamp.current
+        val glass = isGlass
         val artworkWidthFraction = .86f
         BoxWithConstraints(
             modifier = (if (compact) Modifier.height(160.dp) else Modifier.weight(1f))
                 .fillMaxWidth()
-                .drawBehind {
+                .drawWithCache {
                     val color = glowColor
                     val radius = minOf(size.width * artworkWidthFraction, size.height) * .83f
-                    if (color.alpha > 0f && radius > 0f) {
-                        drawCircle(
-                            brush = Brush.radialGradient(
+                    val halo = if (color.alpha > 0f && radius > 0f) Brush.radialGradient(
                                 0f to color,
                                 .58f to color,
                                 .78f to color.copy(alpha = color.alpha * .45f),
                                 1f to color.copy(alpha = 0f),
-                                center = center,
+                                center = Offset(size.width / 2f, size.height / 2f),
                                 radius = radius
-                            ),
-                            radius = radius
-                        )
-                    }
+                        ) else null
+                    onDrawBehind { if (halo != null) drawCircle(halo, radius) }
                 },
             contentAlignment = Alignment.Center
         ) {
                 val artworkSize = minOf(maxWidth * artworkWidthFraction, maxHeight)
+                if (glass) ArtworkReflection(artwork, Modifier.size(artworkSize))
                 Box(
-                    modifier = Modifier.size(artworkSize).aspectRatio(1f).sharedCover().clip(RoundedCornerShape(if (style == "glass") 52.dp else 30.dp))
+                    modifier = Modifier.size(artworkSize).then(if (glass) Modifier.onGloballyPositioned {
+                        lamp.value = it.positionInRoot() + Offset(it.size.width / 2f, it.size.height / 2f)
+                    } else Modifier).aspectRatio(1f).sharedCover().clip(RoundedCornerShape(if (style == "glass") 28.dp else 30.dp))
                         .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer))),
                     contentAlignment = Alignment.Center
                 ) {
@@ -422,7 +426,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         key(s.mediaId) { PlaybackProgress(vm, s.durationMs, s.canSeek) }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).frosted(MaterialTheme.shapes.extraLarge),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).frosted(MaterialTheme.shapes.extraLarge, GlassRole.Transport),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -493,6 +497,8 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
 
     deleteTarget?.let { selected ->
         AlertDialog(
+            modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge, GlassRole.Panel),
+            containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
             onDismissRequest = { deleteTarget = null },
             title = { Text("Удалить из медиатеки?") },
             text = { Text("«${selected.title}» будет удалён из медиатеки auvyx. Исходный файл останется на устройстве.") },
@@ -573,10 +579,14 @@ private fun PlayerBottomSheet(onDismiss: () -> Unit, content: @Composable Column
         shape = MaterialTheme.shapes.extraLarge,
         // The sheet owns its surface. A clip on the outer modifier stays above
         // Material's moving anchor and can cut the sheet in its translated position.
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        dragHandle = if (isGlass) null else ({ androidx.compose.material3.BottomSheetDefaults.DragHandle() }),
+        containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight(.90f), content = content)
+        Column(Modifier.fillMaxWidth().fillMaxHeight(.90f).frosted(MaterialTheme.shapes.extraLarge, GlassRole.Panel)) {
+            if (isGlass) Box(Modifier.align(Alignment.CenterHorizontally)) { androidx.compose.material3.BottomSheetDefaults.DragHandle() }
+            content()
+        }
     }
 }
 
@@ -793,7 +803,7 @@ private fun AudioOutputDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge, overPage = true),
+        modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge, GlassRole.Panel),
         containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("Устройство вывода") },
         text = {

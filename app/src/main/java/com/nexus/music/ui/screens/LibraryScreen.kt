@@ -341,9 +341,7 @@ private fun CollectionPanel(title: String, count: Int, cover: String?, favorites
     Row(Modifier.fillMaxWidth().heightIn(min = 102.dp).frosted(MaterialTheme.shapes.large).clickable(onClick = open)
         .padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         if (favorites) {
-            val context = LocalContext.current
-            val res = remember { context.resources.getIdentifier("glass_liked_songs", "drawable", context.packageName) }
-            if (res != 0) Image(painterResource(res), null, Modifier.size(76.dp), contentScale = ContentScale.Fit)
+            Image(painterResource(R.drawable.glass_liked_songs), null, Modifier.size(76.dp), contentScale = ContentScale.Fit)
         } else ArtTile(cover, null, Modifier.size(76.dp))
         Column { Text(title, style = MaterialTheme.typography.titleMedium); Text("Треков · $count", style = MaterialTheme.typography.bodySmall) }
     }

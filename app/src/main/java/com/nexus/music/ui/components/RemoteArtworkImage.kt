@@ -89,17 +89,17 @@ internal fun RemoteArtworkBitmap(bitmap: Bitmap?, contentDescription: String?, m
 private val paletteCache = java.util.WeakHashMap<Bitmap, Color?>()
 
 @Composable
-internal fun rememberArtworkAccent(bitmap: Bitmap?, fallback: Color): Color? {
-    val accent = key(bitmap) {
-        produceState<Color?>(null) {
-            if (bitmap != null) {
-                value = withContext(Dispatchers.Default) {
-                    synchronized(paletteCache) { paletteCache.getOrPut(bitmap) { representativeArtworkColor(bitmap) } }
+internal fun rememberArtworkAccent(bitmap: Bitmap?): Color? {
+    val previous = produceState<Color?>(null, bitmap) {
+        if (bitmap != null) value = withContext(Dispatchers.Default) {
+            synchronized(bitmap) {
+                synchronized(paletteCache) { paletteCache[bitmap] } ?: representativeArtworkColor(bitmap)?.also {
+                    synchronized(paletteCache) { paletteCache[bitmap] = it }
                 }
             }
-        }.value
+        }
     }
-    return if (bitmap == null) null else accent ?: fallback
+    return if (bitmap == null) null else previous.value
 }
 
 internal fun representativeArtworkColor(bitmap: Bitmap): Color? {

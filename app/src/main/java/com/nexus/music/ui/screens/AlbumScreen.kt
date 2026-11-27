@@ -185,10 +185,11 @@ private fun AlbumHeader(
     onArtist: (() -> Unit)?,
     actions: @Composable () -> Unit
 ) {
-    Card(shape = MaterialTheme.shapes.extraLarge) {
+    Card(shape = MaterialTheme.shapes.extraLarge, modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge),
+        colors = if (isGlass) CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.Transparent) else CardDefaults.cardColors()) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val cover = Modifier.size(144.dp).clip(MaterialTheme.shapes.large)
-            if (isGlass) HaloArtwork(artwork, "Обложка $title", Modifier.size(206.dp))
+            if (isGlass) HaloArtwork(artwork, "Обложка $title", Modifier.size(206.dp).align(androidx.compose.ui.Alignment.CenterHorizontally))
             else if (artwork?.startsWith("https://") == true) RemoteArtworkImage(artwork, "Обложка $title", cover)
             else ArtworkImage(artwork, "Обложка $title", cover)
             Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 3, overflow = TextOverflow.Ellipsis)

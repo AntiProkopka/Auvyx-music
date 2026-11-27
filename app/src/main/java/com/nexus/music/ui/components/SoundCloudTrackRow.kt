@@ -64,7 +64,7 @@ fun CatalogResultRow(title: String, artist: String, durationMs: Long, artwork: S
     var menuExpanded by remember(title, artist) { mutableStateOf(false) }
     ListItem(
         colors = ListItemDefaults.colors(containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surface),
-        modifier = Modifier.then(if (isGlass) Modifier.padding(horizontal = 10.dp, vertical = 3.dp) else Modifier).frosted(MaterialTheme.shapes.medium).clickable(enabled = playEnabled, onClick = onPlay),
+        modifier = Modifier.then(if (isGlass) Modifier.padding(horizontal = 10.dp, vertical = 3.dp) else Modifier).frosted(MaterialTheme.shapes.medium, com.nexus.music.ui.theme.GlassRole.Row).clickable(enabled = playEnabled, onClick = onPlay),
         leadingContent = {
             if (!artwork.isNullOrBlank()) {
                 Box(modifier = Modifier.size(56.dp)) {

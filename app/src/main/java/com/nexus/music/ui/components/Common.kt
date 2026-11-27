@@ -76,7 +76,7 @@ fun TrackRow(
     val shape = MaterialTheme.shapes.medium
     ListItem(
         modifier = Modifier.fillMaxWidth().padding(horizontal = if (isGlass) 10.dp else 0.dp,
-            vertical = if (isGlass) 3.dp else 0.dp).clip(shape).frosted(shape).clickable(onClick = onClick),
+            vertical = if (isGlass) 3.dp else 0.dp).clip(shape).frosted(shape, com.nexus.music.ui.theme.GlassRole.Row).clickable(onClick = onClick),
         colors = ListItemDefaults.colors(containerColor = if (isCurrent) MaterialTheme.colorScheme.secondaryContainer else if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow),
         leadingContent = {
             Box(
@@ -266,7 +266,8 @@ fun NameDialog(
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
         shape = MaterialTheme.shapes.extraLarge,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge, com.nexus.music.ui.theme.GlassRole.Panel),
+        containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -306,7 +307,8 @@ fun PlaylistPickerDialog(
     }
     AlertDialog(
         shape = MaterialTheme.shapes.extraLarge,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge, com.nexus.music.ui.theme.GlassRole.Panel),
+        containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
         title = { Text("Добавить в плейлист") },
         text = {

@@ -98,8 +98,8 @@ internal fun GlassArtist(vm: AppViewModel, target: AppViewModel.ArtistTarget, on
     LazyColumn(contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current + 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { TextButton(onClick = { vm.artistTarget.value = null }) { Text("← Назад") } }
-        item { Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            HaloArtwork(avatar, artist.name, Modifier.size(216.dp))
+        item { Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HaloArtwork(avatar, artist.name, Modifier.size(216.dp).align(androidx.compose.ui.Alignment.CenterHorizontally))
             Text(artist.name, style = MaterialTheme.typography.headlineLarge)
             profile?.description?.takeIf { it.isNotBlank() }?.let { Text(it, maxLines = 6) }
             TextButton(onClick = { vm.toggleFollow(artist) }, enabled = !target.cloud || artist.owner != null) {

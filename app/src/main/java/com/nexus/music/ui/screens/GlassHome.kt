@@ -65,9 +65,9 @@ internal fun GlassHome(vm: AppViewModel) {
 @Composable
 private fun HomeBanner(title: String, photo: String?, mix: Boolean) {
     Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(if (mix) 154.dp else 186.dp)
-        .frosted(RoundedCornerShape(30.dp))) {
+        .clip(RoundedCornerShape(23.dp))) {
         GlassPhoto(photo, Modifier.fillMaxSize())
-        Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color.Black.copy(alpha=.45f), Color.Transparent))))
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(if (mix) listOf(Color.Black.copy(alpha=.52f), Color.Transparent, Color.Black.copy(alpha=.24f)) else listOf(Color.Transparent,Color.Black.copy(alpha=.08f), Color.Black.copy(alpha=.72f)))))
         Text(title, Modifier.align(if (mix) Alignment.TopStart else Alignment.BottomStart).padding(20.dp),
             style = if (mix) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineLarge, color = Color.White)
         if (mix) IconButton(onClick = {}, enabled = false, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) {

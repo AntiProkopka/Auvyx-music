@@ -152,9 +152,14 @@ fun NexusRoot(vm: AppViewModel) {
     val backdrop = if (live) rememberHazeState() else null
     val lamp = remember { mutableStateOf(Offset.Unspecified) }
     val playingArt = if (glass) artworkBitmap(player.artworkUri) else null
-    LaunchedEffect(player.mediaId) { if (player.mediaId == null) lamp.value = Offset.Unspecified }
+    LaunchedEffect(player.mediaId, route) { if (player.mediaId == null) lamp.value = Offset.Unspecified }
     val primary = MaterialTheme.colorScheme.primary
-    val artLight = animateColorAsState(if (glass) rememberArtworkAccent(playingArt, primary) ?: Color.Transparent else Color.Transparent, tween(580))
+    val readyColor = if (glass) rememberArtworkAccent(playingArt) else null
+    var lastColor by remember { mutableStateOf(Color.Transparent) }
+    LaunchedEffect(readyColor, player.artworkUri) {
+        if (readyColor != null || player.artworkUri.isNullOrBlank()) lastColor = readyColor ?: Color.Transparent
+    }
+    val artLight = animateColorAsState(lastColor, tween(420), label = "Cover light")
     SharedTransitionLayout {
         CompositionLocalProvider(LocalPhotos provides if (glass) loadPhotoCatalog() else emptyMap(), LocalBackdrop provides backdrop, LocalLamp provides lamp,
             LocalArtLight provides artLight, LocalGlassQuality provides quality, LocalTransition provides if (glass) this else null) {
@@ -164,7 +169,7 @@ fun NexusRoot(vm: AppViewModel) {
                     val shade = MaterialTheme.colorScheme.background
                     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
                         0f to shade.copy(alpha = .76f),
-                        .40f to shade.copy(alpha = .40f),
+                        .40f to shade.copy(alpha = .52f),
                         .73f to shade.copy(alpha = .54f),
                         1f to shade.copy(alpha = .86f)
                     )))
@@ -177,8 +182,15 @@ fun NexusRoot(vm: AppViewModel) {
                     topBar = {
                         if (route != "player" && !(route == "search" && !glass) && route?.startsWith("playlist") != true) {
                             if (glass) {
-                                Text(title, style = if (route == "home") MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineMedium,
-                                    modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).padding(horizontal = 19.dp, vertical = 8.dp))
+                                Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                                    .padding(horizontal = 19.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    if (route == "home") {
+                                        androidx.compose.foundation.Image(painterResource(R.drawable.auvyx_default_icon), null,
+                                            Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)))
+                                        Spacer(Modifier.width(10.dp))
+                                    }
+                                    Text(title, style = if (route == "home") MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineMedium)
+                                }
                             } else CenterAlignedTopAppBar(
                                 title = {
                                     Text(
@@ -205,7 +217,7 @@ fun NexusRoot(vm: AppViewModel) {
                             ) {
                                 if (player.mediaId != null) CompositionLocalProvider(LocalVisibility provides miniVisibility) { MiniPlayer(vm, onOpen = openPlayer) }
                                 if (glass) {
-                                    Row(Modifier.fillMaxWidth().height(64.dp).frosted(CircleShape, overPage = true).testTag("bottom-dock"),
+                                    Row(Modifier.fillMaxWidth().height(56.dp).frosted(CircleShape, GlassRole.Dock).testTag("bottom-dock"),
                                         verticalAlignment = Alignment.CenterVertically) {
                                         navItems.forEach { item ->
                                             val active = route == item.route || (item.route == "library" && route?.startsWith("playlist") == true)
@@ -309,6 +321,8 @@ private fun FirstRunNicknameDialog(vm: AppViewModel) {
     var draft by remember { mutableStateOf("") }
     if (ready && nickname == null) {
         AlertDialog(
+            modifier = Modifier.frosted(MaterialTheme.shapes.extraLarge, GlassRole.Panel),
+            containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
             onDismissRequest = {},
             title = { Text("Как к вам обращаться?") },
             text = {
@@ -347,7 +361,7 @@ private fun MiniPlayer(vm: AppViewModel, onOpen: () -> Unit) {
     Column(
         Modifier.fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
-            .then(if (isGlass) Modifier.frosted(MaterialTheme.shapes.large, overPage = true) else Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh))
+            .then(if (isGlass) Modifier.frosted(MaterialTheme.shapes.large, GlassRole.Mini) else Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh))
             .clickable(interactionSource = null, indication = ripple(), onClick = onOpen)
     ) {
         Row(

@@ -21,6 +21,7 @@ import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -156,10 +157,9 @@ fun SearchScreen(vm: AppViewModel) {
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow,
                 unfocusedContainerColor = if (glass) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                unfocusedBorderColor = if (glass) Color.Transparent else MaterialTheme.colorScheme.outlineVariant
             ),
-            label = if (glass) { { Text("Трек или исполнитель") } } else null,
-            placeholder = { Text("Название композиции или артиста") },
+            placeholder = { Text(if (glass) "Трек или исполнитель" else "Название композиции или артиста") },
             leadingIcon = { com.nexus.music.ui.components.BrandIcon(R.drawable.glass_search, Icons.Default.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
@@ -168,7 +168,7 @@ fun SearchScreen(vm: AppViewModel) {
                     }
                 }
             },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).frosted(MaterialTheme.shapes.extraLarge)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).frosted(MaterialTheme.shapes.extraLarge, com.nexus.music.ui.theme.GlassRole.Field)
         )
 
         LazyColumn(
@@ -300,10 +300,11 @@ private fun SearchHeading(title: String) {
 
 @Composable
 private fun SourceToggle(active: Boolean, label: String, icon: Int, logo: Boolean = false, change: (Boolean) -> Unit) {
-    Box(Modifier.size(54.dp, 46.dp).frosted(MaterialTheme.shapes.medium)
+    Box(Modifier.size(56.dp, 48.dp).frosted(MaterialTheme.shapes.medium)
         .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = .23f) else Color.Transparent)
         .toggleable(active, role = Role.Checkbox, onValueChange = change), contentAlignment = Alignment.Center) {
-        if (logo) Image(painterResource(icon), label, Modifier.size(30.dp), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color(0xffff5600)))
-        else Icon(painterResource(icon), label, tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        if (logo) Image(painterResource(icon), label, Modifier.size(30.dp), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(if (active) Color(0xffff793e) else MaterialTheme.colorScheme.onSurfaceVariant))
+        if (active) Spacer(Modifier.align(Alignment.BottomCenter).padding(bottom = 5.dp).size(12.dp, 2.dp).background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape))
+        if (!logo) Icon(painterResource(icon), label, tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
