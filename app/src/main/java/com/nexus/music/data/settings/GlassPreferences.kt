@@ -15,7 +15,9 @@ enum class GlassAccent(val title: String, val photoFolder: String, val ink: Long
     Forest("Forest Haze", "forest haze", 0xff456b40, 0xff91b580, 0xffd6e8c9)
 }
 
-enum class GlassQuality { Medium, High, Ultra }
+enum class GlassQuality { Low, Medium, High, Ultra;
+    val liveBackdrop get() = this == High || this == Ultra
+}
 
 data class FollowedArtist(val name: String, val owner: Long?, val cloud: Boolean, val permalink: String?, val avatar: String?) {
     val key get() = if (cloud) "sc/" + (owner?.toString() ?: permalink) else "local/" + name.trim().lowercase()

@@ -152,7 +152,6 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     val style = com.nexus.music.ui.theme.LocalStyle.current
     val s by vm.player.state.collectAsStateWithLifecycle()
     val tracks by vm.knownTracks.collectAsStateWithLifecycle()
-    val pos by vm.player.position.collectAsStateWithLifecycle()
     val eqGains by vm.equalizerGains.collectAsStateWithLifecycle()
     val eqEnabled by vm.equalizerEnabled.collectAsStateWithLifecycle()
     val eqPreset by vm.equalizerPreset.collectAsStateWithLifecycle()
@@ -189,15 +188,9 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         }
     }
     BackHandler(showQueue) { showQueue = false }
-    var dragging by remember { mutableStateOf(false) }
-    var dragValue by remember { mutableFloatStateOf(0f) }
-
     val track = remember(tracks, s.mediaId) { tracks.firstOrNull { it.id.toString() == s.mediaId } }
     val isFavorite = track?.isFavorite == true
     val artworkUri = track?.artworkUri ?: s.artworkUri
-    val duration = s.durationMs.coerceAtLeast(1L)
-    val sliderValue = if (dragging) dragValue else pos.toFloat().coerceIn(0f, duration.toFloat())
-
     val config = androidx.compose.ui.platform.LocalConfiguration.current
     val compact = (config.screenHeightDp < 520 || config.fontScale > 1.5f) && !showQueue
     val scroll = rememberScrollState()
@@ -426,17 +419,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             }
         }
 
-        ExpressiveSlider(
-            value = sliderValue,
-            enabled = s.canSeek,
-            onValueChange = { dragging = true; dragValue = it },
-            onValueChangeFinished = { vm.player.seekTo(dragValue.toLong()); dragging = false },
-            valueRange = 0f..duration.toFloat()
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(formatTime(sliderValue.toLong()), style = MaterialTheme.typography.bodySmall)
-            Text(formatTime(s.durationMs), style = MaterialTheme.typography.bodySmall)
-        }
+        key(s.mediaId) { PlaybackProgress(vm, s.durationMs, s.canSeek) }
 
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp).frosted(MaterialTheme.shapes.extraLarge),
@@ -503,14 +486,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             }
         }
         if (isGlass && s.mediaId != null) {
-            val id = s.mediaId.orEmpty()
-            val text by remember(id) { vm.lyrics(id) }.collectAsStateWithLifecycle(initialValue = "")
-            val lines = remember(text) { com.nexus.music.playback.timedLyrics(text) }
-            val preview = lines.getOrNull(com.nexus.music.playback.activeLyricIndex(lines, pos))?.second
-                ?: lines.firstOrNull()?.second ?: text.lineSequence().firstOrNull()
-            if (!preview.isNullOrBlank()) TextButton(onClick = { panel = PlayerPanel.Lyrics }) {
-                Text(preview, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+            LyricsPreview(vm, s.mediaId.orEmpty()) { panel = PlayerPanel.Lyrics }
         }
         Spacer(Modifier.height(6.dp))
     }
@@ -531,7 +507,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     }
     if (panel == PlayerPanel.Lyrics && s.mediaId != null) {
         key(s.mediaId) {
-            TrackLyricsSheet(vm, s.mediaId.orEmpty(), s.title, s.artist, s.durationMs, pos,
+            TrackLyricsSheet(vm, s.mediaId.orEmpty(), s.title, s.artist, s.durationMs, vm.player.position.collectAsStateWithLifecycle().value,
                 track?.takeIf { it.source == "soundcloud" }?.sourceUrl) { if (panel == PlayerPanel.Lyrics) panel = null }
         }
     }
@@ -544,6 +520,41 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             onSelect = { device -> PlaybackAudioRouting.select(device); showOutput = false },
             onDismiss = { showOutput = false }
         )
+    }
+}
+
+@Composable
+private fun PlaybackProgress(vm: AppViewModel, durationMs: Long, canSeek: Boolean) {
+    val pos by vm.player.position.collectAsStateWithLifecycle()
+    var dragging by remember { mutableStateOf(false) }
+    var dragValue by remember { mutableFloatStateOf(0f) }
+
+    val duration = durationMs.coerceAtLeast(1L)
+    val sliderValue = if (dragging) dragValue else pos.toFloat().coerceIn(0f, duration.toFloat())
+
+    ExpressiveSlider(
+        value = sliderValue,
+        enabled = canSeek,
+        onValueChange = { dragging = true; dragValue = it },
+        onValueChangeFinished = { vm.player.seekTo(dragValue.toLong()); dragging = false },
+        valueRange = 0f..duration.toFloat()
+    )
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(formatTime(sliderValue.toLong()), style = MaterialTheme.typography.bodySmall)
+        Text(formatTime(durationMs), style = MaterialTheme.typography.bodySmall)
+    }
+
+}
+
+@Composable
+private fun LyricsPreview(vm: AppViewModel, id: String, onOpen: () -> Unit) {
+    val pos by vm.player.position.collectAsStateWithLifecycle()
+    val text by remember(id) { vm.lyrics(id) }.collectAsStateWithLifecycle(initialValue = "")
+    val lines = remember(text) { com.nexus.music.playback.timedLyrics(text) }
+    val preview = lines.getOrNull(com.nexus.music.playback.activeLyricIndex(lines, pos))?.second
+        ?: lines.firstOrNull()?.second ?: text.lineSequence().firstOrNull()
+    if (!preview.isNullOrBlank()) TextButton(onClick = onOpen) {
+        Text(preview, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

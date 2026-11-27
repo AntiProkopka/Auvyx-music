@@ -148,18 +148,18 @@ fun NexusRoot(vm: AppViewModel) {
     val glass = style == "glass"
     val quality by vm.glassQuality.collectAsStateWithLifecycle()
     val keyboardVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
-    val wallpaper = rememberHazeState()
-    val page = rememberHazeState()
+    val live = glass && quality.liveBackdrop && android.os.Build.VERSION.SDK_INT >= 31
+    val backdrop = if (live) rememberHazeState() else null
     val lamp = remember { mutableStateOf(Offset.Unspecified) }
     val playingArt = if (glass) artworkBitmap(player.artworkUri) else null
     LaunchedEffect(player.mediaId) { if (player.mediaId == null) lamp.value = Offset.Unspecified }
     val primary = MaterialTheme.colorScheme.primary
     val artLight = animateColorAsState(if (glass) rememberArtworkAccent(playingArt, primary) ?: Color.Transparent else Color.Transparent, tween(580))
     SharedTransitionLayout {
-        CompositionLocalProvider(LocalPhotos provides if (glass) loadPhotoCatalog() else emptyMap(), LocalWallpaper provides wallpaper, LocalPage provides page, LocalLamp provides lamp,
+        CompositionLocalProvider(LocalPhotos provides if (glass) loadPhotoCatalog() else emptyMap(), LocalBackdrop provides backdrop, LocalLamp provides lamp,
             LocalArtLight provides artLight, LocalGlassQuality provides quality, LocalTransition provides if (glass) this else null) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                if (glass) Box(Modifier.fillMaxSize().hazeSource(page, zIndex = 0f).hazeSource(wallpaper).background(MaterialTheme.colorScheme.background)) {
+                if (glass) Box(Modifier.fillMaxSize().then(if (backdrop != null) Modifier.hazeSource(backdrop, zIndex = 0f) else Modifier).background(MaterialTheme.colorScheme.background)) {
                     GlassWallpaper(vm)
                     val shade = MaterialTheme.colorScheme.background
                     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
@@ -260,7 +260,7 @@ fun NexusRoot(vm: AppViewModel) {
                             top = padding.calculateTopPadding(),
                             end = padding.calculateEndPadding(direction),
                             bottom = if (route == "player") bottomPadding else 0.dp
-                        ).fillMaxSize().then(if (glass) Modifier.hazeSource(page, zIndex = 1f) else Modifier)) {
+                        ).fillMaxSize().then(if (backdrop != null) Modifier.hazeSource(backdrop, zIndex = 1f) else Modifier)) {
                             val motion = MaterialTheme.motionScheme
                             NavHost(
                                 navController = nav,
@@ -280,7 +280,7 @@ fun NexusRoot(vm: AppViewModel) {
                             AnimatedContent(album, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(150)) },
                                 label = "Album page") { target -> if (target != null) {
                                 androidx.activity.compose.BackHandler(enabled = artist == null && album == target) { vm.albumTarget.value = null }
-                                Surface(Modifier.fillMaxSize(), color = if (glass) MaterialTheme.colorScheme.background.copy(alpha = .78f) else MaterialTheme.colorScheme.surface) {
+                                Surface(Modifier.fillMaxSize(), color = if (glass) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface) {
                                     androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.AlbumScreen(vm, target) }
                                 }
                             }
@@ -288,7 +288,7 @@ fun NexusRoot(vm: AppViewModel) {
                             AnimatedContent(artist, transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(150)) },
                                 label = "Artist page") { target -> if (target != null) {
                                 androidx.activity.compose.BackHandler(enabled = artist == target) { vm.artistTarget.value = null }
-                                Surface(Modifier.fillMaxSize(), color = if (glass) MaterialTheme.colorScheme.background.copy(alpha = .78f) else MaterialTheme.colorScheme.surface) {
+                                Surface(Modifier.fillMaxSize(), color = if (glass) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface) {
                                     androidx.compose.runtime.key(target) { com.nexus.music.ui.screens.ArtistScreen(vm, target, onOpenPlayer = openPlayer) }
                                 }
                             }

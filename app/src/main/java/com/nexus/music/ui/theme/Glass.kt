@@ -25,8 +25,7 @@ import com.nexus.music.data.settings.GlassQuality
 import dev.chrisbanes.haze.*
 
 internal val LocalGlassQuality = staticCompositionLocalOf { GlassQuality.Ultra }
-internal val LocalWallpaper = staticCompositionLocalOf<HazeState?> { null }
-internal val LocalPage = staticCompositionLocalOf<HazeState?> { null }
+internal val LocalBackdrop = staticCompositionLocalOf<HazeState?> { null }
 internal val LocalArtLight = staticCompositionLocalOf<State<Color>> { mutableStateOf(Color.Transparent) }
 internal val LocalLamp = staticCompositionLocalOf { mutableStateOf(Offset.Unspecified) }
 internal val isGlass: Boolean @Composable get() = LocalStyle.current == "glass"
@@ -35,7 +34,7 @@ internal val isGlass: Boolean @Composable get() = LocalStyle.current == "glass"
 internal fun Modifier.frosted(shape: Shape, overPage: Boolean = false): Modifier {
     if (!isGlass) return this
     val quality = LocalGlassQuality.current
-    val source = if (overPage) LocalPage.current else LocalWallpaper.current
+    val source = LocalBackdrop.current
     val colors = MaterialTheme.colorScheme
     val smoked = lerp(colors.background, colors.surfaceContainerHigh, if (overPage) .57f else .35f)
     val tint = smoked.copy(alpha = if (overPage) .67f else .55f)
@@ -49,7 +48,7 @@ internal fun Modifier.frosted(shape: Shape, overPage: Boolean = false): Modifier
     val blur = when (quality) {
         GlassQuality.High -> if (overPage) 15.dp else 9.dp
         GlassQuality.Ultra -> if (overPage) 26.dp else 16.dp
-        GlassQuality.Medium -> 0.dp
+        GlassQuality.Low, GlassQuality.Medium -> 0.dp
     }
     return clipped.then(
         if (quality == GlassQuality.Ultra && overPage) Modifier.onGloballyPositioned { origin.value = it.positionInRoot() }
@@ -60,7 +59,9 @@ internal fun Modifier.frosted(shape: Shape, overPage: Boolean = false): Modifier
         noiseFactor = 0f,
         blurRadius = blur,
         fallbackTint = HazeTint(smoked.copy(alpha = .88f))
-    )).drawWithContent {
+    )) {
+        canDrawArea = { it.zIndex == 0f || overPage }
+    }.drawWithContent {
         val highlight = highlightState.value
         if (quality == GlassQuality.Ultra && overPage && highlight.alpha > 0 && origin.value != Offset.Unspecified && lamp.value != Offset.Unspecified) {
             val center = lamp.value - origin.value
@@ -111,6 +112,7 @@ internal fun AtmosphericLight(fullPlayer: Boolean) {
         val center = if (fullPlayer) Offset(size.width * .5f, size.height * .34f) else lamp.value
         if (center != Offset.Unspecified) {
             val opacity = when (quality) {
+                GlassQuality.Low -> .08f
                 GlassQuality.Medium -> .14f
                 GlassQuality.High -> .22f
                 GlassQuality.Ultra -> .32f

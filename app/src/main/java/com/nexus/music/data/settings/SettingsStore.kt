@@ -73,7 +73,7 @@ class SettingsStore(private val context: Context) {
         GlassQuality.entries.find { it.name == prefs[qualityKey] } ?: GlassQuality.Ultra
     }
     suspend fun setGlassQuality(quality: GlassQuality) {
-        store.edit { it[qualityKey] = quality.name; it[styleKey] = "glass" }
+        store.edit { it[qualityKey] = quality.name }
     }
 
     val accent = store.data.map { prefs -> GlassAccent.entries.find { it.name == prefs[accentKey] } ?: GlassAccent.Sunset }

@@ -98,6 +98,7 @@ internal fun GlassWallpaper(vm: AppViewModel) {
     val blur by vm.blur.collectAsStateWithLifecycle()
     val quality = LocalGlassQuality.current
     val radius = when (quality) {
+        GlassQuality.Low -> blur * .25f
         GlassQuality.Medium -> blur * .42f
         GlassQuality.High -> blur * .72f
         GlassQuality.Ultra -> blur.toFloat()

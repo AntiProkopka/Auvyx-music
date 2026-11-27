@@ -38,16 +38,15 @@ internal fun Appearance(vm: AppViewModel) {
                 verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(style == id, null, Modifier.padding(9.dp))
                 Text(name)
-                if (id == "material") Text(" · Low", style = MaterialTheme.typography.labelMedium)
             }
         }
+        if (!isGlass) return@Column
         Text("Качество графики", style = MaterialTheme.typography.titleMedium)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             GlassQuality.entries.forEach { preset ->
                 FilterChip(selected = isGlass && quality == preset, onClick = { vm.setGlassQuality(preset) }, label = { Text(preset.name) })
             }
         }
-        if (!isGlass) return@Column
         Text(accent.title, style = MaterialTheme.typography.titleMedium)
         LazyRow(modifier = Modifier.testTag("appearance-accents"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(GlassAccent.entries) { entry ->
