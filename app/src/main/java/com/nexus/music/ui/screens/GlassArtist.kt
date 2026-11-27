@@ -1,6 +1,20 @@
 package com.nexus.music.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
+import com.nexus.music.R
+import com.nexus.music.ui.components.LocalArtworkImage
+import com.nexus.music.ui.components.rememberArtworkAccent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
@@ -99,17 +113,41 @@ internal fun GlassArtist(vm: AppViewModel, target: AppViewModel.ArtistTarget, on
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { TextButton(onClick = { vm.artistTarget.value = null }) { Text("← Назад") } }
         item { Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            HaloArtwork(avatar, artist.name, Modifier.size(216.dp).align(androidx.compose.ui.Alignment.CenterHorizontally))
+            ArtistAvatar(avatar, artist.name, Modifier.size(216.dp).align(Alignment.CenterHorizontally))
             Text(artist.name, style = MaterialTheme.typography.headlineLarge)
             profile?.description?.takeIf { it.isNotBlank() }?.let { Text(it, maxLines = 6) }
-            TextButton(onClick = { vm.toggleFollow(artist) }, enabled = !target.cloud || artist.owner != null) {
-                Text(if (followed.any { it.key == artist.key }) "Отписаться" else "Подписаться")
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = complete && playable, onClick = { if (active && playing.showPause) vm.player.pause() else play(false) }) {
-                    Text(if (active && playing.showPause) "Пауза" else "Слушать")
+            val subscribed = followed.any { it.key == artist.key }
+            val pause = active && playing.showPause
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilledTonalButton(
+                    onClick = { vm.toggleFollow(artist) },
+                    enabled = !target.cloud || artist.owner != null,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = CircleShape,
+                    contentPadding = PaddingValues(horizontal = 10.dp)
+                ) {
+                    Icon(painterResource(if (subscribed) R.drawable.glass_check else R.drawable.glass_plus), null,
+                        Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (subscribed) "Отписаться" else "Подписаться", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                TextButton(enabled = complete && playable, onClick = { play(true) }) { Text("Перемешать") }
+                FilledTonalIconButton(onClick = { play(true) }, enabled = complete && playable,
+                    modifier = Modifier.size(48.dp), shape = CircleShape) {
+                    Icon(painterResource(R.drawable.glass_shuffle), "Перемешать")
+                }
+                FilledIconButton(
+                    onClick = { if (pause) vm.player.pause() else play(false) },
+                    enabled = pause || (complete && playable),
+                    modifier = Modifier.size(64.dp, 48.dp),
+                    shape = CircleShape
+                ) {
+                    Icon(painterResource(if (pause) R.drawable.glass_pause else R.drawable.glass_play),
+                        if (pause) "Пауза" else "Слушать")
+                }
             }
             if (!complete && error == null) LinearProgressIndicator()
             if (error != null || releaseError) TextButton(onClick = { retry++ }) { Text("Повторить загрузку каталога") }
@@ -117,12 +155,35 @@ internal fun GlassArtist(vm: AppViewModel, target: AppViewModel.ArtistTarget, on
         item { Text("Популярные песни", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleLarge) }
         if (top.isEmpty()) item { Text("Нет данных о прослушиваниях", Modifier.padding(horizontal = 16.dp)) }
         items(top, key = { it.key }) { song ->
-            ListItem(modifier = Modifier.frosted(MaterialTheme.shapes.medium, GlassRole.Row).clickable(onClick = song.onClick), headlineContent = { Text(song.title) },
+            ListItem(modifier = Modifier.clickable(onClick = song.onClick), headlineContent = { Text(song.title) },
                 leadingContent = { ArtTile(song.artwork, null, Modifier.size(48.dp)) },
-                colors = ListItemDefaults.colors(containerColor = if (usesGlassV4) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow))
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow))
         }
         item { CoverCarousel("Все песни", songs, empty = "Песни не найдены") }
         item { CoverCarousel("Синглы", singles, empty = "Нет данных о синглах") }
         item { CoverCarousel("Альбомы и другие релизы", albums, empty = "Нет данных о релизах") }
+    }
+}
+
+
+@Composable
+private fun ArtistAvatar(uri: String?, name: String, modifier: Modifier) {
+    val bitmap = artworkBitmap(uri)
+    val color = animateColorAsState(rememberArtworkAccent(bitmap) ?: Color.Transparent, tween(420),
+        label = "Artist avatar light")
+    Box(modifier.drawWithCache {
+        val tint = color.value
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val radius = (size.minDimension * .76f).coerceAtLeast(1f)
+        val halo = Brush.radialGradient(
+            0f to tint.copy(alpha = tint.alpha * .62f),
+            .56f to tint.copy(alpha = tint.alpha * .40f),
+            1f to Color.Transparent,
+            center = center,
+            radius = radius
+        )
+        onDrawBehind { if (tint.alpha > 0f) drawCircle(halo, radius, center) }
+    }.padding(10.dp)) {
+        LocalArtworkImage(bitmap, name, Modifier.fillMaxSize().clip(MaterialTheme.shapes.large))
     }
 }

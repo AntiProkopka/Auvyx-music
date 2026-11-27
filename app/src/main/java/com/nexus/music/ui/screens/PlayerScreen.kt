@@ -146,17 +146,13 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.shape.CircleShape
-import com.nexus.music.ui.components.GlassSliderThumb
-import com.nexus.music.ui.components.GlassSliderTrack
 import com.nexus.music.playback.LyricsRepository
 import com.nexus.music.ui.components.rememberArtworkAccent
 
 @OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
-    val brand = isGlass
-    val v4 = usesGlassV4
+    val style = com.nexus.music.ui.theme.LocalStyle.current
     val s by vm.player.state.collectAsStateWithLifecycle()
     val tracks by vm.knownTracks.collectAsStateWithLifecycle()
     val eqGains by vm.equalizerGains.collectAsStateWithLifecycle()
@@ -304,7 +300,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                 Box(
                     modifier = Modifier.size(artworkSize).then(if (glass) Modifier.onGloballyPositioned {
                         lamp.value = it.positionInRoot() + Offset(it.size.width / 2f, it.size.height / 2f)
-                    } else Modifier).aspectRatio(1f).sharedCover().clip(RoundedCornerShape(if (brand) 28.dp else 30.dp))
+                    } else Modifier).aspectRatio(1f).sharedCover().clip(RoundedCornerShape(if (style == "classic") 28.dp else 30.dp))
                         .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer))),
                     contentAlignment = Alignment.Center
                 ) {
@@ -445,13 +441,13 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             )
             FilledIconButton(
                 onClick = { vm.player.togglePlayPause() },
-                modifier = Modifier.size(if (v4) 52.dp else 64.dp),
+                modifier = Modifier.size(64.dp),
                 colors = if (isGlass) androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
                     containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary
                 ) else androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(),
                 shapes = androidx.compose.material3.IconButtonDefaults.shapes(
-                    shape = if (v4) CircleShape else RoundedCornerShape(playCorner),
-                    pressedShape = if (v4) CircleShape else MaterialTheme.shapes.large
+                    shape = RoundedCornerShape(playCorner),
+                    pressedShape = MaterialTheme.shapes.large
                 )
             ) {
                 BrandIcon(if (s.showPause) R.drawable.glass_pause else R.drawable.glass_play, if (s.showPause) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (s.showPause) "Пауза" else "Играть", modifier = Modifier.size(36.dp))
@@ -625,22 +621,12 @@ private fun SoundToolsSheet(
                         val gain = gains.getOrElse(index) { 0f }.coerceIn(-12f, 12f)
                         val slider = remember { SliderState(gain, 0, -12f..12f) }
                         slider.value = gain
-                        val band = Modifier.height(126.dp).fillMaxWidth().semantics {
-                            contentDescription = "${SixBandEqualizer.FREQUENCIES[index].toInt()} Гц"
-                        }
-                        val change: (Float) -> Unit = { vm.setEqualizerBand(index, it) }
-                        if (usesGlassV4) VerticalSlider(
+                        VerticalSlider(
                             state = slider,
-                            onValueChange = change,
-                            modifier = band,
-                            enabled = enabled,
-                            thumb = { GlassSliderThumb(enabled, vertical = true) },
-                            track = { GlassSliderTrack(it, enabled, -12f..12f, vertical = true) },
-                            topToBottom = false
-                        ) else VerticalSlider(
-                            state = slider,
-                            onValueChange = change,
-                            modifier = band,
+                            onValueChange = { vm.setEqualizerBand(index, it) },
+                            modifier = Modifier.height(126.dp).fillMaxWidth().semantics {
+                                contentDescription = "${SixBandEqualizer.FREQUENCIES[index].toInt()} Гц"
+                            },
                             enabled = enabled,
                             topToBottom = false
                         )

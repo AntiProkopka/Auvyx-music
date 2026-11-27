@@ -45,10 +45,10 @@ class ThemeNavigationTest {
         org.junit.Assert.assertEquals(com.nexus.music.data.settings.GlassQuality.Medium, settings.glassQuality.first())
         settings.setGlassQuality(com.nexus.music.data.settings.GlassQuality.Low)
         org.junit.Assert.assertEquals("material", settings.visualStyle.first())
-        settings.setStyle("glass")
+        settings.setStyle("classic")
         org.junit.Assert.assertEquals(com.nexus.music.data.settings.GlassQuality.Low, settings.glassQuality.first())
         settings.setGlassQuality(com.nexus.music.data.settings.GlassQuality.High)
-        org.junit.Assert.assertEquals("glass", settings.visualStyle.first())
+        org.junit.Assert.assertEquals("classic", settings.visualStyle.first())
         org.junit.Assert.assertEquals(com.nexus.music.data.settings.GlassQuality.High, settings.glassQuality.first())
     }
 
@@ -62,7 +62,7 @@ class ThemeNavigationTest {
             compose.onNodeWithText("Пропустить").performClick()
         }
         compose.onNodeWithTag("nav-settings").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
-        compose.onNodeWithText("auvyx Glass UI").performScrollTo().performClick()
+        compose.onNodeWithText("auvyx Classic").performScrollTo().performClick()
         compose.onNodeWithText("Ultra").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("High").performScrollTo().performClick()
         compose.waitUntil(5000) {
@@ -178,7 +178,7 @@ class ThemeNavigationTest {
                 androidx.compose.runtime.CompositionLocalProvider(
                     androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 1.6f)
                 ) {
-                    NexusTheme("dark", "glass") { com.nexus.music.ui.screens.PlayerScreen(vm) {} }
+                    NexusTheme("dark", "classic") { com.nexus.music.ui.screens.PlayerScreen(vm) {} }
                 }
             }
             app.playerController.playTrack(track)
@@ -227,7 +227,7 @@ class ThemeNavigationTest {
                 androidx.compose.runtime.CompositionLocalProvider(
                     androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 1.6f)
                 ) {
-                    NexusTheme("dark", "glass") {
+                    NexusTheme("dark", "classic") {
                         if (visible.value) com.nexus.music.ui.screens.TrackLyricsSheet(
                             vm, "100", "A long track name that wraps on a small display",
                             "Test artist", 12000L, 0L, null

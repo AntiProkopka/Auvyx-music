@@ -62,7 +62,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val themeMode: StateFlow<String> =
         settings.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, "system")
-    val visualStyle = settings.visualStyle.stateIn(viewModelScope, SharingStarted.Eagerly, "glass")
+    val visualStyle = settings.visualStyle.stateIn(viewModelScope, SharingStarted.Eagerly, "classic")
     fun setStyle(style: String) { viewModelScope.launch { settings.setStyle(style) } }
     val accent = settings.accent.stateIn(viewModelScope, lazily, GlassAccent.Sunset)
     val photo = settings.photo.stateIn(viewModelScope, lazily, "")

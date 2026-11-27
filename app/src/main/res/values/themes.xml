@@ -2,10 +2,11 @@
     <style name="Theme.Auvyx" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">#F7F7FF</item>
-        <item name="android:navigationBarColor">#F7F7FF</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowBackground">#020003</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#020003</item>
+        <item name="android:navigationBarColor">#020003</item>
+        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowNoTitle">true</item>
     </style>
 </resources>
