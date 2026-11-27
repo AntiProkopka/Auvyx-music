@@ -81,6 +81,11 @@ class ThemeNavigationTest {
             compose.onNodeWithContentDescription(accent.title).assertIsSelected()
         }
         compose.onNodeWithText("Material 3 Expressive").performScrollTo().performClick()
+        compose.waitUntil(5000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS)
+            kotlinx.coroutines.runBlocking { settings.visualStyle.first() } == "material"
+        }
+        compose.waitForIdle()
         compose.onNodeWithContentDescription("По умолчанию").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Неон").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Стекло").performScrollTo().assertIsDisplayed()
