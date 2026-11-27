@@ -114,6 +114,14 @@ class SettingsStore(private val context: Context) {
     val queueIndex: Flow<Int> = store.data.map { it[Keys.QUEUE_INDEX] ?: 0 }
     val queuePosition: Flow<Long> = store.data.map { it[Keys.QUEUE_POSITION] ?: 0L }
     val shuffle: Flow<Boolean> = store.data.map { it[Keys.SHUFFLE] ?: false }
+    private val finiteRepeatKey = stringPreferencesKey("finite_repeat")
+    internal val finiteRepeat = store.data.map { it[finiteRepeatKey].orEmpty() }
+    internal suspend fun saveFiniteRepeat(value: String?, baseMode: Int? = null) {
+        store.edit {
+            if (value == null) it.remove(finiteRepeatKey) else it[finiteRepeatKey] = value
+            if (baseMode != null) it[Keys.REPEAT] = baseMode
+        }
+    }
     val repeatMode: Flow<Int> = store.data.map { it[Keys.REPEAT] ?: 0 }
     val speed: Flow<Float> = store.data.map { it[Keys.SPEED] ?: 1f }
     val pitch: Flow<Float> = store.data.map { it[Keys.PITCH] ?: 1f }
@@ -177,6 +185,7 @@ class SettingsStore(private val context: Context) {
 
     suspend fun backupSettings(): JSONObject = JSONObject().apply {
         for ((key, value) in store.data.first().asMap()) {
+            if (key == finiteRepeatKey) continue
             put(key.name, if (value is Set<*>) JSONArray(value) else value)
         }
     }

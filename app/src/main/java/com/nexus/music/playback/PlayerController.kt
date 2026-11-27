@@ -75,20 +75,36 @@ class PlayerController(
     private var lastLoggedId: String? = null
     private var queue: List<QueueItem> = emptyList()
     private var saveParametersJob: Job? = null
+    private val _finiteRepeat = MutableStateFlow<FiniteRepeat?>(null)
+    internal val finiteRepeat = _finiteRepeat.asStateFlow()
+    private var repeatSave: Job? = null
     private val pendingActions = mutableListOf<(MediaController) -> Unit>()
 
     private val listener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             lastLoggedId = null
+            val current = _finiteRepeat.value ?: return
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT && activeMoment.value == null) {
+                setFiniteRepeat(current.afterRepeat())
+            } else if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) setFiniteRepeat(null)
+        }
+
+        override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+            if (reason == Player.DISCONTINUITY_REASON_SEEK && oldPosition.mediaItemIndex != newPosition.mediaItemIndex)
+                setFiniteRepeat(null)
         }
 
         override fun onEvents(player: Player, events: Player.Events) {
             if (events.contains(Player.EVENT_TIMELINE_CHANGED)) {
                 val previousQueue = queue
                 rebuildQueue()
+                if (_finiteRepeat.value?.queue?.let { it != queue.map(QueueItem::mediaId) } == true)
+                    setFiniteRepeat(null)
                 if (queue != previousQueue) persistQueue()
                 savePlaybackPosition()
             }
+            if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED) && player.playbackState == Player.STATE_ENDED)
+                setFiniteRepeat(null)
             refreshState()
             if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                 if (player.isPlaying) logHistory() else savePlaybackPosition()
@@ -115,6 +131,7 @@ class PlayerController(
                     .setListener(object : MediaController.Listener {
                         override fun onDisconnected(controller: MediaController) {
                             this@PlayerController.controller = null
+                            _finiteRepeat.value = null
                             _state.value = PlayerState()
                             _position.value = 0L
                         }
@@ -130,6 +147,12 @@ class PlayerController(
                 restoreQueue(connected)
                 connected.addListener(listener)
                 rebuildQueue()
+                val savedRepeat = FiniteRepeat.decode(settings.finiteRepeat.first())
+                if (savedRepeat != null && savedRepeat.queue == queue.map(QueueItem::mediaId) &&
+                    savedRepeat.index == connected.currentMediaItemIndex) {
+                    _finiteRepeat.value = savedRepeat
+                    connected.repeatMode = savedRepeat.playerMode
+                } else if (savedRepeat != null) settings.saveFiniteRepeat(null)
                 refreshState()
                 val waiting = pendingActions.toList()
                 pendingActions.clear()
@@ -194,6 +217,7 @@ class PlayerController(
     fun playQueueIndex(index: Int) = withController { c ->
         if (index in 0 until c.mediaItemCount) {
             lastLoggedId = null
+            setFiniteRepeat(null)
             c.seekToDefaultPosition(index)
             c.play()
         }
@@ -215,8 +239,8 @@ class PlayerController(
         }
     }
 
-    fun next() = withController { it.seekToNext() }
-    fun previous() = withController { it.seekToPrevious() }
+    fun next() = withController { setFiniteRepeat(null); it.seekToNext() }
+    fun previous() = withController { setFiniteRepeat(null); it.seekToPrevious() }
 
     internal fun playMoment(track: TrackEntity, moment: com.nexus.music.data.db.TrackMoment, loop: Boolean) {
         withController { c ->
@@ -250,7 +274,34 @@ class PlayerController(
         refreshState()
     }
 
+    internal fun startFiniteRepeat(total: Int) = withController { c ->
+        if (total !in 2..99 || c.currentMediaItem == null || c.isCurrentMediaItemLive) return@withController
+        val ids = List(c.mediaItemCount) { c.getMediaItemAt(it).mediaId }
+        val base = _finiteRepeat.value?.restoreMode ?: c.repeatMode
+        val restore = if (base == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_OFF else base
+        setFiniteRepeat(FiniteRepeat(ids, c.currentMediaItemIndex, total, total, restore))
+    }
+
+    internal fun cancelFiniteRepeat() = withController { setFiniteRepeat(null) }
+
+    private fun setFiniteRepeat(next: FiniteRepeat?) {
+        val previous = _finiteRepeat.value
+        if (previous == next) return
+        _finiteRepeat.value = next
+        val base = next?.restoreMode ?: previous?.restoreMode ?: Player.REPEAT_MODE_OFF
+        controller?.repeatMode = next?.playerMode ?: base
+        refreshState()
+        repeatSave?.cancel()
+        repeatSave = scope.launch {
+            settings.saveFiniteRepeat(next?.encode(), base)
+        }
+    }
+
     fun cycleRepeat() = withController { c ->
+        if (_finiteRepeat.value != null) {
+            setFiniteRepeat(null)
+            return@withController
+        }
         val nextMode = when (c.repeatMode) {
             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
             Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE

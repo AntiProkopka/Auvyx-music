@@ -91,6 +91,7 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import com.nexus.music.ui.components.ExpressiveFilterChip
 import androidx.compose.material3.FilledIconButton
@@ -164,6 +165,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     var showTrackMenu by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<com.nexus.music.data.db.TrackEntity?>(null) }
     val offlineTransfers by vm.offlineTransfers.collectAsStateWithLifecycle()
+    var showFiniteRepeat by remember { mutableStateOf(false) }
     var showPlaylist by remember { mutableStateOf(false) }
     val disliked by vm.dislikedTracks.collectAsStateWithLifecycle()
     var showOutput by remember { mutableStateOf(false) }
@@ -407,6 +409,11 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
                             showTrackMenu = false
                         })
                     }
+                    DropdownMenuItem(text = { Text("Конечный повтор") },
+                        enabled = s.durationMs > 0, onClick = {
+                            showTrackMenu = false
+                            showFiniteRepeat = true
+                        })
                     DropdownMenuItem(text = { Text("В плейлист…") }, onClick = {
                         showTrackMenu = false
                         showPlaylist = true
@@ -497,6 +504,32 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
             LyricsPreview(vm, s.mediaId.orEmpty()) { panel = PlayerPanel.Lyrics }
         }
         Spacer(Modifier.height(6.dp))
+    }
+
+    if (showFiniteRepeat) {
+        val repeat by vm.player.finiteRepeat.collectAsStateWithLifecycle()
+        var count by remember { mutableStateOf(repeat?.total?.toString() ?: "3") }
+        AlertDialog(onDismissRequest = { showFiniteRepeat = false }, title = { Text("Конечный повтор") },
+            text = {
+                Column {
+                    repeat?.let { Text("${it.iteration} из ${it.total}") }
+                    Text("Число воспроизведений вместе с текущим")
+                    Row { listOf(2, 3, 5).forEach { option ->
+                        TextButton(onClick = { count = option.toString() }) { Text("$option") }
+                    } }
+                    OutlinedTextField(count, { count = it.filter(Char::isDigit).take(2) }, singleLine = true,
+                        label = { Text("От 2 до 99") })
+                    if (repeat != null) TextButton(onClick = {
+                        vm.player.cancelFiniteRepeat()
+                        showFiniteRepeat = false
+                    }) { Text("Остановить конечный повтор") }
+                }
+            },
+            confirmButton = { TextButton(enabled = count.toIntOrNull()?.let { it in 2..99 } == true, onClick = {
+                count.toIntOrNull()?.let(vm.player::startFiniteRepeat)
+                showFiniteRepeat = false
+            }) { Text("Применить") } },
+            dismissButton = { TextButton(onClick = { showFiniteRepeat = false }) { Text("Закрыть") } })
     }
 
     deleteTarget?.let { selected ->

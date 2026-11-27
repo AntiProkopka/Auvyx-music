@@ -153,6 +153,13 @@ class ThemeNavigationTest {
         compose.runOnUiThread { controller.playNext(tracks[1]); controller.enqueue(tracks[0]) }
         awaitState { controller.state.value.queue.size == 5 }
         org.junit.Assert.assertEquals(listOf("Audio 2", "Audio 1"), controller.state.value.queue.takeLast(2).map { it.title })
+        compose.runOnUiThread { controller.startFiniteRepeat(3) }
+        awaitState { controller.finiteRepeat.value?.iteration == 1 &&
+            controller.state.value.repeatMode == androidx.media3.common.Player.REPEAT_MODE_ONE }
+        compose.runOnUiThread { controller.next() }
+        awaitState { controller.finiteRepeat.value == null &&
+            controller.state.value.repeatMode != androidx.media3.common.Player.REPEAT_MODE_ONE }
+
     }
 
     private fun seedTracks(app: NexusApp) = kotlinx.coroutines.runBlocking {

@@ -24,6 +24,19 @@ class TrackToolsTest {
         assertTrue(mergedRanges(listOf(range(0, 4_000)), 2_000).isEmpty())
     }
 
+    @Test fun finiteRepeatUsesBaseModeForFinalPassAndRestoresEncodedEntry() {
+        val repeat = com.nexus.music.playback.FiniteRepeat(listOf("7", "7", "8"), 1, 3, 3,
+            androidx.media3.common.Player.REPEAT_MODE_OFF)
+        val next = repeat.afterRepeat()!!
+        assertEquals(2, next.iteration)
+        assertEquals(next, com.nexus.music.playback.FiniteRepeat.decode(next.encode()))
+        val last = next.afterRepeat()!!
+        assertEquals(3, last.iteration)
+        assertEquals(1, last.index)
+        assertEquals(androidx.media3.common.Player.REPEAT_MODE_OFF, last.playerMode)
+        assertNull(last.afterRepeat())
+    }
+
     @Test fun gainsAttenuateWithoutExceedingUnity() {
         assertEquals(.630957f, attenuation(-4f), .0001f)
         assertEquals(1f, attenuation(0f))
