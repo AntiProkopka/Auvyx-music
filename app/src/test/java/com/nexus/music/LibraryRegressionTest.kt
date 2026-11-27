@@ -61,6 +61,7 @@ class LibraryRegressionTest {
             source.trackTools().putMoment(TrackMoment("6172f0ee-013f-4d2d-929d-b0bd125a239b", local, 100L, 800L,
                 "Припев", 42L))
             source.trackTools().putGain(com.nexus.music.data.db.TrackGain(local, -4f))
+            source.soundProfiles().put(TrackSoundProfile(local, true, true, "bass_boost", "[5,3,0,1,0,2]", .8f, null))
             source.trackTools().putLink(com.nexus.music.data.db.TrackLink(minOf(local, cloud), maxOf(local, cloud), "Связь", 1))
 
             LibraryExport.write(context.contentResolver,uri,source,settings)
@@ -78,6 +79,7 @@ class LibraryRegressionTest {
             assertEquals(collection, dest.smartCollections().lists().first().single())
             assertEquals(destinationTag.id, dest.smartCollections().conditions(collection.id).first().single().argument)
             assertEquals(42L, dest.trackTools().moments(fav.id).first().single().createdAt)
+            assertEquals(.8f, dest.soundProfiles().profile(fav.id).first()!!.speed!!, 0.001f)
             assertEquals(-4f, dest.trackTools().gain(fav.id).first()!!.decibels, 0f)
             assertEquals("soundcloud", dest.trackDao().getByIds(listOf(
                 dest.trackTools().links(fav.id).first().single().other(fav.id))).single().source)

@@ -9,7 +9,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
-import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -55,11 +54,12 @@ data class PlayerState(
 )
 
 /** UI bridge to the MediaSessionService player. */
-class PlayerController(
+class PlayerController internal constructor(
     private val context: Context,
     private val db: NexusDatabase,
     private val settings: SettingsStore,
     private val scope: CoroutineScope,
+    private val soundProfiles: SoundProfileResolver,
     private val activeMoment: MutableStateFlow<com.nexus.music.data.db.TrackMoment?> = MutableStateFlow(null)
 ) {
     private val _state = MutableStateFlow(PlayerState())
@@ -141,9 +141,6 @@ class PlayerController(
                 controller = connected
                 connected.shuffleModeEnabled = settings.shuffle.first()
                 connected.repeatMode = settings.repeatMode.first()
-                val speed = settings.speed.first().coerceIn(0.5f, 2f)
-                val pitch = settings.pitch.first().coerceIn(0.5f, 2f)
-                connected.setPlaybackParameters(PlaybackParameters(speed, pitch))
                 restoreQueue(connected)
                 connected.addListener(listener)
                 rebuildQueue()
@@ -320,16 +317,14 @@ class PlayerController(
     fun setSpeedAndPitch(speed: Float, pitch: Float) = setPlaybackParameters(speed, pitch)
 
     private fun setPlaybackParameters(speed: Float, pitch: Float) {
-        val safeSpeed = speed.coerceIn(0.5f, 2f)
-        val safePitch = pitch.coerceIn(0.5f, 2f)
-        withController { c ->
-            c.setPlaybackParameters(PlaybackParameters(safeSpeed, safePitch))
-            saveParametersJob?.cancel()
-            saveParametersJob = scope.launch {
-                delay(300)
-                settings.setPlaybackParameters(safeSpeed, safePitch)
-            }
-            refreshState()
+        val safeSpeed = speed.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
+        val safePitch = pitch.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
+        if (soundProfiles.updateTemporary { copy(speed = safeSpeed, pitch = safePitch) }) return
+        soundProfiles.updateBase { copy(speed = safeSpeed, pitch = safePitch) }
+        saveParametersJob?.cancel()
+        saveParametersJob = scope.launch {
+            delay(300)
+            settings.setPlaybackParameters(safeSpeed, safePitch)
         }
     }
 

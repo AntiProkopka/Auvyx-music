@@ -20,7 +20,6 @@ import com.nexus.music.data.db.PlaylistTrackEntity
 import com.nexus.music.data.db.hasEnabledSource
 import kotlinx.coroutines.flow.map
 import com.nexus.music.data.db.TrackEntity
-import com.nexus.music.data.settings.SettingsStore
 import com.nexus.music.data.soundcloud.SoundCloudRepository
 import com.nexus.music.data.soundcloud.SoundCloudTrack
 import com.nexus.music.playback.SixBandEqualizer
@@ -119,14 +118,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _nickname = MutableStateFlow<String?>(null)
     val nickname: StateFlow<String?> = _nickname.asStateFlow()
     val nicknameReady = MutableStateFlow(false)
-    private val _equalizerGains = MutableStateFlow(SettingsStore.DEFAULT_EQ_GAINS)
-    val equalizerGains: StateFlow<List<Float>> = _equalizerGains.asStateFlow()
-    val equalizerPreset: StateFlow<String> = settings.equalizerPreset.stateIn(
-        viewModelScope, SharingStarted.Eagerly, "bass_boost"
-    )
-    val equalizerEnabled: StateFlow<Boolean> = settings.equalizerEnabled.stateIn(
-        viewModelScope, SharingStarted.Eagerly, true
-    )
+    internal val soundSettings = nexus.soundProfiles.effective
+    internal val activeSoundProfile = nexus.soundProfiles.active
+    internal val soundProfiles = db.soundProfiles()
 
     data class AlbumTarget(val title: String, val artist: String, val soundCloud: SoundCloudAlbumTrack? = null) {
         data class SoundCloudAlbumTrack(val id: Long, val permalink: String, val releaseId: Long? = null)
@@ -197,13 +191,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 nicknameReady.value = true
             }
         }
-        viewModelScope.launch {
-            settings.equalizerGains.collect { gains ->
-                _equalizerGains.value = gains
-                nexus.equalizer.setGains(gains)
-            }
-        }
-        viewModelScope.launch { settings.equalizerEnabled.collect(nexus.equalizer::setEnabled) }
     }
 
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
@@ -267,7 +254,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setEqualizerEnabled(enabled: Boolean) {
-        nexus.equalizer.setEnabled(enabled)
+        if (nexus.soundProfiles.updateTemporary { copy(eqEnabled = enabled) }) return
+        nexus.soundProfiles.updateBase { copy(eqEnabled = enabled) }
         viewModelScope.launch { settings.setEqualizerEnabled(enabled) }
     }
 
@@ -276,11 +264,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             "default" -> SixBandEqualizer.DEFAULT
             "treble" -> SixBandEqualizer.TREBLE_BOOST
             "vocal" -> SixBandEqualizer.VOCAL
-            "custom" -> equalizerGains.value
+            "custom" -> soundSettings.value.gains
             else -> SixBandEqualizer.BASS_BOOST
         }
-        _equalizerGains.value = gains
-        nexus.equalizer.setGains(gains)
+        if (nexus.soundProfiles.updateTemporary { copy(preset = preset, gains = gains) }) return
+        nexus.soundProfiles.updateBase { copy(preset = preset, gains = gains) }
         equalizerSaveJob?.cancel()
         equalizerSaveJob = viewModelScope.launch {
             settings.setEqualizerPreset(preset, gains)
@@ -289,10 +277,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setEqualizerBand(index: Int, value: Float) {
         if (index !in 0 until SixBandEqualizer.BAND_COUNT) return
-        val updated = _equalizerGains.value.toMutableList()
+        val updated = soundSettings.value.gains.toMutableList()
         updated[index] = value.coerceIn(-12f, 12f)
-        _equalizerGains.value = updated
-        nexus.equalizer.setGains(updated)
+        if (nexus.soundProfiles.updateTemporary { copy(preset = "custom", gains = updated) }) return
+        nexus.soundProfiles.updateBase { copy(preset = "custom", gains = updated) }
         equalizerSaveJob?.cancel()
         equalizerSaveJob = viewModelScope.launch {
             delay(180)

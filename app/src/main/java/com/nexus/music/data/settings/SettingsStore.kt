@@ -2,6 +2,8 @@ package com.nexus.music.data.settings
 
 import android.content.Context
 import com.nexus.music.playback.SixBandEqualizer
+import com.nexus.music.playback.SoundSettings
+import com.nexus.music.playback.soundPresets
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -128,7 +130,19 @@ class SettingsStore(private val context: Context) {
     val nickname: Flow<String?> = store.data.map { it[Keys.NICKNAME] }
     val equalizerEnabled: Flow<Boolean> = store.data.map { it[Keys.EQ_ENABLED] ?: true }
     val equalizerPreset: Flow<String> = store.data.map { it[Keys.EQ_PRESET] ?: "bass_boost" }
-    val equalizerGains: Flow<List<Float>> = store.data.map { prefs ->
+    val equalizerGains: Flow<List<Float>> = store.data.map(::readEqBands)
+
+    internal val soundSettings = store.data.map { prefs ->
+        SoundSettings(
+            eqEnabled = prefs[Keys.EQ_ENABLED] ?: true,
+            preset = prefs[Keys.EQ_PRESET]?.takeIf { it in soundPresets } ?: "bass_boost",
+            gains = readEqBands(prefs),
+            speed = prefs[Keys.SPEED]?.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f,
+            pitch = prefs[Keys.PITCH]?.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
+        )
+    }
+
+    private fun readEqBands(prefs: Preferences): List<Float> {
         val gains = listOf(
             prefs[Keys.EQ_60] ?: DEFAULT_EQ_GAINS[0],
             prefs[Keys.EQ_150] ?: DEFAULT_EQ_GAINS[1],
@@ -137,7 +151,7 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.EQ_2400] ?: DEFAULT_EQ_GAINS[4],
             prefs[Keys.EQ_15000] ?: DEFAULT_EQ_GAINS[5]
         )
-        if (prefs[Keys.EQ_PRESET] == "treble" && gains == listOf(-1f, 0f, 0f, 0f, 2f, 4f)) {
+        return if (prefs[Keys.EQ_PRESET] == "treble" && gains == listOf(-1f, 0f, 0f, 0f, 2f, 4f)) {
             SixBandEqualizer.TREBLE_BOOST
         } else gains
     }

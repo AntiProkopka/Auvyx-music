@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -49,11 +50,25 @@ class PlaybackService : MediaSessionService() {
                 .setAudioAttributes(player.audioAttributes, false)
                 .build().also { PlaybackAudioRouting.routeOverlay(it) }
         }
-        val settings = (application as NexusApp).settings
-        serviceScope.launch { settings.crossfade.collect { crossfade?.seconds = it } }
-        serviceScope.launch { settings.equalizerEnabled.collect(equalizer::setEnabled) }
-        serviceScope.launch { settings.equalizerGains.collect(equalizer::setGains) }
         val app = application as NexusApp
+        val settings = app.settings
+        val profiles = app.soundProfiles
+        serviceScope.launch { settings.crossfade.collect { crossfade?.seconds = it } }
+        serviceScope.launch {
+            profiles.effective.collect { effective ->
+                equalizer.setEnabled(effective.eqEnabled)
+                equalizer.setGains(effective.gains)
+                val params = PlaybackParameters(effective.speed, effective.pitch)
+                if (player.playbackParameters != params) player.setPlaybackParameters(params)
+            }
+        }
+        serviceScope.launch {
+            app.database.soundProfiles().enabledProfiles().collect { rows ->
+                profiles.replaceProfiles(rows.mapNotNull { row ->
+                    runCatching { row.trackId to row.overrides() }.getOrNull()
+                }.toMap())
+            }
+        }
         val tools = app.database.trackTools()
         val trackPlayback = TrackPlaybackTools(player, serviceScope, app.activeMoment) { app.activeMoment.value = null }
         player.addListener(trackPlayback)
@@ -62,9 +77,15 @@ class PlaybackService : MediaSessionService() {
             trackPlayback.ranges = skips[player.currentMediaItem?.mediaId?.toLongOrNull()].orEmpty()
         }
         player.addListener(object : androidx.media3.common.Player.Listener {
-            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) = updateRanges()
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                profiles.select(mediaItem?.mediaId?.toLongOrNull())
+                updateRanges()
+            }
         })
-        crossfade?.canMixTrack = { id -> id.toLongOrNull() !in skips && app.activeMoment.value?.trackId?.toString() != id }
+        crossfade?.canMixTrack = { id ->
+            val trackId = id.toLongOrNull()
+            trackId !in skips && !profiles.hasProfile(trackId) && app.activeMoment.value?.trackId?.toString() != id
+        }
         serviceScope.launch { tools.allActiveRanges().collect { rows -> skips = rows.groupBy { it.trackId }; updateRanges() } }
         serviceScope.launch { tools.gains().collect { rows ->
             crossfade?.setAttenuation(rows.associate { it.trackId.toString() to attenuation(it.decibels) })
@@ -85,6 +106,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         serviceScope.cancel()
+        (application as NexusApp).soundProfiles.select(null)
         crossfade?.release()
         exoPlayer?.let { PlaybackAudioRouting.detach(it) }
         session?.run {

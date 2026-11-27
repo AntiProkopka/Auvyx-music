@@ -156,9 +156,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
     val style = com.nexus.music.ui.theme.LocalStyle.current
     val s by vm.player.state.collectAsStateWithLifecycle()
     val tracks by vm.knownTracks.collectAsStateWithLifecycle()
-    val eqGains by vm.equalizerGains.collectAsStateWithLifecycle()
-    val eqEnabled by vm.equalizerEnabled.collectAsStateWithLifecycle()
-    val eqPreset by vm.equalizerPreset.collectAsStateWithLifecycle()
+    val sound by vm.soundSettings.collectAsStateWithLifecycle()
     val nickname by vm.nickname.collectAsStateWithLifecycle()
     var showQueue by remember { mutableStateOf(false) }
     var panel by remember { mutableStateOf<PlayerPanel?>(null) }
@@ -555,7 +553,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         }
     }
     if (panel == PlayerPanel.Sound) {
-        SoundToolsSheet(vm, eqGains, eqEnabled, eqPreset, s.speed, s.pitch) { if (panel == PlayerPanel.Sound) panel = null }
+        SoundToolsSheet(vm, sound.gains, sound.eqEnabled, sound.preset, s.speed, s.pitch) { if (panel == PlayerPanel.Sound) panel = null }
     }
     if (showOutput) {
         AudioOutputDialog(
@@ -638,6 +636,7 @@ private fun SoundToolsSheet(
     pitch: Float,
     onDismiss: () -> Unit
 ) {
+    val activeProfile by vm.activeSoundProfile.collectAsStateWithLifecycle()
     PlayerBottomSheet(onDismiss) {
         Column(Modifier.fillMaxWidth().weight(1f).testTag("sound-tools-scroll")
             .verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
@@ -646,6 +645,8 @@ private fun SoundToolsSheet(
                 Text("Эквалайзер", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 Switch(checked = enabled, onCheckedChange = vm::setEqualizerEnabled)
             }
+            if (activeProfile != null) Text("Звуковой профиль трека · изменения действуют до смены трека",
+                style = MaterialTheme.typography.bodySmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("default" to "Default", "bass_boost" to "Bass Boosted", "treble" to "Treble Bass",
                     "vocal" to "Vocal Boost", "custom" to "Custom").forEach { (key, label) ->

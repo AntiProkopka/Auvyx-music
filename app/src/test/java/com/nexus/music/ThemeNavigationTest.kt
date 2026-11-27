@@ -168,6 +168,17 @@ class ThemeNavigationTest {
             controller.position.value in 2500L..6499L && app.activeMoment.value == moment }
         compose.runOnUiThread { controller.next() }
         awaitState { app.activeMoment.value == null }
+
+        kotlinx.coroutines.runBlocking {
+            app.database.soundProfiles().put(com.nexus.music.data.db.TrackSoundProfile(
+                tracks[1].id, true, false, null, null, .8f, null))
+        }
+        compose.runOnUiThread { controller.playTrack(tracks[1]) }
+        awaitState { controller.state.value.speed == .8f && controller.state.value.pitch == 1.25f }
+        compose.runOnUiThread { controller.setSpeed(1.1f) }
+        awaitState { controller.state.value.speed == 1.1f }
+        compose.runOnUiThread { controller.playTrack(tracks[0]) }
+        awaitState { controller.state.value.speed == 1.25f && app.soundProfiles.effective.value.eqEnabled }
     }
 
     private fun seedTracks(app: NexusApp) = kotlinx.coroutines.runBlocking {

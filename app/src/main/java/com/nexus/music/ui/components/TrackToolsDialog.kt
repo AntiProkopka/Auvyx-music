@@ -24,7 +24,8 @@ import java.util.UUID
 
 private enum class Tool(val label: String) {
     Gain("Индивидуальная громкость"), Skip("Пропуск фрагментов"), Moments("Моменты"),
-    Tags("Музыкальные теги"), Links("Связанные композиции"), Rediscover("Когда-то на повторе")
+    Tags("Музыкальные теги"), Links("Связанные композиции"), Rediscover("Когда-то на повторе"),
+    SoundProfile("Звуковой профиль трека")
 }
 
 @Composable
@@ -46,6 +47,7 @@ internal fun TrackToolsHost(vm: AppViewModel) {
                 Tool.Moments -> RangeDialog(vm, selected, moments = true) { tool = null }
                 Tool.Tags -> TagsDialog(vm, selected) { tool = null }
                 Tool.Links -> LinksDialog(vm, selected) { tool = null }
+                Tool.SoundProfile -> SoundProfileDialog(vm, selected) { tool = null }
                 Tool.Rediscover, null -> Unit
             }
         }

@@ -5,7 +5,8 @@ import com.nexus.music.playback.MIN_TRACK_GAIN
 import org.json.JSONObject
 import java.util.UUID
 
-internal val trackToolTables = listOf("track_gain", "skip_ranges", "skip_disabled", "track_moments", "track_tags", "tags", "track_links", "collection_conditions", "smart_collections")
+internal val trackToolTables = listOf("track_gain", "skip_ranges", "skip_disabled", "track_moments", "track_tags", "tags", "track_links",
+    "collection_conditions", "smart_collections", "track_sound_profiles")
 
 internal suspend fun restoreTrackTools(tables: JSONObject, ids: Map<Long, Long>, db: NexusDatabase) {
     val tools = db.trackTools()
@@ -21,6 +22,17 @@ internal suspend fun restoreTrackTools(tables: JSONObject, ids: Map<Long, Long>,
         val gain = row.getDouble("decibels").toFloat()
         require(gain.isFinite() && gain in MIN_TRACK_GAIN..0f)
         tools.putGain(TrackGain(row.track(), gain))
+    }
+    for (row in rows("track_sound_profiles")) {
+        fun boolean(key: String) = row.getInt(key).also { require(it in 0..1) } == 1
+        val profile = TrackSoundProfile(row.track(), boolean("enabled"),
+            if (row.isNull("eqEnabled")) null else boolean("eqEnabled"),
+            if (row.isNull("preset")) null else row.shortText("preset"),
+            if (row.isNull("bands")) null else row.shortText("bands"),
+            if (row.isNull("speed")) null else row.getDouble("speed").toFloat(),
+            if (row.isNull("pitch")) null else row.getDouble("pitch").toFloat())
+        profile.overrides()
+        db.soundProfiles().put(profile)
     }
     val importedRanges = rows("skip_ranges").map { row ->
         val start = row.getLong("startMs")

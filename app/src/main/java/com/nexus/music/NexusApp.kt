@@ -22,10 +22,11 @@ class NexusApp : Application() {
     val equalizer = SixBandEqualizer()
     val database: NexusDatabase by lazy { NexusDatabase.create(this) }
     val settings: SettingsStore by lazy { SettingsStore(this) }
+    internal val soundProfiles by lazy { com.nexus.music.playback.SoundProfileResolver(appScope, settings) }
     val library: LibraryRepository by lazy { LibraryRepository(this, database, settings) }
     val offline by lazy { com.nexus.music.data.local.OfflineAudio(this, database.trackDao(), appScope) }
     internal val activeMoment = kotlinx.coroutines.flow.MutableStateFlow<com.nexus.music.data.db.TrackMoment?>(null)
     val playerController: PlayerController by lazy {
-        PlayerController(this, database, settings, appScope, activeMoment)
+        PlayerController(this, database, settings, appScope, soundProfiles, activeMoment)
     }
 }

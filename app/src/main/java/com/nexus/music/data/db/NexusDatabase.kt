@@ -22,9 +22,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TrackTag::class,
         TrackLink::class,
         SmartCollection::class,
-        CollectionCondition::class
+        CollectionCondition::class,
+        TrackSoundProfile::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class NexusDatabase : RoomDatabase() {
@@ -34,12 +35,19 @@ abstract class NexusDatabase : RoomDatabase() {
     abstract fun queueDao(): QueueDao
     abstract fun trackTools(): TrackToolsDao
     abstract fun smartCollections(): SmartCollectionDao
+    abstract fun soundProfiles(): TrackSoundProfileDao
     companion object {
         fun create(context: Context): NexusDatabase =
             Room.databaseBuilder(context.applicationContext, NexusDatabase::class.java, "nexus.db")
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-                    MIGRATION_6_7, MIGRATION_7_8)
+                    MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .build()
+
+        internal val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE track_sound_profiles (trackId INTEGER NOT NULL PRIMARY KEY, enabled INTEGER NOT NULL, eqEnabled INTEGER, preset TEXT, bands TEXT, speed REAL, pitch REAL, FOREIGN KEY(trackId) REFERENCES tracks(id) ON DELETE CASCADE)")
+            }
+        }
 
         internal val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
