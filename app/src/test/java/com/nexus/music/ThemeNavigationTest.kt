@@ -272,6 +272,49 @@ class ThemeNavigationTest {
         }
     }
 
+    @Test fun savedMomentCanBeEditedReopenedAndDeleted() {
+        val app = compose.activity.application as NexusApp
+        val track = seedTracks(app).first()
+        val moment = com.nexus.music.data.db.TrackMoment("saved-edit", track.id, 1000, 6000, "Saved moment")
+        kotlinx.coroutines.runBlocking { app.database.trackTools().putMoment(moment) }
+        fun mountEditor(initial: com.nexus.music.data.db.TrackMoment) = compose.runOnUiThread {
+            val vm = AppViewModel(app)
+            compose.activity.setContent {
+                NexusTheme("dark", "classic") {
+                    com.nexus.music.ui.components.RangeDialog(vm, track, initial) {}
+                }
+            }
+        }
+        val list = compose.onNodeWithTag("fragment-list")
+        mountEditor(moment)
+        compose.waitUntil(5000) { compose.onAllNodesWithTag("fragment-list").fetchSemanticsNodes().isNotEmpty() }
+        list.performScrollToNode(hasText("Название"))
+        compose.onNodeWithText("Название").performTextReplacement("Updated moment")
+        val thumbs = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsActions.SetProgress)).fetchSemanticsNodes()
+        org.junit.Assert.assertEquals(2, thumbs.size)
+        compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsActions.SetProgress))[0].performSemanticsAction(
+            androidx.compose.ui.semantics.SemanticsActions.SetProgress
+        ) { it(2000f) }
+        compose.onNodeWithText("Updated moment").assertExists()
+        list.performScrollToNode(hasText("Сохранить"))
+        compose.onNodeWithText("Сохранить").assertIsEnabled().performClick()
+        compose.waitUntil(5000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS)
+            kotlinx.coroutines.runBlocking { app.database.trackTools().momentById(moment.id) }?.name == "Updated moment"
+        }
+        val stored = kotlinx.coroutines.runBlocking { app.database.trackTools().momentById(moment.id) }
+        org.junit.Assert.assertEquals(2000L, stored?.startMs)
+        compose.activityRule.scenario.recreate()
+        mountEditor(requireNotNull(stored))
+        compose.waitUntil(5000) { compose.onAllNodesWithTag("fragment-list").fetchSemanticsNodes().isNotEmpty() }
+        list.performScrollToNode(hasText("Название"))
+        compose.onNodeWithText("Updated moment").assertExists()
+        kotlinx.coroutines.runBlocking {
+            app.database.trackTools().deleteMoment(stored)
+            org.junit.Assert.assertNull(app.database.trackTools().momentById(moment.id))
+        }
+    }
+
     private fun seedTracks(app: NexusApp, durationMs: Long = 12_000L) = kotlinx.coroutines.runBlocking {
         (1..3).map { n ->
             val uri = "content://audio-test/$n.wav"

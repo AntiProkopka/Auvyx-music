@@ -6,6 +6,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.nexus.music.playback.LocalCrossfade
+import com.nexus.music.playback.skipFadeProgress
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -51,6 +52,25 @@ class CrossfadeTest {
                 else -> error(m.name)
             }
         } as ExoPlayer
+    }
+
+    @Test fun skipFadeMultipliesTrackAttenuationAndRestoresIt() {
+        val item = MediaItem.Builder().setMediaId("track").setUri("content://test/track").build()
+        val deck = Deck(item, item)
+        val mix = LocalCrossfade(deck.player) { error("No crossfade requested") }
+        try {
+            mix.setAttenuation(mapOf("track" to 0.63f))
+            val progress = ::skipFadeProgress
+            assertEquals(0f, progress(0L), 0f)
+            assertEquals(0.5f, progress(24L), 0.001f)
+            assertEquals(1f, progress(48L), 0f)
+            mix.setSkipGain(1f - progress(24L))
+            assertEquals(0.315f, deck.volume, 0.001f)
+            mix.setSkipGain(0f)
+            assertEquals(0f, deck.volume, 0f)
+            mix.setSkipGain(1f)
+            assertEquals(0.63f, deck.volume, 0.001f)
+        } finally { mix.release() }
     }
 
     @Test fun overlappingLocalDecksShareSpeedAndReleaseOnPause() {

@@ -10,11 +10,22 @@ import androidx.media3.exoplayer.ExoPlayer
 @UnstableApi
 internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOverlay: (MediaItem) -> ExoPlayer) : Player.Listener {
     private var attenuationById = emptyMap<String, Float>()
+    private var skipGain = 1f
+
+    fun setSkipGain(gain: Float) {
+        skipGain = gain
+        if (overlay == null) setPrimaryVolume() else update()
+    }
+
+    private fun setPrimaryVolume(item: MediaItem? = primary.currentMediaItem, mix: Float = 1f) {
+        primary.volume = gain(item) * mix * skipGain
+    }
+
     var canMixTrack: (String) -> Boolean = { true }
 
     fun setAttenuation(gains: Map<String, Float>) {
         attenuationById = gains
-        if (overlay == null) primary.volume = gain(primary.currentMediaItem)
+        if (overlay == null) setPrimaryVolume()
         else update()
     }
 
@@ -91,7 +102,7 @@ internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOv
         }
         val fraction = (1f - remaining.toFloat() / windowMs.coerceAtLeast(1)).coerceIn(0f, 1f)
         // Keep the sum at unity so coincident peaks from the two audio tracks cannot overload the mix.
-        primary.volume = gain(primary.currentMediaItem) * (1f - fraction)
+        setPrimaryVolume(mix = 1f - fraction)
         player.volume = gain(next) * fraction
     }
 
@@ -111,7 +122,7 @@ internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOv
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-        if (overlay == null) primary.volume = gain(mediaItem)
+        if (overlay == null) setPrimaryVolume(mediaItem)
     }
 
     override fun onIsPlayingChanged(isPlaying: Boolean) { schedule() }
@@ -127,7 +138,7 @@ internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOv
             PlaybackAudioRouting.clearOverlay()
             previousOverlay.release()
         }
-        primary.volume = gain(primary.currentMediaItem)
+        setPrimaryVolume()
     }
     fun release() { handler.removeCallbacks(tick); primary.removeListener(this); reset() }
 }

@@ -1,6 +1,5 @@
 package com.nexus.music.ui.components
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.selection.toggleable
@@ -9,13 +8,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
@@ -27,7 +25,7 @@ import com.nexus.music.playback.mergedRanges
 import java.util.UUID
 
 private enum class Tool(val label: String) {
-    Gain("Индивидуальная громкость"), Skip("Пропуск фрагментов"), Moments("Моменты"),
+    Gain("Индивидуальная громкость"), Fragments("Музыкальные фрагменты"), Moments("Моменты"),
     Tags("Музыкальные теги"), Links("Связанные композиции"), Rediscover("Когда-то на повторе"),
     SoundProfile("Звуковой профиль трека")
 }
@@ -42,17 +40,16 @@ internal fun TrackToolsHost(vm: AppViewModel) {
             if (tool == null) AlertDialog(
                 onDismissRequest = close,
                 title = { Text(selected.title) },
-                text = { Column { Tool.entries.filterNot { it == Tool.Rediscover }.forEach { item -> TextButton(onClick = { tool = item }) { Text(item.label) } } } },
+                text = { Column { Tool.entries.filterNot { it == Tool.Rediscover || it == Tool.Moments }.forEach { item -> TextButton(onClick = { tool = item }) { Text(item.label) } } } },
                 confirmButton = { TextButton(onClick = close) { Text("Закрыть") } }
             )
             when (tool) {
                 Tool.Gain -> GainDialog(vm, selected) { tool = null }
-                Tool.Skip -> RangeDialog(vm, selected, moments = false) { tool = null }
-                Tool.Moments -> RangeDialog(vm, selected, moments = true) { tool = null }
+                Tool.Fragments -> RangeDialog(vm, selected) { tool = null }
                 Tool.Tags -> TagsDialog(vm, selected) { tool = null }
                 Tool.Links -> LinksDialog(vm, selected) { tool = null }
                 Tool.SoundProfile -> SoundProfileDialog(vm, selected) { tool = null }
-                Tool.Rediscover, null -> Unit
+                Tool.Rediscover, Tool.Moments, null -> Unit
             }
         }
     }
@@ -166,7 +163,7 @@ private data class RangeDraft(val range: SkipRange? = null, val moment: TrackMom
 }
 
 @Composable
-private fun RangeDialog(vm: AppViewModel, track: TrackEntity, moments: Boolean, close: () -> Unit) {
+internal fun RangeDialog(vm: AppViewModel, track: TrackEntity, initialMoment: TrackMoment? = null, close: () -> Unit) {
     val player by vm.player.state.collectAsStateWithLifecycle()
     val activeMoment by vm.activeMoment.collectAsStateWithLifecycle()
     val current = player.mediaId == track.id.toString()
@@ -175,50 +172,51 @@ private fun RangeDialog(vm: AppViewModel, track: TrackEntity, moments: Boolean, 
     val ranges by remember(track.id) { vm.trackTools.ranges(track.id) }.collectAsStateWithLifecycle(emptyList())
     val saved by remember(track.id) { vm.trackTools.moments(track.id) }.collectAsStateWithLifecycle(emptyList())
     val disabled by remember(track.id) { vm.trackTools.skipDisabled(track.id) }.collectAsStateWithLifecycle(null)
-    var draft by remember { mutableStateOf<RangeDraft?>(null) }
+    var moments by remember { mutableStateOf(initialMoment != null) }
+    var draft by remember { mutableStateOf(RangeDraft(moment = initialMoment)) }
+    var name by remember { mutableStateOf(initialMoment?.name.orEmpty()) }
+    var start by remember { mutableLongStateOf(initialMoment?.startMs ?: if (current) vm.player.position.value else 0L) }
+    var end by remember { mutableLongStateOf(initialMoment?.endMs ?: (start + 10_000L)) }
+    var point by remember { mutableStateOf(initialMoment != null && initialMoment.endMs == null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val preview by vm.player.rangePreview.collectAsStateWithLifecycle()
+    val id = remember { UUID.randomUUID().toString() }
+    DisposableEffect(id) { onDispose { vm.player.stopRangePreview(id) } }
+
+    fun select(value: RangeDraft, first: Long, last: Long?) {
+        vm.player.stopRangePreview(id)
+        draft = value
+        start = first
+        end = last ?: first + 10_000L
+        name = value.moment?.name.orEmpty()
+        point = value.moment != null && last == null
+        error = null
+    }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(draft?.momentId, duration) {
-        if (draft != null && duration != null) listState.scrollToItem(2)
-    }
-    ToolList(if (moments) Tool.Moments.label else Tool.Skip.label, close, listState) {
-        item {
+    ToolList(Tool.Fragments.label, close, listState, Modifier.testTag("fragment-list")) {
+        item(key = "fragment-header") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(false to "Пропуск", true to "Момент").forEach { (mode, label) ->
+                    FilterChip(selected = moments == mode, onClick = {
+                        if (moments != mode) {
+                            vm.player.stopRangePreview(id)
+                            moments = mode
+                            draft = RangeDraft()
+                            error = null
+                        }
+                    }, label = { Text(label) })
+                }
+            }
             TrackRangeHeader(track)
         }
-        item {
-            if (!canEdit) Text("Редактирование доступно при известной длительности и поддержке перемотки. Для онлайн-трека сначала откройте его в плеере.")
-            duration?.let { length ->
-                val marks = if (moments) saved.map { it.startMs to it.endMs }
-                else ranges.filter { it.enabled }.map { it.startMs to it.endMs }
-                TrackTimeScale(length, marks)
-            }
-            TextButton(enabled = canEdit, onClick = { draft = RangeDraft() }) { Text("Добавить") }
-            if (!moments) Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Автопропуск для трека", Modifier.weight(1f))
-                Switch(disabled == null, onCheckedChange = { value -> vm.saveTrackTools {
-                    if (value) vm.trackTools.enableSkip(SkipDisabled(track.id)) else vm.trackTools.disableSkip(SkipDisabled(track.id))
-                } })
-            }
-            if (activeMoment?.trackId == track.id) TextButton(onClick = vm.player::stopMoment) { Text("Закончить повтор момента") }
-            if (moments && saved.isEmpty()) Text("Сохраните позицию или диапазон, чтобы вернуться к нему позже.")
-            if (!moments && ranges.isEmpty()) Text("Отметьте начало и конец первого фрагмента.")
-        }
         val value = draft
-        if (value != null && duration != null) item(key = value.momentId) {
-            val startDefault = (value.range?.startMs ?: value.moment?.startMs
-                ?: if (current) vm.player.position.value else 0L).coerceIn(0L, duration - 1)
-            var name by remember { mutableStateOf(value.range?.name ?: value.moment?.name.orEmpty()) }
-            var start by remember { mutableLongStateOf(startDefault) }
-            var end by remember { mutableLongStateOf((value.range?.endMs ?: value.moment?.endMs
-                ?: (startDefault + 10_000L)).coerceIn(startDefault + 1, duration)) }
-            var point by remember { mutableStateOf(value.moment != null && value.moment.endMs == null) }
-            var error by remember { mutableStateOf<String?>(null) }
-            val preview by vm.player.rangePreview.collectAsStateWithLifecycle()
-            val id = remember { UUID.randomUUID().toString() }
-            DisposableEffect(id) { onDispose { vm.player.stopRangePreview(id) } }
+        if (duration != null) item(key = "fragment-editor") {
+            val first = start.coerceIn(0L, duration - 1)
+            val last = end.coerceIn(first + 1, duration)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TrackRangePicker(duration, start.coerceAtMost(duration - 1),
-                    if (point) null else end.coerceAtMost(duration), onChange = { first, last ->
+                TrackRangePicker(duration, first,
+                    if (moments && point) null else last, onChange = { first, last ->
                         vm.player.stopRangePreview(id)
                         start = first
                         end = last
@@ -231,19 +229,19 @@ private fun RangeDialog(vm: AppViewModel, track: TrackEntity, moments: Boolean, 
                         if (!selected && end <= start + 1) end = (start + 10_000).coerceAtMost(duration)
                     })
                 }
-                TextButton(enabled = canEdit && !point && end > start, onClick = {
+                TextButton(enabled = canEdit && !(moments && point), onClick = {
                     if (preview?.id == id) vm.player.stopRangePreview(id)
-                    else vm.player.previewRange(track, id, start, end.coerceAtMost(duration))
+                    else vm.player.previewRange(track, id, first, last)
                 }) { Text(if (preview?.id == id) "Остановить" else "Прослушать фрагмент") }
-                OutlinedTextField(name, { name = it.take(120) }, label = { Text("Название") }, singleLine = true)
+                if (moments) OutlinedTextField(name, { name = it.take(120) }, label = { Text("Название") }, singleLine = true)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 Row {
-                    TextButton(onClick = { draft = null }) { Text("Отмена") }
+                    TextButton(onClick = { select(RangeDraft(), 0L, null) }) { Text("Новый") }
                     TextButton(enabled = canEdit, onClick = {
-                        val last = if (point) null else end
-                        val next = if (moments) null else SkipRange(track.id, start, end, name.trim(), value.range?.enabled ?: true)
+                        val momentEnd = if (point) null else last
+                        val next = if (moments) null else SkipRange(track.id, first, last, "", value.range?.enabled ?: true)
                         val problem = runCatching {
-                            validateRange(start, last, duration)
+                            validateRange(first, if (moments) momentEnd else last, duration)
                             if (next?.enabled == true) require(mergedRanges(ranges.filter { it != value.range } + next, duration).isNotEmpty()) {
                                 "Оставьте часть трека для воспроизведения"
                             }
@@ -251,31 +249,40 @@ private fun RangeDialog(vm: AppViewModel, track: TrackEntity, moments: Boolean, 
                         if (problem != null) error = problem.message
                         else vm.saveTrackTools {
                             if (next != null) vm.trackTools.replaceRange(value.range, next)
-                            else vm.trackTools.putMoment(TrackMoment(value.momentId, track.id, start, last,
+                            else vm.trackTools.putMoment(TrackMoment(value.momentId, track.id, first, momentEnd,
                                 name.trim().ifBlank { "Момент" }, value.moment?.createdAt ?: System.currentTimeMillis()))
-                            draft = null
+                            select(RangeDraft(), first, last)
                         }
                     }) { Text("Сохранить") }
                 }
             }
         }
-        if (moments) items(saved, key = { it.id }) { row ->
+        item(key = "fragment-options") {
+            if (!canEdit) Text("Для редактирования нужна дорожка с известной длительностью и перемоткой. Онлайн-трек сначала откройте в плеере.")
+            if (!moments) Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Автопропуск для трека", Modifier.weight(1f))
+                Switch(disabled == null, onCheckedChange = { enabled -> vm.saveTrackTools {
+                    if (enabled) vm.trackTools.enableSkip(SkipDisabled(track.id)) else vm.trackTools.disableSkip(SkipDisabled(track.id))
+                } })
+            }
+            if (activeMoment?.trackId == track.id) TextButton(onClick = vm.player::stopMoment) { Text("Закончить повтор момента") }
+        }
+        if (moments) items(saved, key = { "saved-moment:${it.id}" }) { row ->
             Text(row.name)
             Text(mark(row.startMs, row.endMs), style = MaterialTheme.typography.bodySmall)
             Row {
                 TextButton(enabled = canEdit, onClick = { vm.player.playMoment(track, row, false); close() }) { Text("Играть") }
                 if (row.endMs != null) TextButton(enabled = canEdit, onClick = { vm.player.playMoment(track, row, true); close() }) { Text("Повторять") }
-                TextButton(enabled = canEdit, onClick = { draft = RangeDraft(moment = row) }) { Text("Изменить") }
+                TextButton(enabled = canEdit, onClick = { select(RangeDraft(moment = row), row.startMs, row.endMs); listState.requestScrollToItem(0) }) { Text("Изменить") }
                 TextButton(onClick = { vm.saveTrackTools {
                     if (activeMoment?.id == row.id) vm.player.stopMoment()
                     vm.trackTools.deleteMoment(row)
                 } }) { Text("Удалить") }
             }
         } else items(ranges, key = { "${it.startMs}:${it.endMs}" }) { row ->
-            Text(row.name.ifBlank { "Фрагмент" })
             Text(mark(row.startMs, row.endMs), style = MaterialTheme.typography.bodySmall)
             Row {
-                TextButton(enabled = canEdit, onClick = { draft = RangeDraft(range = row) }) { Text("Изменить") }
+                TextButton(enabled = canEdit, onClick = { select(RangeDraft(range = row), row.startMs, row.endMs); listState.requestScrollToItem(0) }) { Text("Изменить") }
                 TextButton(onClick = { vm.saveTrackTools { vm.trackTools.deleteRange(row) } }) { Text("Удалить") }
                 Spacer(Modifier.weight(1f))
                 Switch(row.enabled, enabled = canEdit, onCheckedChange = { enabled ->
@@ -302,37 +309,14 @@ private fun TrackRangeHeader(track: TrackEntity) {
     }
 }
 
-@Composable
-private fun TrackTimeScale(duration: Long, marks: List<Pair<Long, Long?>>) {
-    val scheme = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Canvas(Modifier.fillMaxWidth().height(12.dp)) {
-            val y = size.height / 2
-            fun position(time: Long) = (time.toDouble() / duration).coerceIn(0.0, 1.0).toFloat() * size.width
-            drawLine(scheme.surfaceVariant, Offset(0f, y), Offset(size.width, y), 4.dp.toPx(), StrokeCap.Round)
-            for ((start, end) in marks) {
-                if (start !in 0..duration) continue
-                val origin = Offset(position(start), y)
-                if (end != null && end > start) {
-                    drawLine(scheme.primary, origin, Offset(position(end), y), 5.dp.toPx(), StrokeCap.Round)
-                } else drawCircle(scheme.primary, 3.dp.toPx(), origin)
-            }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(formatTime(0), style = MaterialTheme.typography.labelSmall)
-            Text(formatTime(duration), style = MaterialTheme.typography.labelSmall)
-        }
-    }
-}
-
 private fun mark(start: Long, end: Long?): String {
     return formatTime(start) + (end?.let { " – ${formatTime(it)}" } ?: "")
 }
 
 @Composable
-internal fun ToolList(title: String, close: () -> Unit, state: LazyListState = rememberLazyListState(), content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
+internal fun ToolList(title: String, close: () -> Unit, state: LazyListState = rememberLazyListState(), modifier: Modifier = Modifier, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
     AlertDialog(onDismissRequest = close, title = { Text(title) },
-        text = { LazyColumn(Modifier.fillMaxWidth().heightIn(max = 390.dp), state = state, verticalArrangement = Arrangement.spacedBy(4.dp), content = content) },
+        text = { LazyColumn(modifier.fillMaxWidth().heightIn(max = 390.dp), state = state, verticalArrangement = Arrangement.spacedBy(4.dp), content = content) },
         confirmButton = { TextButton(onClick = close) { Text("Готово") } })
 }
 
@@ -398,9 +382,9 @@ internal fun LibraryTrackTools(vm: AppViewModel) {
     } else {
         val rows by remember { vm.trackTools.moments() }.collectAsStateWithLifecycle(emptyList())
         val player by vm.player.state.collectAsStateWithLifecycle()
-        var editing by remember { mutableStateOf<TrackEntity?>(null) }
+        var editing by remember { mutableStateOf<Pair<TrackEntity, TrackMoment>?>(null) }
         val date = remember { java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM) }
-        ToolList("Коллекция моментов", close) {
+        if (editing == null) ToolList("Коллекция моментов", close) {
             if (rows.isEmpty()) item { Text("Сохраните момент через меню трека.") }
             items(rows.sortedByDescending { it.createdAt }, key = { it.id }) { row ->
                 val track = byId[row.trackId]
@@ -429,12 +413,12 @@ internal fun LibraryTrackTools(vm: AppViewModel) {
                         if (row.endMs != null) TextButton(enabled = canPlay, onClick = {
                             vm.player.playMoment(track, row, true); close()
                         }) { Text("Повторять") }
-                        TextButton(onClick = { editing = track }) { Text("Действия") }
+                        TextButton(onClick = { editing = track to row }) { Text("Действия") }
                     }
                 }
             }
         }
-        editing?.let { RangeDialog(vm, it, moments = true) { editing = null } }
+        editing?.let { (track, moment) -> RangeDialog(vm, track, initialMoment = moment) { editing = null } }
     }
 }
 

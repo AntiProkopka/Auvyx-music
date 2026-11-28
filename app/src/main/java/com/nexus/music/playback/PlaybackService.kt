@@ -74,7 +74,8 @@ class PlaybackService : MediaSessionService() {
             }
         }
         val tools = app.database.trackTools()
-        val trackPlayback = TrackPlaybackTools(player, serviceScope, app.activeMoment, app.rangePreview) { app.activeMoment.value = null }
+        val trackPlayback = TrackPlaybackTools(player, serviceScope, app.activeMoment, app.rangePreview,
+            setSkipGain = { crossfade?.setSkipGain(it) }) { app.activeMoment.value = null }
         player.addListener(trackPlayback)
         serviceScope.launch { app.rangePreview.collect { trackPlayback.schedulePreviewEnd() } }
         var skips = emptyMap<Long, List<com.nexus.music.data.db.SkipRange>>()
