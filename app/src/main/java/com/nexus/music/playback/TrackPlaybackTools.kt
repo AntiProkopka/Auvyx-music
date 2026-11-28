@@ -12,9 +12,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlin.math.pow
 
-internal const val MIN_TRACK_GAIN = -24f
+internal const val MIN_TRACK_GAIN = -12f
+internal const val MAX_TRACK_GAIN = 6f
+internal const val LEGACY_MIN_TRACK_GAIN = -24f
+internal fun trackBoost(decibels: Float): Float =
+    10f.pow(decibels.takeIf { it.isFinite() }?.coerceIn(0f, MAX_TRACK_GAIN)?.div(20f) ?: 0f)
 internal fun attenuation(decibels: Float): Float =
-    10f.pow(decibels.takeIf { it.isFinite() }?.coerceIn(MIN_TRACK_GAIN, 0f)?.div(20f) ?: 0f)
+    10f.pow(decibels.takeIf { it.isFinite() }?.coerceIn(LEGACY_MIN_TRACK_GAIN, 0f)?.div(20f) ?: 0f)
 
 internal fun mergedRanges(rows: List<SkipRange>, duration: Long): List<LongRange> {
     if (duration <= 0) return emptyList()
@@ -36,6 +40,7 @@ internal class TrackPlaybackTools(
     private val player: ExoPlayer,
     private val scope: CoroutineScope,
     private val moment: StateFlow<TrackMoment?>,
+    private val preview: kotlinx.coroutines.flow.MutableStateFlow<TrackMoment?>,
     private val clearMoment: () -> Unit
 ) : Player.Listener {
     var ranges: List<SkipRange> = emptyList()
@@ -43,6 +48,7 @@ internal class TrackPlaybackTools(
             field = value
             normalizedDuration = 0L
         }
+    private var previewEnd: androidx.media3.exoplayer.PlayerMessage? = null
     private var job: Job? = null
     private var guardedRange: LongRange? = null
     private var manualRange: LongRange? = null
@@ -67,6 +73,30 @@ internal class TrackPlaybackTools(
         normalizedDuration = 0L
         autoTarget = null
         if (moment.value?.trackId?.toString() != mediaItem?.mediaId) clearMoment()
+        val clip = preview.value
+        if (clip != null && clip.trackId.toString() != mediaItem?.mediaId) preview.value = null
+        schedulePreviewEnd()
+    }
+
+    override fun onPlaybackStateChanged(playbackState: Int) {
+        if (playbackState == Player.STATE_READY) schedulePreviewEnd()
+        if (playbackState == Player.STATE_ENDED) preview.value = null
+    }
+
+    fun schedulePreviewEnd() {
+        previewEnd?.cancel()
+        previewEnd = null
+        val clip = preview.value ?: return
+        val end = clip.endMs ?: return
+        if (clip.trackId.toString() != player.currentMediaItem?.mediaId || !player.isCurrentMediaItemSeekable ||
+            player.duration <= 0) return
+        val stopAt = minOf(end, player.duration - 1)
+        previewEnd = player.createMessage { _, _ ->
+            if (preview.value == clip && player.currentMediaItem?.mediaId == clip.trackId.toString()) {
+                player.pause()
+                preview.value = null
+            }
+        }.setLooper(player.applicationLooper).setPosition(player.currentMediaItemIndex, stopAt).send()
     }
 
     override fun onPositionDiscontinuity(
@@ -86,6 +116,7 @@ internal class TrackPlaybackTools(
     private fun update() {
         if (!player.isPlaying || !player.isCurrentMediaItemSeekable || player.duration <= 0) return
         val position = player.currentPosition
+        if (preview.value?.trackId?.toString() == player.currentMediaItem?.mediaId && preview.value != null) return
         val active = moment.value?.takeIf { it.trackId.toString() == player.currentMediaItem?.mediaId }
         if (active != null && active.endMs != null) {
             if (active.endMs > player.duration) clearMoment()

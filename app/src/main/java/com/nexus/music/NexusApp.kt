@@ -26,7 +26,9 @@ class NexusApp : Application() {
     val library: LibraryRepository by lazy { LibraryRepository(this, database, settings) }
     val offline by lazy { com.nexus.music.data.local.OfflineAudio(this, database.trackDao(), appScope) }
     internal val activeMoment = kotlinx.coroutines.flow.MutableStateFlow<com.nexus.music.data.db.TrackMoment?>(null)
+    internal val rangePreview = kotlinx.coroutines.flow.MutableStateFlow<com.nexus.music.data.db.TrackMoment?>(null)
+    internal val finiteRepeat by lazy { com.nexus.music.playback.FiniteRepeatSession(settings, appScope) }
     val playerController: PlayerController by lazy {
-        PlayerController(this, database, settings, appScope, soundProfiles, activeMoment)
+        PlayerController(this, database, settings, appScope, soundProfiles, finiteRepeat, activeMoment, rangePreview)
     }
 }

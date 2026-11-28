@@ -22,6 +22,9 @@ class PlaybackService : MediaSessionService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var crossfade: LocalCrossfade? = null
     private var session: MediaSession? = null
+    @Volatile private var trackBoosts = emptyMap<String, Float>()
+    @Volatile private var playingId: String? = null
+
     private var exoPlayer: ExoPlayer? = null
 
     override fun onCreate() {
@@ -31,7 +34,7 @@ class PlaybackService : MediaSessionService() {
 
         val equalizer = (application as NexusApp).equalizer
         val player = ExoPlayer.Builder(this)
-            .setRenderersFactory(AuvyxRenderersFactory(this, equalizer.audioProcessor))
+            .setRenderersFactory(AuvyxRenderersFactory(this, equalizer.newProcessor { trackBoosts[playingId] ?: 1f }))
             .setMediaSourceFactory(CatalogMediaFactory(mediaSourceFactory))
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -43,9 +46,9 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
-        crossfade = LocalCrossfade(player) {
+        crossfade = LocalCrossfade(player) { next ->
             ExoPlayer.Builder(this)
-                .setRenderersFactory(AuvyxRenderersFactory(this, equalizer.newProcessor()))
+                .setRenderersFactory(AuvyxRenderersFactory(this, equalizer.newProcessor { trackBoosts[next.mediaId] ?: 1f }))
                 .setMediaSourceFactory(mediaSourceFactory)
                 .setAudioAttributes(player.audioAttributes, false)
                 .build().also { PlaybackAudioRouting.routeOverlay(it) }
@@ -53,6 +56,7 @@ class PlaybackService : MediaSessionService() {
         val app = application as NexusApp
         val settings = app.settings
         val profiles = app.soundProfiles
+        app.finiteRepeat.attach(player)
         serviceScope.launch { settings.crossfade.collect { crossfade?.seconds = it } }
         serviceScope.launch {
             profiles.effective.collect { effective ->
@@ -70,24 +74,27 @@ class PlaybackService : MediaSessionService() {
             }
         }
         val tools = app.database.trackTools()
-        val trackPlayback = TrackPlaybackTools(player, serviceScope, app.activeMoment) { app.activeMoment.value = null }
+        val trackPlayback = TrackPlaybackTools(player, serviceScope, app.activeMoment, app.rangePreview) { app.activeMoment.value = null }
         player.addListener(trackPlayback)
+        serviceScope.launch { app.rangePreview.collect { trackPlayback.schedulePreviewEnd() } }
         var skips = emptyMap<Long, List<com.nexus.music.data.db.SkipRange>>()
         fun updateRanges() {
             trackPlayback.ranges = skips[player.currentMediaItem?.mediaId?.toLongOrNull()].orEmpty()
         }
         player.addListener(object : androidx.media3.common.Player.Listener {
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                playingId = mediaItem?.mediaId
                 profiles.select(mediaItem?.mediaId?.toLongOrNull())
                 updateRanges()
             }
         })
         crossfade?.canMixTrack = { id ->
             val trackId = id.toLongOrNull()
-            trackId !in skips && !profiles.hasProfile(trackId) && app.activeMoment.value?.trackId?.toString() != id
+            trackId !in skips && !profiles.hasProfile(trackId) && app.activeMoment.value?.trackId?.toString() != id && app.rangePreview.value == null
         }
         serviceScope.launch { tools.allActiveRanges().collect { rows -> skips = rows.groupBy { it.trackId }; updateRanges() } }
         serviceScope.launch { tools.gains().collect { rows ->
+            trackBoosts = rows.filter { it.decibels > 0f }.associate { it.trackId.toString() to trackBoost(it.decibels) }
             crossfade?.setAttenuation(rows.associate { it.trackId.toString() to attenuation(it.decibels) })
         } }
         exoPlayer = player
@@ -106,6 +113,8 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         serviceScope.cancel()
+        (application as NexusApp).rangePreview.value = null
+        (application as NexusApp).finiteRepeat.detach()
         (application as NexusApp).soundProfiles.select(null)
         crossfade?.release()
         exoPlayer?.let { PlaybackAudioRouting.detach(it) }

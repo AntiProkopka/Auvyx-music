@@ -8,7 +8,7 @@ import androidx.media3.exoplayer.ExoPlayer
 
 /** Overlaps seekable local files and on-demand SoundCloud streams. The session player remains the owner of the timeline. */
 @UnstableApi
-internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOverlay: () -> ExoPlayer) : Player.Listener {
+internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOverlay: (MediaItem) -> ExoPlayer) : Player.Listener {
     private var attenuationById = emptyMap<String, Float>()
     var canMixTrack: (String) -> Boolean = { true }
 
@@ -63,7 +63,7 @@ internal class LocalCrossfade(private val primary: ExoPlayer, private val makeOv
         if (!canOverlap(next) || !canMixTrack(next.mediaId) || remaining > requested + lead ||
             (incoming != null && incoming != next)) { reset(); return }
         if (failedIndex == primary.currentMediaItemIndex) return
-        val player = overlay ?: makeOverlay().also {
+        val player = overlay ?: makeOverlay(next).also {
             overlay = it
             incoming = next
             it.volume = 0f

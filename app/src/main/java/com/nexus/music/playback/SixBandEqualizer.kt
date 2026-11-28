@@ -25,7 +25,7 @@ class SixBandEqualizer {
 
     val audioProcessor: AudioProcessor = EqualizerProcessor(this)
 
-    fun newProcessor(): AudioProcessor = EqualizerProcessor(this)
+    fun newProcessor(boost: () -> Float = { 1f }): AudioProcessor = EqualizerProcessor(this, boost)
 
     fun setEnabled(value: Boolean) {
         enabled = value
@@ -86,7 +86,8 @@ class SixBandEqualizer {
 
 @UnstableApi
 private class EqualizerProcessor(
-    private val equalizer: SixBandEqualizer
+    private val equalizer: SixBandEqualizer,
+    private val boost: () -> Float = { 1f }
 ) : BaseAudioProcessor() {
     private var sampleRate = 48_000
     private var channels = 2
@@ -141,16 +142,20 @@ private class EqualizerProcessor(
         val input = inputBuffer.order(ByteOrder.nativeOrder())
         val output = replaceOutputBuffer(input.remaining()).order(ByteOrder.nativeOrder())
         val gains = equalizer.currentGains()
-        if (!equalizer.enabled || gains.all { it == 0f }) {
+        val filtering = equalizer.enabled && gains.any { it != 0f }
+        val trackBoost = boost()
+        if (!filtering) {
             if (configuredGains != null) {
                 resetFilterState()
                 configuredGains = null
             }
-            output.put(input)
-            output.flip()
-            return
+            if (trackBoost == 1f) {
+                output.put(input)
+                output.flip()
+                return
+            }
         }
-        if (configuredGains !== gains) updateFilters(gains)
+        if (filtering && configuredGains !== gains) updateFilters(gains)
         var sampleIndex = 0
 
         while (input.remaining() >= bytesPerSample) {
@@ -159,16 +164,19 @@ private class EqualizerProcessor(
             } else {
                 input.short.toDouble() / 32768.0
             }
-            var value = source * preamp
-            if (states.isNotEmpty()) {
+            var value = source * if (filtering) preamp else 1.0
+            if (filtering) {
                 val channel = sampleIndex % channels
                 for (band in filters.indices) {
                     value = states[band][channel].process(value, filters[band])
                 }
             }
             // Smoothly absorb rare transients above the headroom ceiling.
-            val safe = if (abs(value) <= 0.95) value else
-                sign(value) * (0.95 + 0.0499 * (1.0 - kotlin.math.exp(-(abs(value) - 0.95) / 0.0499)))
+            value *= trackBoost
+            val knee = if (trackBoost > 1f) 0.72 else 0.95
+            val headroom = 0.9999 - knee
+            val safe = if (abs(value) <= knee) value else
+                sign(value) * (knee + headroom * (1.0 - kotlin.math.exp(-(abs(value) - knee) / headroom)))
             if (encoding == C.ENCODING_PCM_FLOAT) {
                 output.putFloat(safe.toFloat())
             } else {

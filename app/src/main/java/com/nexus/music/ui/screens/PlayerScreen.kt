@@ -510,7 +510,7 @@ fun PlayerScreen(vm: AppViewModel, onClose: () -> Unit) {
         AlertDialog(onDismissRequest = { showFiniteRepeat = false }, title = { Text("Конечный повтор") },
             text = {
                 Column {
-                    repeat?.let { Text("${it.iteration} из ${it.total}") }
+                    repeat?.let { Text("Осталось воспроизведений: ${it.remaining} из ${it.total}") }
                     Text("Число воспроизведений вместе с текущим")
                     Row { listOf(2, 3, 5).forEach { option ->
                         TextButton(onClick = { count = option.toString() }) { Text("$option") }
