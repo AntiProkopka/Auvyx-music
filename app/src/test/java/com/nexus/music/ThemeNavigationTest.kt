@@ -10,6 +10,7 @@ import com.nexus.music.ui.theme.NexusTheme
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -181,18 +182,108 @@ class ThemeNavigationTest {
         awaitState { controller.state.value.speed == 1.25f && app.soundProfiles.effective.value.eqEnabled }
     }
 
-    private fun seedTracks(app: NexusApp) = kotlinx.coroutines.runBlocking {
+    @Test fun finiteRepeatFinishesThreePassesThroughMediaSession() {
+        val app = compose.activity.application as NexusApp
+        val tracks = seedTracks(app, durationMs = 1600)
+        val player = app.playerController
+        val passes = mutableListOf<Int>()
+        var finished = false
+        val observation = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined)
+        observation.launch {
+            player.finiteRepeat.collect { repeat ->
+                if (repeat != null) passes += repeat.remaining
+                else if (passes.isNotEmpty()) finished = true
+            }
+        }
+        try {
+            fun await(check: () -> Boolean) {
+                try {
+                    compose.waitUntil(15_000) {
+                        org.robolectric.shadows.ShadowLooper.idleMainLooper(30, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        check()
+                    }
+                } catch (e: ComposeTimeoutException) {
+                    throw AssertionError("Passes $passes, finished $finished, position ${player.position.value}, ${player.state.value}", e)
+                }
+            }
+            compose.runOnUiThread { player.playTracks(tracks.take(2), 0); player.pause() }
+            await { player.state.value.canSeek && !player.state.value.showPause }
+            compose.runOnUiThread { player.startFiniteRepeat(3); player.seekTo(450L) }
+            await { player.position.value == 450L }
+            org.junit.Assert.assertEquals(listOf(3), passes)
+            compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+            compose.runOnUiThread { player.playTrack(tracks[0]) }
+            await { finished && player.state.value.mediaId == tracks[1].id.toString() }
+            org.junit.Assert.assertEquals(listOf(3, 2, 1), passes)
+            org.junit.Assert.assertEquals(androidx.media3.common.Player.REPEAT_MODE_OFF, player.state.value.repeatMode)
+        } finally {
+            observation.cancel()
+        }
+    }
+
+    @Test fun selectionPreviewStopsAtEndWithoutSkippingOrAdvancingQueue() {
+        val app = compose.activity.application as NexusApp
+        val tracks = seedTracks(app)
+        val player = app.playerController
+        fun await(check: () -> Boolean) = compose.waitUntil(15_000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS)
+            check()
+        }
+        kotlinx.coroutines.runBlocking {
+            app.database.trackTools().putRange(com.nexus.music.data.db.SkipRange(tracks[0].id, 1000L, 9000L, "", true))
+        }
+        compose.runOnUiThread { player.playTracks(tracks.take(2), 0) }
+        await { player.state.value.canSeek }
+        compose.runOnUiThread { player.previewRange(tracks[0], "preview", 2_000L, 3_000L) }
+        await { player.rangePreview.value == null && !player.state.value.isPlaying }
+        org.junit.Assert.assertEquals(tracks[0].id.toString(), player.state.value.mediaId)
+        org.junit.Assert.assertTrue("Preview stopped at ${player.position.value}", player.position.value in 2_900L..4_200L)
+        org.junit.Assert.assertEquals(2, player.state.value.queue.size)
+    }
+
+    @Test fun smartPlaylistUpdatesAnOpenSubscriptionWhenFavoriteChanges() {
+        val app = compose.activity.application as NexusApp
+        val track = seedTracks(app).first()
+        val id = "17eeec74-032c-47ea-b593-3b6c605ecb35"
+        kotlinx.coroutines.runBlocking {
+            app.database.smartCollections().save(
+                com.nexus.music.data.db.SmartCollection(id, "Избранное автоматически", true, 10),
+                listOf(com.nexus.music.data.db.CollectionCondition(id, 0, "FAVORITE", ""))
+            )
+        }
+        val results = kotlinx.coroutines.flow.MutableStateFlow<List<Long>?>(null)
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined)
+        compose.runOnUiThread {
+            val vm = androidx.lifecycle.ViewModelProvider(compose.activity)[AppViewModel::class.java]
+            scope.launch { vm.smartPlaylistTracks(id).collect { tracks -> results.value = tracks.map { it.id } } }
+        }
+        fun await(expected: List<Long>) = compose.waitUntil(10_000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS)
+            results.value == expected
+        }
+        try {
+            await(emptyList())
+            kotlinx.coroutines.runBlocking { app.database.trackDao().setFavorite(track.id, true) }
+            await(listOf(track.id))
+            kotlinx.coroutines.runBlocking { app.database.trackDao().setFavorite(track.id, false) }
+            await(emptyList())
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    private fun seedTracks(app: NexusApp, durationMs: Long = 12_000L) = kotlinx.coroutines.runBlocking {
         (1..3).map { n ->
             val uri = "content://audio-test/$n.wav"
             val copy = com.nexus.music.data.local.OfflineAudio.file(app,uri)
             copy.parentFile!!.mkdirs()
-            val dataSize = 48000 * 2 * 12
+            val dataSize = (48_000 * 2 * durationMs / 1_000).toInt()
             val wav = java.nio.ByteBuffer.allocate(44 + dataSize).order(java.nio.ByteOrder.LITTLE_ENDIAN)
             wav.put("RIFF".toByteArray()).putInt(dataSize + 36).put("WAVEfmt ".toByteArray())
                 .putInt(16).putShort(1).putShort(1).putInt(48000).putInt(96000)
                 .putShort(2).putShort(16).put("data".toByteArray()).putInt(dataSize)
             copy.writeBytes(wav.array())
-            val t = com.nexus.music.data.db.TrackEntity(uri=uri,title="Audio $n",artist="Test",album="",durationMs=12000L,addedAt=n.toLong())
+            val t = com.nexus.music.data.db.TrackEntity(uri=uri,title="Audio $n",artist="Test",album="",durationMs=durationMs,addedAt=n.toLong())
             t.copy(id=app.database.trackDao().insertOrIgnore(t))
         }
     }

@@ -23,8 +23,6 @@ class SixBandEqualizer {
     var enabled: Boolean = true
         private set
 
-    val audioProcessor: AudioProcessor = EqualizerProcessor(this)
-
     fun newProcessor(boost: () -> Float = { 1f }): AudioProcessor = EqualizerProcessor(this, boost)
 
     fun setEnabled(value: Boolean) {
@@ -87,7 +85,7 @@ class SixBandEqualizer {
 @UnstableApi
 private class EqualizerProcessor(
     private val equalizer: SixBandEqualizer,
-    private val boost: () -> Float = { 1f }
+    private val boost: () -> Float
 ) : BaseAudioProcessor() {
     private var sampleRate = 48_000
     private var channels = 2

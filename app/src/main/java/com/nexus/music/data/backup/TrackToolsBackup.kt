@@ -1,7 +1,8 @@
 package com.nexus.music.data.backup
 
 import com.nexus.music.data.db.*
-import com.nexus.music.playback.MIN_TRACK_GAIN
+import com.nexus.music.playback.LEGACY_MIN_TRACK_GAIN
+import com.nexus.music.playback.MAX_TRACK_GAIN
 import org.json.JSONObject
 import java.util.UUID
 
@@ -20,7 +21,7 @@ internal suspend fun restoreTrackTools(tables: JSONObject, ids: Map<Long, Long>,
 
     for (row in rows("track_gain")) {
         val gain = row.getDouble("decibels").toFloat()
-        require(gain.isFinite() && gain in MIN_TRACK_GAIN..0f)
+        require(gain.isFinite() && gain in LEGACY_MIN_TRACK_GAIN..MAX_TRACK_GAIN)
         tools.putGain(TrackGain(row.track(), gain))
     }
     for (row in rows("track_sound_profiles")) {
@@ -82,7 +83,8 @@ internal suspend fun restoreTrackTools(tables: JSONObject, ids: Map<Long, Long>,
         val id = UUID.fromString(row.getString("id")).toString()
         val mode = row.getInt("matchAll")
         require(mode in 0..1)
-        val collection = SmartCollection(id, row.shortText("name"), mode == 1, row.getInt("limit"))
+        val collection = SmartCollection(id, row.shortText("name"), mode == 1, row.getInt("limit"),
+            row.optString("coverUri", "").takeIf { it.startsWith("content://") && it.length <= 4096 })
         val rules = conditions.remove(id).orEmpty().sortedBy { it.getInt("position") }.map { item ->
             val kind = item.getString("kind")
             val argument = item.shortText("argument")

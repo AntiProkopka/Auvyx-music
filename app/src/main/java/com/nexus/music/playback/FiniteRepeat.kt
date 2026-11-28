@@ -12,7 +12,11 @@ internal data class FiniteRepeat(
     val restoreMode: Int
 ) {
     val iteration: Int get() = total - remaining + 1
-    val playerMode: Int get() = if (remaining > 1) Player.REPEAT_MODE_ONE else restoreMode
+    val playerMode: Int get() = when {
+        remaining > 1 -> Player.REPEAT_MODE_ONE
+        queue.size == 1 -> Player.REPEAT_MODE_OFF
+        else -> restoreMode
+    }
 
     init {
         require(index in queue.indices && total in 2..99 && remaining in 1..total)

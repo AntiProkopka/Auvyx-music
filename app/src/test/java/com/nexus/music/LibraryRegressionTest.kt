@@ -36,6 +36,29 @@ class LibraryRegressionTest {
     private fun track(n: Int) = TrackEntity(uri = "content://docs/$n", sourceId = "doc-$n", title="Song $n",
         artist="Artist", album="Album", durationMs=1000L, addedAt=n.toLong())
 
+    @Test fun trackBoostRaisesQuietPcmAndLimitsLoudPcmWithBassBoost() {
+        val equalizer = SixBandEqualizer()
+        fun render(amplitude: Int, gain: Float, bass: Boolean): Int {
+            equalizer.setEnabled(bass)
+            val processor = equalizer.newProcessor { gain }
+            processor.configure(AudioFormat(48_000, 1, C.ENCODING_PCM_16BIT))
+            processor.flush()
+            val input = ByteBuffer.allocateDirect(96_000).order(ByteOrder.nativeOrder())
+            repeat(48_000) { input.putShort((amplitude * sin(2 * PI * 60 * it / 48_000)).toInt().toShort()) }
+            input.flip()
+            processor.queueInput(input)
+            val output = processor.output.order(ByteOrder.nativeOrder())
+            var peak = 0
+            while (output.hasRemaining()) peak = maxOf(peak, abs(output.short.toInt()))
+            return peak
+        }
+        assertEquals(4_000.0, render(2_000, 2f, false).toDouble(), 4.0)
+        val baseline = render(27_000, 1f, true)
+        val boosted = render(27_000, 2f, true)
+        assertTrue(boosted > baseline)
+        assertTrue(boosted in 1..32766)
+    }
+
     @Test fun backupMergesRepeatedlyAndRollsBackOnInvalidLink() = runBlocking {
         val source = memoryDb()
         val dest = memoryDb()
@@ -56,11 +79,11 @@ class LibraryRegressionTest {
             settings.saveLyrics(local.toString(), "lyrics")
             source.trackTools().assignTag(local, "Ночь")
             val sourceTag = source.trackTools().tags(local).first().single()
-            val collection = SmartCollection("71e97e98-5884-4622-b536-2db5cb2f0e06", "Night", true, 10)
+            val collection = SmartCollection("71e97e98-5884-4622-b536-2db5cb2f0e06", "Night", true, 10, "content://test/cover")
             source.smartCollections().save(collection, listOf(CollectionCondition(collection.id, 0, "TAG", sourceTag.id)))
             source.trackTools().putMoment(TrackMoment("6172f0ee-013f-4d2d-929d-b0bd125a239b", local, 100L, 800L,
                 "Припев", 42L))
-            source.trackTools().putGain(com.nexus.music.data.db.TrackGain(local, -4f))
+            source.trackTools().putGain(com.nexus.music.data.db.TrackGain(local, 6f))
             source.soundProfiles().put(TrackSoundProfile(local, true, true, "bass_boost", "[5,3,0,1,0,2]", .8f, null))
             source.trackTools().putLink(com.nexus.music.data.db.TrackLink(minOf(local, cloud), maxOf(local, cloud), "Связь", 1))
 
@@ -80,7 +103,7 @@ class LibraryRegressionTest {
             assertEquals(destinationTag.id, dest.smartCollections().conditions(collection.id).first().single().argument)
             assertEquals(42L, dest.trackTools().moments(fav.id).first().single().createdAt)
             assertEquals(.8f, dest.soundProfiles().profile(fav.id).first()!!.speed!!, 0.001f)
-            assertEquals(-4f, dest.trackTools().gain(fav.id).first()!!.decibels, 0f)
+            assertEquals(6f, dest.trackTools().gain(fav.id).first()!!.decibels, 0f)
             assertEquals("soundcloud", dest.trackDao().getByIds(listOf(
                 dest.trackTools().links(fav.id).first().single().other(fav.id))).single().source)
 

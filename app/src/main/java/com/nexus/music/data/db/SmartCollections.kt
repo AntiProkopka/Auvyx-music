@@ -4,7 +4,7 @@ import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "smart_collections")
-data class SmartCollection(@PrimaryKey val id: String, val name: String, val matchAll: Boolean, val limit: Int)
+data class SmartCollection(@PrimaryKey val id: String, val name: String, val matchAll: Boolean, val limit: Int, val coverUri: String? = null)
 
 @Entity(tableName = "collection_conditions", primaryKeys = ["collectionId", "position"], foreignKeys = [
     ForeignKey(SmartCollection::class, ["id"], ["collectionId"], onDelete = ForeignKey.CASCADE)
@@ -15,6 +15,8 @@ data class CollectionCondition(val collectionId: String, val position: Int, val 
 abstract class SmartCollectionDao {
     @Query("SELECT * FROM smart_collections ORDER BY name COLLATE NOCASE, id")
     abstract fun lists(): Flow<List<SmartCollection>>
+    @Query("SELECT * FROM smart_collections WHERE id = :id")
+    abstract fun collection(id: String): Flow<SmartCollection?>
     @Query("SELECT * FROM collection_conditions WHERE collectionId = :id ORDER BY position")
     abstract fun conditions(id: String): Flow<List<CollectionCondition>>
     @Upsert abstract suspend fun upsert(collection: SmartCollection)

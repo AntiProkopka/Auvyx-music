@@ -35,6 +35,8 @@ class TrackToolsTest {
         assertEquals(1, last.index)
         assertEquals(androidx.media3.common.Player.REPEAT_MODE_OFF, last.playerMode)
         assertNull(last.afterRepeat())
+        val single = last.copy(queue = listOf("7"), index = 0, restoreMode = androidx.media3.common.Player.REPEAT_MODE_ALL)
+        assertEquals(androidx.media3.common.Player.REPEAT_MODE_OFF, single.playerMode)
     }
 
     @Test fun gainsAttenuateWithoutExceedingUnity() {
@@ -62,6 +64,12 @@ class TrackToolsTest {
             assertEquals("Ночной микс", night.name)
             assertEquals(setOf(b), taggedTrackIds(tools.tags().first(), setOf(night.id, phonk.id), true))
             assertEquals(setOf(a, b), taggedTrackIds(tools.tags().first(), setOf(night.id, phonk.id), false))
+            tools.selectTag(a, phonk.id, true)
+            tools.selectTag(a, phonk.id, true)
+            assertEquals(setOf(night.id, phonk.id), tools.tags(a).first().map { it.id }.toSet())
+            tools.selectTag(a, phonk.id, false)
+            assertEquals(listOf(night.id), tools.tags(a).first().map { it.id })
+            assertEquals(2, tools.catalog().first().size)
             tools.renameTag(night, "Ночь")
             assertEquals(night.id, tools.findTag("ночь")!!.id)
             tools.deleteTag(TrackTag(a, night.id))
@@ -92,18 +100,22 @@ class TrackToolsTest {
             val forgotten = db.trackDao().insertOrIgnore(item(1))
             val recent = db.trackDao().insertOrIgnore(item(2))
             val rare = db.trackDao().insertOrIgnore(item(3))
-            (1L..3L).forEach { time ->
+            val now = java.time.Instant.parse("2026-11-28T08:00:00Z").toEpochMilli()
+            val cutoff = now - REDISCOVER_DAYS * DAY_MILLIS
+            assertTrue(db.historyDao().forgotten(cutoff, REDISCOVER_MIN_STARTS).first().isEmpty())
+            (0L..2L).forEach { offset ->
+                val time = cutoff - offset * DAY_MILLIS
                 db.historyDao().insert(HistoryEntity(trackId = forgotten, playedAt = time))
                 db.historyDao().insert(HistoryEntity(trackId = recent, playedAt = time))
             }
-            db.historyDao().insert(HistoryEntity(trackId = recent, playedAt = 5))
-            db.historyDao().insert(HistoryEntity(trackId = rare, playedAt = 1))
-            val rows = db.historyDao().forgotten(3, 3).first()
+            db.historyDao().insert(HistoryEntity(trackId = recent, playedAt = cutoff + 1))
+            db.historyDao().insert(HistoryEntity(trackId = rare, playedAt = cutoff - DAY_MILLIS))
+            val rows = db.historyDao().forgotten(cutoff, REDISCOVER_MIN_STARTS).first()
             assertEquals(forgotten, rows.single().track.id)
             assertEquals(3L, rows.single().starts)
-            assertEquals(3L, rows.single().lastPlayed)
-            db.historyDao().insert(HistoryEntity(trackId = forgotten, playedAt = 6))
-            assertTrue(db.historyDao().forgotten(3, 3).first().isEmpty())
+            assertEquals(cutoff, rows.single().lastPlayed)
+            db.historyDao().insert(HistoryEntity(trackId = forgotten, playedAt = now))
+            assertTrue(db.historyDao().forgotten(cutoff, REDISCOVER_MIN_STARTS).first().isEmpty())
         } finally {
             db.close()
         }

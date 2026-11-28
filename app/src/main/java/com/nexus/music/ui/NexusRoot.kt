@@ -280,10 +280,15 @@ fun NexusRoot(vm: AppViewModel) {
                             ) {
                                 composable("home") { HomeScreen(vm) }
                                 composable("search") { SearchScreen(vm) }
-                                composable("library") { LibraryScreen(vm, onOpenPlaylist = { id -> nav.navigate("playlist/$id") }) }
+                                composable("library") { LibraryScreen(vm, onOpenPlaylist = { id -> nav.navigate("playlist/$id") },
+                                    onOpenSmartPlaylist = { id -> nav.navigate("playlist-smart/${android.net.Uri.encode(id)}") }) }
                                 composable("settings") { SettingsScreen(vm) }
                                 composable(route = "playlist/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
                                     PlaylistScreen(vm, entry.arguments?.getLong("id") ?: 0L, onBack = { nav.popBackStack() })
+                                }
+                                composable("playlist-smart/{id}") { entry ->
+                                    val id = entry.arguments?.getString("id").orEmpty()
+                                    com.nexus.music.ui.screens.SmartPlaylistScreen(vm, id) { nav.popBackStack() }
                                 }
                                 composable("player") { CompositionLocalProvider(LocalVisibility provides this) { PlayerScreen(vm, onClose = { nav.popBackStack() }) } }
                             }

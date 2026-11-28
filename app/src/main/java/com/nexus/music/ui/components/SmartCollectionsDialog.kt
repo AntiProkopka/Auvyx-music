@@ -1,7 +1,6 @@
 package com.nexus.music.ui.components
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -12,103 +11,19 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexus.music.AppViewModel
 import com.nexus.music.data.db.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import java.util.UUID
 
 @Composable
-internal fun SmartCollectionsDialog(vm: AppViewModel, close: () -> Unit) {
-    val collections by remember { vm.smartCollections.lists() }.collectAsStateWithLifecycle(null)
-    var selected by remember { mutableStateOf<SmartCollection?>(null) }
-    var edit by remember { mutableStateOf<SmartCollection?>(null) }
-    var remove by remember { mutableStateOf<SmartCollection?>(null) }
-    val current = selected
-    if (current == null) ToolList("Умные коллекции", close) {
-        item {
-            TextButton(onClick = { edit = SmartCollection(UUID.randomUUID().toString(), "", true, 100) }) {
-                Text("Новая умная коллекция")
-            }
-            when {
-                collections == null -> CircularProgressIndicator()
-                collections.orEmpty().isEmpty() -> Text("Укажите условия, чтобы собирать треки из вашей медиатеки автоматически.")
-            }
-        }
-        items(collections.orEmpty(), key = { it.id }) { list ->
-            TextButton(onClick = { selected = list }) { Text(list.name) }
-        }
-    } else CollectionPreview(vm, current, edit = { edit = current }, remove = { remove = current }) { selected = null }
-
-    edit?.let { list ->
-        val rules by remember(list.id) { vm.smartCollections.conditions(list.id) }.collectAsStateWithLifecycle(null)
-        val tags by remember { vm.trackTools.catalog() }.collectAsStateWithLifecycle(emptyList())
-        rules?.let { present ->
-            key(list.id) {
-                CollectionEditor(list, present, tags, close = { edit = null }) { saved, conditions ->
-                    vm.saveTrackTools {
-                        vm.smartCollections.save(saved, conditions)
-                        edit = null
-                        selected = saved
-                    }
-                }
-            }
-        }
-    }
-    remove?.let { list ->
-        AlertDialog(onDismissRequest = { remove = null }, title = { Text("Удалить «${list.name}»?") },
-            text = { Text("Треки останутся в медиатеке.") },
-            confirmButton = { TextButton(onClick = {
-                vm.saveTrackTools { vm.smartCollections.delete(list); selected = null; remove = null }
-            }) { Text("Удалить") } },
-            dismissButton = { TextButton(onClick = { remove = null }) { Text("Отмена") } })
-    }
-}
-
-@Composable
-private fun CollectionPreview(vm: AppViewModel, list: SmartCollection, edit: () -> Unit, remove: () -> Unit, close: () -> Unit) {
-    val tracks by vm.knownTracks.collectAsStateWithLifecycle()
-    val listens by vm.listenCounts.collectAsStateWithLifecycle()
-    val tags by remember { vm.trackTools.tags() }.collectAsStateWithLifecycle(emptyList())
-    val catalog by remember { vm.trackTools.catalog() }.collectAsStateWithLifecycle(emptyList())
-    val moments by remember { vm.trackTools.moments() }.collectAsStateWithLifecycle(emptyList())
+internal fun SmartCollectionEditor(vm: AppViewModel, list: SmartCollection, close: () -> Unit, saved: () -> Unit) {
     val rules by remember(list.id) { vm.smartCollections.conditions(list.id) }.collectAsStateWithLifecycle(null)
-    val now by produceState(System.currentTimeMillis(), list.id) {
-        while (true) {
-            delay(60_000)
-            value = System.currentTimeMillis()
-        }
-    }
-    val matches by produceState<List<TrackEntity>?>(null, list, arrayOf(tracks, listens, tags, moments, rules, now).toList()) {
-        val current = rules ?: return@produceState
-        value = withContext(Dispatchers.Default) {
-            collectionTracks(list, current, tracks, tags, moments.mapTo(hashSetOf()) { it.trackId }, listens, now)
-        }
-    }
-    val snapshot = matches.orEmpty()
-    val tagNames = remember(catalog) { catalog.associate { it.id to it.name } }
-    ToolList(list.name, close) {
-        item {
-            Text(if (list.matchAll) "Все условия" else "Любое условие")
-            rules.orEmpty().forEach { Text(describeCondition(it, tagNames), style = MaterialTheme.typography.bodySmall) }
-            when {
-                matches == null -> CircularProgressIndicator()
-                snapshot.isEmpty() -> Text("Ни один трек не подходит. Можно отредактировать правила.")
-                else -> {
-                    Text("Треков: ${snapshot.size}")
-                    Row {
-                        TextButton(onClick = { vm.player.playTracks(snapshot, 0) }) { Text("Играть") }
-                        TextButton(onClick = { vm.player.playTracks(snapshot, 0, shuffle = true) }) { Text("Перемешать") }
-                    }
-                    TextButton(onClick = { vm.savePlaylistSnapshot(list.name, snapshot) }) { Text("Сохранить как плейлист") }
+    val tags by remember { vm.trackTools.catalog() }.collectAsStateWithLifecycle(emptyList())
+    rules?.let { present ->
+        key(list.id) {
+            CollectionEditor(vm, list, present, tags, close) { collection, conditions ->
+                vm.saveTrackTools {
+                    vm.smartCollections.save(collection, conditions)
+                    saved()
                 }
             }
-            Row {
-                TextButton(onClick = edit) { Text("Правила") }
-                TextButton(onClick = remove) { Text("Удалить") }
-            }
-        }
-        items(snapshot, key = { it.id }) { track ->
-            TextButton(onClick = { vm.playTrack(track) }) { Text("${track.title} · ${track.artist}") }
         }
     }
 }
@@ -121,12 +36,17 @@ private fun describeCondition(rule: CollectionCondition, tags: Map<String, Strin
 
 @Composable
 private fun CollectionEditor(
+    vm: AppViewModel,
     list: SmartCollection,
     initial: List<CollectionCondition>,
     tags: List<MusicalTag>,
     close: () -> Unit,
     save: (SmartCollection, List<CollectionCondition>) -> Unit
 ) {
+    var cover by remember { mutableStateOf(list.coverUri) }
+    val coverPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { vm.keepCollectionCover(it) }?.let { cover = it } }
     var name by remember { mutableStateOf(list.name) }
     var all by remember { mutableStateOf(list.matchAll) }
     var limit by remember { mutableStateOf(list.limit.toString()) }
@@ -146,6 +66,11 @@ private fun CollectionEditor(
         text = {
             Column(Modifier.heightIn(max = 410.dp).verticalScroll(rememberScrollState())) {
                 OutlinedTextField(name, { name = it.take(120) }, label = { Text("Название") }, singleLine = true)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    cover?.let { com.nexus.music.ui.theme.ArtTile(it, "Обложка", Modifier.size(44.dp)) }
+                    TextButton(onClick = { coverPicker.launch(arrayOf("image/*")) }) { Text("Обложка") }
+                    if (cover != null) TextButton(onClick = { cover = null }) { Text("Сбросить") }
+                }
                 OutlinedTextField(limit, { limit = it.take(3) }, label = { Text("Максимум треков · 1–500") }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(if (all) "Все условия" else "Любое условие", Modifier.weight(1f))
@@ -185,7 +110,7 @@ private fun CollectionEditor(
         confirmButton = {
             val max = limit.toIntOrNull()
             TextButton(enabled = name.isNotBlank() && rules.isNotEmpty() && max != null && max in 1..500,
-                onClick = { save(list.copy(name = name.trim(), limit = requireNotNull(max), matchAll = all), rules) }) {
+                onClick = { save(list.copy(name = name.trim(), limit = requireNotNull(max), matchAll = all, coverUri = cover), rules) }) {
                 Text("Сохранить")
             }
         },

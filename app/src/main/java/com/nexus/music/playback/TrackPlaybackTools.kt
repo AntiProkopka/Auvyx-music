@@ -86,14 +86,16 @@ internal class TrackPlaybackTools(
     fun schedulePreviewEnd() {
         previewEnd?.cancel()
         previewEnd = null
-        val clip = preview.value ?: return
-        val end = clip.endMs ?: return
+        val clip = preview.value
+        player.setPauseAtEndOfMediaItems(clip != null)
+        val end = clip?.endMs ?: return
         if (clip.trackId.toString() != player.currentMediaItem?.mediaId || !player.isCurrentMediaItemSeekable ||
             player.duration <= 0) return
         val stopAt = minOf(end, player.duration - 1)
         previewEnd = player.createMessage { _, _ ->
             if (preview.value == clip && player.currentMediaItem?.mediaId == clip.trackId.toString()) {
                 player.pause()
+                seek(end.coerceAtMost(player.duration))
                 preview.value = null
             }
         }.setLooper(player.applicationLooper).setPosition(player.currentMediaItemIndex, stopAt).send()

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -62,6 +63,8 @@ import com.nexus.music.R
 import com.nexus.music.AppViewModel
 import com.nexus.music.ui.LocalBottomBarPadding
 import com.nexus.music.data.db.TrackEntity
+import com.nexus.music.data.db.SmartCollection
+import com.nexus.music.ui.components.SmartCollectionEditor
 import com.nexus.music.ui.components.AddToPlaylistDialog
 import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.NameDialog
@@ -69,12 +72,15 @@ import com.nexus.music.ui.components.TrackRow
 import com.nexus.music.ui.components.trackMenu
 
 @Composable
-fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
+fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit, onOpenSmartPlaylist: (String) -> Unit) {
     val tracks by vm.tracks.collectAsStateWithLifecycle()
     val collection by vm.knownTracks.collectAsStateWithLifecycle()
     val favorites by vm.favorites.collectAsStateWithLifecycle()
     val recent by vm.recent.collectAsStateWithLifecycle()
     val playlists by vm.playlists.collectAsStateWithLifecycle()
+    val smartPlaylists by remember(vm) { vm.smartCollections.lists() }.collectAsStateWithLifecycle(emptyList())
+    var creatingSmart by remember { mutableStateOf<SmartCollection?>(null) }
+    val newSmart = { creatingSmart = SmartCollection(java.util.UUID.randomUUID().toString(), "", true, 100) }
     val busy by vm.busy.collectAsStateWithLifecycle()
     val sort by vm.sortMode.collectAsStateWithLifecycle()
     val current by vm.player.state.collectAsStateWithLifecycle()
@@ -175,7 +181,8 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
         com.nexus.music.ui.components.LibraryTrackTools(vm)
 
         when (tab) {
-            7 -> LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = LocalBottomBarPadding.current),
+            7 -> LazyColumn(modifier = Modifier.testTag("library-collections"),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = LocalBottomBarPadding.current),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     CollectionPanel("Понравившиеся песни", favorites.size, null, true) { savedTab = 1 }
@@ -186,7 +193,13 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                         onOpenPlaylist(playlist.id)
                     }
                 }
-                item { TextButton(onClick = { creatingPlaylist = true }) { Text("Новый плейлист") } }
+                items(smartPlaylists, key = { it.id }) { playlist ->
+                    SmartPlaylistCard(vm, playlist) { onOpenSmartPlaylist(playlist.id) }
+                }
+                item {
+                    TextButton(onClick = { creatingPlaylist = true }) { Text("Новый плейлист") }
+                    TextButton(onClick = newSmart) { Text("Новая умная коллекция") }
+                }
             }
             6 -> LazyColumn(contentPadding = PaddingValues(bottom = LocalBottomBarPadding.current)) {
                 val artists = collection.distinctBy { it.source to (it.artistId ?: it.artist.trim().lowercase()) }.sortedBy { it.artist.lowercase() }
@@ -254,7 +267,8 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                     Spacer(Modifier.width(6.dp))
                     Text("Новый плейлист")
                 }
-                if (playlists.isEmpty()) {
+                TextButton(onClick = newSmart, modifier = Modifier.padding(start = 8.dp)) { Text("Новая умная коллекция") }
+                if (playlists.isEmpty() && smartPlaylists.isEmpty()) {
                     EmptyHint("Плейлистов пока нет.")
                 } else {
                     LazyColumn(
@@ -275,6 +289,11 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
                                 headlineContent = { Text(playlist.name, style = MaterialTheme.typography.titleSmall) },
                                 supportingContent = { Text("Треков: ${playlist.trackCount}", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             )
+                        }
+                        items(smartPlaylists, key = { it.id }) { playlist ->
+                            Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                                SmartPlaylistCard(vm, playlist) { onOpenSmartPlaylist(playlist.id) }
+                            }
                         }
                     }
                 }
@@ -304,6 +323,12 @@ fun LibraryScreen(vm: AppViewModel, onOpenPlaylist: (Long) -> Unit) {
         }
     }
 
+    creatingSmart?.let { playlist ->
+        SmartCollectionEditor(vm, playlist, close = { creatingSmart = null }, saved = {
+            creatingSmart = null
+            onOpenSmartPlaylist(playlist.id)
+        })
+    }
     if (creatingPlaylist) {
         NameDialog(
             title = "Новый плейлист",
@@ -339,12 +364,25 @@ private fun ColumnScope.TrackList(
 }
 
 @Composable
-private fun CollectionPanel(title: String, count: Int, cover: String?, favorites: Boolean, open: () -> Unit) {
+private fun CollectionPanel(title: String, count: Int, cover: String?, favorites: Boolean, smart: Boolean = false, open: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 102.dp).frosted(MaterialTheme.shapes.large).clickable(onClick = open)
         .padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         if (favorites) {
             Image(painterResource(R.drawable.glass_liked_songs), null, Modifier.size(76.dp), contentScale = ContentScale.Fit)
         } else ArtTile(cover, null, Modifier.size(76.dp))
-        Column { Text(title, style = MaterialTheme.typography.titleMedium); Text("Треков · $count", style = MaterialTheme.typography.bodySmall) }
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (smart) Icon(Icons.Default.Refresh, "Умная коллекция", Modifier.size(16.dp))
+                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Text("Треков · $count", style = MaterialTheme.typography.bodySmall)
+        }
     }
+}
+
+@Composable
+private fun SmartPlaylistCard(vm: AppViewModel, playlist: SmartCollection, open: () -> Unit) {
+    val tracks by remember(playlist.id) { vm.smartPlaylistTracks(playlist.id) }.collectAsStateWithLifecycle(emptyList())
+    CollectionPanel(playlist.name, tracks.size, playlist.coverUri ?: tracks.firstNotNullOfOrNull { it.artworkUri },
+        favorites = false, smart = true, open = open)
 }

@@ -5,6 +5,7 @@ import com.nexus.music.data.settings.GlassAccent
 import com.nexus.music.data.settings.GlassQuality
 import com.nexus.music.data.settings.FollowedArtist
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
@@ -52,6 +53,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val player = nexus.playerController
     internal val trackTools = db.trackTools()
     internal val smartCollections = db.smartCollections()
+
+    internal fun keepCollectionCover(uri: Uri): String? = runCatching {
+        require(uri.scheme == "content")
+        nexus.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        uri.toString()
+    }.getOrElse {
+        messages.tryEmit("Не удалось сохранить доступ к обложке")
+        null
+    }
+
+    private val collectionClock = kotlinx.coroutines.flow.flow {
+        while (true) {
+            emit(System.currentTimeMillis())
+            delay(60_000)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), System.currentTimeMillis())
+
+    internal fun smartPlaylistTracks(id: String): Flow<List<TrackEntity>> {
+        val rules = combine(smartCollections.collection(id), smartCollections.conditions(id), collectionClock) {
+            collection, conditions, now -> Triple(collection, conditions, now)
+        }
+        return combine(rules, knownTracks, trackTools.tags(), trackTools.moments(), listenCounts) {
+            (collection, conditions, now), tracks, tags, moments, listens ->
+            if (collection == null) emptyList() else com.nexus.music.data.db.collectionTracks(
+                collection, conditions, tracks, tags, moments.mapTo(hashSetOf()) { it.trackId }, listens, now)
+        }.flowOn(Dispatchers.Default)
+    }
     internal val trackToolsTarget = MutableStateFlow<TrackEntity?>(null)
     internal val activeMoment = nexus.activeMoment.asStateFlow()
 

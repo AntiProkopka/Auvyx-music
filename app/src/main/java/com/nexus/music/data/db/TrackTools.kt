@@ -106,12 +106,23 @@ abstract class TrackToolsDao {
     @Delete abstract suspend fun deleteTag(row: TrackTag)
     @Delete abstract suspend fun deleteTag(row: MusicalTag)
     @Transaction
+    open suspend fun selectTag(track: Long, tagId: String, selected: Boolean) {
+        val row = TrackTag(track, tagId)
+        if (!selected) {
+            deleteTag(row)
+            return
+        }
+        require(tagById(tagId) != null) { "Этот тег уже удалён" }
+        require(hasTag(track, tagId) || tagCount(track) < 32) { "У трека уже 32 тега" }
+        putTag(row)
+    }
+
+    @Transaction
     open suspend fun assignTag(track: Long, name: String) {
         val normalized = canonicalTag(name)
         val tag = findTag(normalized) ?: MusicalTag(java.util.UUID.randomUUID().toString(),
             tagDisplayName(name), normalized).also { createTag(it) }
-        require(hasTag(track, tag.id) || tagCount(track) < 32) { "У трека уже 32 тега" }
-        putTag(TrackTag(track, tag.id))
+        selectTag(track, tag.id, true)
     }
 
     @Transaction

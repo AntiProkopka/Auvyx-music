@@ -45,6 +45,8 @@ import com.nexus.music.ui.components.EmptyHint
 import com.nexus.music.ui.components.MenuAction
 import com.nexus.music.ui.components.NameDialog
 import com.nexus.music.ui.components.TrackRow
+import com.nexus.music.ui.components.SmartCollectionEditor
+import com.nexus.music.data.db.TrackEntity
 
 @Composable
 fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
@@ -52,8 +54,50 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
     val tracksFlow = remember(playlistId) { vm.playlistTracks(playlistId) }
     val playlist by playlistFlow.collectAsStateWithLifecycle(initialValue = null)
     val tracks by tracksFlow.collectAsStateWithLifecycle(initialValue = emptyList())
-    val current by vm.player.state.collectAsStateWithLifecycle()
     var renaming by remember { mutableStateOf(false) }
+    PlaylistContent(vm, playlist?.name ?: "", tracks, null, false, onBack,
+        edit = { renaming = true }, delete = { vm.deletePlaylist(playlistId); onBack() },
+        removeTrack = { vm.removeFromPlaylist(playlistId, it.id) })
+    if (renaming) {
+        NameDialog(title = "Переименовать плейлист", initial = playlist?.name.orEmpty(), confirmLabel = "Сохранить",
+            onConfirm = { vm.renamePlaylist(playlistId, it); renaming = false }, onDismiss = { renaming = false })
+    }
+}
+
+@Composable
+internal fun SmartPlaylistScreen(vm: AppViewModel, id: String, onBack: () -> Unit) {
+    val playlist by remember(id) { vm.smartCollections.collection(id) }.collectAsStateWithLifecycle(null)
+    val tracks by remember(id) { vm.smartPlaylistTracks(id) }.collectAsStateWithLifecycle(emptyList())
+    var editing by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    val selected = playlist ?: return
+    PlaylistContent(vm, selected.name, tracks, selected.coverUri, true, onBack,
+        edit = { editing = true }, delete = { deleting = true })
+    if (editing) SmartCollectionEditor(vm, selected, close = { editing = false }, saved = { editing = false })
+    if (deleting) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { deleting = false },
+        title = { Text("Удалить «${selected.name}»?") },
+        text = { Text("Треки останутся в медиатеке.") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = {
+            vm.saveTrackTools { vm.smartCollections.delete(selected); deleting = false; onBack() }
+        }) { Text("Удалить") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { deleting = false }) { Text("Отмена") } }
+    )
+}
+
+@Composable
+private fun PlaylistContent(
+    vm: AppViewModel,
+    name: String,
+    tracks: List<TrackEntity>,
+    cover: String?,
+    smart: Boolean,
+    onBack: () -> Unit,
+    edit: () -> Unit,
+    delete: () -> Unit,
+    removeTrack: ((TrackEntity) -> Unit)? = null
+) {
+    val current by vm.player.state.collectAsStateWithLifecycle()
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -62,14 +106,14 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
         ) {
             IconButton(onClick = onBack) { com.nexus.music.ui.components.BrandIcon(R.drawable.glass_back, Icons.Default.ArrowBack, contentDescription = "Назад") }
             Text(
-                text = playlist?.name ?: "",
+                text = name,
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = { renaming = true }) { Icon(Icons.Default.Edit, contentDescription = "Переименовать") }
-            IconButton(onClick = { vm.deletePlaylist(playlistId); onBack() }) { Icon(Icons.Default.Delete, contentDescription = "Удалить плейлист") }
+            IconButton(onClick = edit) { Icon(Icons.Default.Edit, contentDescription = if (smart) "Изменить коллекцию" else "Переименовать") }
+            IconButton(onClick = delete) { Icon(Icons.Default.Delete, contentDescription = "Удалить плейлист") }
         }
 
         Card(
@@ -78,10 +122,11 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
             colors = CardDefaults.cardColors(containerColor = if (isGlass) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.primaryContainer)
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (isGlass && tracks.isNotEmpty()) ArtTile(tracks.first().artworkUri, null, Modifier.padding(start = 16.dp).size(76.dp))
+                val artwork = cover ?: tracks.firstOrNull()?.artworkUri
+                if ((isGlass || smart) && artwork != null) ArtTile(artwork, null, Modifier.padding(start = 16.dp).size(76.dp))
             Column(modifier = Modifier.weight(1f).padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("ПЛЕЙЛИСТ", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                Text(playlist?.name ?: "Моя музыка", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(if (smart) "УМНАЯ КОЛЛЕКЦИЯ" else "ПЛЕЙЛИСТ", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(name.ifBlank { "Моя музыка" }, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text("${tracks.size} треков", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             }
@@ -104,7 +149,8 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
         }
 
         if (tracks.isEmpty()) {
-            EmptyHint("В плейлисте пока нет треков. Добавьте их через меню «⋮» у трека в медиатеке.")
+            EmptyHint(if (smart) "Ни один трек не подходит под правила коллекции."
+                else "В плейлисте пока нет треков. Добавьте их через меню «⋮» у трека в медиатеке.")
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f),
@@ -117,23 +163,12 @@ fun PlaylistScreen(vm: AppViewModel, playlistId: Long, onBack: () -> Unit) {
                         menuItems = listOf(
                             MenuAction(if (track.isFavorite) "Убрать из избранного" else "В избранное") { vm.toggleFavorite(track) },
                             MenuAction("Играть следующим") { vm.player.playNext(track) },
-                            MenuAction("В конец очереди") { vm.player.enqueue(track) },
-                            MenuAction("Убрать из плейлиста") { vm.removeFromPlaylist(playlistId, track.id) }
-                        ),
+                            MenuAction("В конец очереди") { vm.player.enqueue(track) }
+                        ) + listOfNotNull(removeTrack?.let { remove -> MenuAction("Убрать из плейлиста") { remove(track) } }),
                         onClick = { vm.player.playTracks(tracks, index) }
                     )
                 }
             }
         }
-    }
-
-    if (renaming) {
-        NameDialog(
-            title = "Переименовать плейлист",
-            initial = playlist?.name ?: "",
-            confirmLabel = "Сохранить",
-            onConfirm = { vm.renamePlaylist(playlistId, it); renaming = false },
-            onDismiss = { renaming = false }
-        )
     }
 }
